@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type { Organization, DeviceHealthSummary, DeviceInfo } from "@shared/schema";
 import { log } from "../index";
 
@@ -9,12 +10,31 @@ const INSTANCE = cleanEnv("NINJAONE_INSTANCE", "app");
 const BASE_URL = `https://${INSTANCE}.ninjarmm.com`;
 const CLIENT_ID = cleanEnv("NINJAONE_CLIENT_ID");
 const CLIENT_SECRET = cleanEnv("NINJAONE_CLIENT_SECRET");
+const LEGACY_KEY_ID = cleanEnv("NINJAONE_LEGACY_KEY_ID");
+const LEGACY_SECRET = cleanEnv("NINJAONE_LEGACY_SECRET");
 
 let accessToken: string | null = null;
 let tokenExpiry = 0;
 
+const useOAuth = !!(CLIENT_ID && CLIENT_SECRET);
+const useLegacy = !!(LEGACY_KEY_ID && LEGACY_SECRET);
+
 export function isConfigured(): boolean {
-  return !!(CLIENT_ID && CLIENT_SECRET);
+  return useOAuth || useLegacy;
+}
+
+function generateLegacyAuth(method: string, path: string, contentType = ""): Record<string, string> {
+  const date = new Date().toUTCString();
+  const stringToSign = `${method.toUpperCase()}\n\n${contentType}\n${date}\n${path}`;
+  const signature = crypto
+    .createHmac("sha1", LEGACY_SECRET)
+    .update(stringToSign)
+    .digest("base64");
+
+  return {
+    "Authorization": `NJ ${LEGACY_KEY_ID}:${signature}`,
+    "Date": date,
+  };
 }
 
 async function getToken(): Promise<string> {
@@ -23,7 +43,7 @@ async function getToken(): Promise<string> {
   }
 
   const tokenUrl = `${BASE_URL}/ws/oauth/token`;
-  log(`NinjaOne auth attempt: ${tokenUrl}`);
+  log(`NinjaOne OAuth auth attempt: ${tokenUrl}`);
 
   try {
     const res = await fetch(tokenUrl, {
@@ -53,10 +73,19 @@ async function getToken(): Promise<string> {
 }
 
 async function apiGet(path: string): Promise<any> {
-  const token = await getToken();
-  const res = await fetch(`${BASE_URL}/api${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const fullPath = `/api${path}`;
+  const url = `${BASE_URL}${fullPath}`;
+  let headers: Record<string, string>;
+
+  if (useLegacy) {
+    headers = generateLegacyAuth("GET", fullPath);
+    log(`NinjaOne legacy API request: ${url}`);
+  } else {
+    const token = await getToken();
+    headers = { Authorization: `Bearer ${token}` };
+  }
+
+  const res = await fetch(url, { headers });
 
   if (!res.ok) {
     const text = await res.text();
