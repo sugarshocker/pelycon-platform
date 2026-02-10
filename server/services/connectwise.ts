@@ -1,11 +1,15 @@
 import type { TicketSummary } from "@shared/schema";
 import { log } from "../index";
 
-const COMPANY_ID = process.env.CW_COMPANY_ID;
-const PUBLIC_KEY = process.env.CW_PUBLIC_KEY;
-const PRIVATE_KEY = process.env.CW_PRIVATE_KEY;
-const CLIENT_ID = process.env.CW_CLIENT_ID;
-const SITE_URL = process.env.CW_SITE_URL || "na.myconnectwise.net";
+function cleanEnv(key: string, fallback?: string): string {
+  return (process.env[key] || fallback || "").replace(/\\n/g, "").trim();
+}
+
+const COMPANY_ID = cleanEnv("CW_COMPANY_ID");
+const PUBLIC_KEY = cleanEnv("CW_PUBLIC_KEY");
+const PRIVATE_KEY = cleanEnv("CW_PRIVATE_KEY");
+const CLIENT_ID = cleanEnv("CW_CLIENT_ID");
+const SITE_URL = cleanEnv("CW_SITE_URL", "na.myconnectwise.net");
 const BASE_URL = `https://${SITE_URL}/v4_6_release/apis/3.0`;
 
 export function isConfigured(): boolean {

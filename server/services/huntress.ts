@@ -1,8 +1,12 @@
 import type { SecuritySummary } from "@shared/schema";
 import { log } from "../index";
 
-const API_KEY = process.env.HUNTRESS_API_KEY;
-const API_SECRET = process.env.HUNTRESS_API_SECRET;
+function cleanEnv(key: string): string {
+  return (process.env[key] || "").replace(/\\n/g, "").trim();
+}
+
+const API_KEY = cleanEnv("HUNTRESS_API_KEY");
+const API_SECRET = cleanEnv("HUNTRESS_API_SECRET");
 const BASE_URL = "https://api.huntress.io/v1";
 
 export function isConfigured(): boolean {
