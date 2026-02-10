@@ -21,6 +21,9 @@ export function ClientSelector({
 }: ClientSelectorProps) {
   const { data: organizations, isLoading, error } = useQuery<Organization[]>({
     queryKey: ["/api/organizations"],
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   if (isLoading) {

@@ -38,6 +38,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const { data: apiStatus } = useQuery<ApiStatus>({
     queryKey: ["/api/status"],
+    retry: 2,
+    retryDelay: 1000,
   });
 
   const { data: deviceHealth } = useQuery<DeviceHealthSummary>({

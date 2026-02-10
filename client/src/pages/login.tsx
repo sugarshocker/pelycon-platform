@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Shield, Lock, Eye, EyeOff } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface LoginProps {
@@ -23,6 +23,7 @@ export default function Login({ onLogin }: LoginProps) {
 
     try {
       await apiRequest("POST", "/api/auth/login", { password });
+      queryClient.clear();
       onLogin();
     } catch (err: any) {
       toast({
