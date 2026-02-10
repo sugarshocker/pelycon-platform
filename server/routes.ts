@@ -26,6 +26,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.set("trust proxy", 1);
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "tbr-dashboard-secret",
@@ -34,6 +35,8 @@ export async function registerRoutes(
       store: new MemStore({ checkPeriod: 86400000 }),
       cookie: {
         secure: false,
+        httpOnly: true,
+        sameSite: "lax",
         maxAge: 24 * 60 * 60 * 1000,
       },
     })
@@ -49,7 +52,12 @@ export async function registerRoutes(
 
     if (password === dashboardPassword) {
       (req.session as any).authenticated = true;
-      res.json({ success: true });
+      req.session.save((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Session save failed" });
+        }
+        res.json({ success: true });
+      });
     } else {
       res.status(401).json({ message: "Invalid password" });
     }
