@@ -1,0 +1,135 @@
+# Replit Prompt: MSP Technology Business Review (TBR) Dashboard
+
+## What to Build
+
+A client-facing TBR dashboard for an MSP owner to screen-share during 30-minute semi-annual client review meetings. The app pulls live data from MSP tools, accepts manual report uploads, and uses AI to generate a plain-language priority roadmap.
+
+**Stack:** Next.js (React frontend + API routes for backend), Tailwind CSS for styling, Claude API (Anthropic) for AI analysis. Deployed on Replit with always-on hosting.
+
+**Auth:** Simple password-protected login (just me using it, no client logins). Store all API keys in Replit Secrets.
+
+---
+
+## Core Features
+
+### 1. Client Selector
+- Dropdown at the top to select a client/organization
+- Pulls client list from NinjaOne organizations API
+- All dashboard sections refresh when a client is selected
+
+### 2. Device Health Section (NinjaOne API)
+Pull from NinjaOne API for the selected organization:
+- **Total device count** (workstations + servers)
+- **Devices over 4 years old** — flag these in red with device name and age
+- **OS versions** — flag any end-of-life Windows versions (Windows 10 hits EOL Oct 2025, flag it)
+- **Patch compliance percentage** — green if >90%, yellow 80-90%, red <80%
+- **Critical alerts** — list any unresolved critical alerts
+
+Display as a clean card layout. No dense tables — this is screen-shared with non-technical people.
+
+**NinjaOne API docs:** https://app.ninjarmm.com/apidocs/
+- Auth: API key (client credentials OAuth2)
+- Key endpoints: `/v2/organizations`, `/v2/organization/{id}/devices`, `/v2/device/{id}`
+
+### 3. Security Section (Huntress API)
+Pull from Huntress API for the selected organization:
+- **Total incident reports** last 6 months
+- **Incidents resolved vs pending**
+- **Managed EDR summary** — active agents count
+- **Security Awareness Training** — completion percentage, latest phishing simulation click rate
+
+Display as a summary card with a simple trend indicator (better/worse than last period if data available).
+
+**Huntress API docs:** https://api.huntress.io/docs
+- Auth: API key (Basic auth with API key + secret)
+- Key endpoints: `/v1/organizations`, `/v1/organizations/{id}/reports`, `/v1/organizations/{id}/agents`
+
+### 4. Ticket Trends Section (ConnectWise Manage API)
+Pull from ConnectWise Manage API for the selected client:
+- **Total tickets last 6 months**
+- **Top 3 ticket categories by volume** (use board or type grouping)
+- **Recurring issues** — flag any ticket subject/type that appears 3+ times
+- **Open tickets over 30 days old** — list with age and summary
+- A simple bar chart showing ticket volume by month (last 6 months)
+
+**ConnectWise Manage API docs:** https://developer.connectwise.com/
+- Auth: Client ID + Public/Private key (Basic auth)
+- Key endpoints: `/service/tickets`, `/company/companies`
+
+### 5. CIPP Report Upload Section
+- Two upload buttons: "Upload MFA Report" and "Upload License Report"
+- Accepts CSV files (PDF support is nice-to-have but CSV is priority)
+- **MFA Report:** Parse and display — total users, users with MFA enabled, users WITHOUT MFA (flag in red with names)
+- **License Report:** Parse and display — license type, quantity assigned, quantity actually in use, **wasted licenses** (assigned but unused, highlight cost waste)
+- These should persist for the session but don't need a database — just in-memory while the meeting is happening
+
+### 6. AI Roadmap Analysis (Claude API)
+A "Generate Roadmap" button that sends the gathered data to Claude's API and returns a plain-language analysis:
+
+**Prompt to Claude should include:**
+- Device health summary (aging hardware, EOL OS, patch gaps)
+- Security posture (incident trends, SAT completion, MFA gaps)
+- Ticket trend summary (recurring issues, volume trends)
+- License waste data (if uploaded)
+
+**Claude should return:**
+- A prioritized list of 3-5 recommended actions for the next 6 months
+- Written in plain language (no jargon — the client is reading this on screen)
+- Each item should include: what the issue is, why it matters to the business (not IT), and a rough priority (urgent / plan for / nice to have)
+- Frame everything around "avoiding surprises" — preventing unexpected costs, downtime, or security incidents
+
+**Claude API:**
+- Model: `claude-sonnet-4-5-20250929`
+- Use `/v1/messages` endpoint
+- API key stored in Replit Secrets as `ANTHROPIC_API_KEY`
+
+### 7. Meeting Summary Export
+A button that exports/generates a one-page PDF or printable summary of everything shown on the dashboard for that client. This is the leave-behind the client gets after the meeting.
+
+Include:
+- Date and client name
+- Key metrics from each section (device health, security, tickets, MFA/licensing)
+- The AI-generated roadmap
+- A "Next TBR: [date 6 months out]" line at the bottom
+
+---
+
+## UI/UX Requirements
+
+- **Clean, professional, not flashy.** This is screen-shared with business owners, not IT people. Think executive dashboard, not monitoring tool.
+- **Dark mode optional** but default should be light/clean
+- **Large readable fonts** — this will be on a projector or screen share
+- **Color coding:** Green = good, Yellow = attention, Red = action needed. Keep it simple.
+- **No technical jargon in labels.** Instead of "Patch Compliance %", say "Software Updates" or "Systems Up to Date." Instead of "EOL OS," say "Unsupported Operating Systems."
+- **Card-based layout.** Each section is a card. Cards should be collapsible so I can focus the conversation on what matters for that specific client.
+- **Responsive** — needs to look good on a laptop screen (most common) and a large monitor
+
+---
+
+## Environment Variables (Replit Secrets)
+
+```
+NINJAONE_CLIENT_ID=
+NINJAONE_CLIENT_SECRET=
+NINJAONE_INSTANCE=  (e.g., "app" or "eu")
+HUNTRESS_API_KEY=
+HUNTRESS_API_SECRET=
+CW_COMPANY_ID=
+CW_PUBLIC_KEY=
+CW_PRIVATE_KEY=
+CW_CLIENT_ID=
+CW_SITE_URL=  (e.g., "na.myconnectwise.net")
+ANTHROPIC_API_KEY=
+DASHBOARD_PASSWORD=  (simple login password)
+```
+
+---
+
+## What NOT to Build (Yet)
+
+- No client self-service portal (future iteration)
+- No ConnectWise financial/agreement data (future iteration)
+- No database — this is a live-pull dashboard, not a historical tracker
+- No multi-user auth — just a single password gate
+- No CIPP API integration — manual CSV upload only
+- No automated scheduling or email sending
