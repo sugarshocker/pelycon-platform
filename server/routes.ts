@@ -30,13 +30,13 @@ export async function registerRoutes(
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "tbr-dashboard-secret",
-      resave: false,
+      resave: true,
       saveUninitialized: false,
       store: new MemStore({ checkPeriod: 86400000 }),
       cookie: {
-        secure: false,
+        secure: process.env.NODE_ENV === "production" || process.env.REPL_SLUG ? true : false,
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: process.env.REPL_SLUG ? "none" as const : "lax" as const,
         maxAge: 24 * 60 * 60 * 1000,
       },
     })
