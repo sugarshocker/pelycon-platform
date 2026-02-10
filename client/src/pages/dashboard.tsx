@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/theme-provider";
 import { Sun, Moon, LogOut, Shield, CheckCircle2, XCircle } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, clearToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
   Organization,

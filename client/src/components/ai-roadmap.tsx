@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getToken } from "@/lib/queryClient";
 import type {
   RoadmapAnalysis,
   RoadmapItem,
@@ -77,10 +78,13 @@ export function AiRoadmap({
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch("/api/roadmap/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers,
         body: JSON.stringify({
           clientName: client.name,
           deviceHealth,

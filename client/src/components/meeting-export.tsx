@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FileDown, Printer, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getToken } from "@/lib/queryClient";
 import type {
   Organization,
   DeviceHealthSummary,
@@ -37,10 +38,13 @@ export function MeetingExport({
   const handleExport = async (mode: "download" | "print") => {
     setIsExporting(true);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch("/api/export/summary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers,
         body: JSON.stringify({
           clientName: client.name,
           deviceHealth,

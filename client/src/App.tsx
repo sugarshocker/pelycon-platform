@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, getToken, clearToken } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,14 +11,29 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/check", { credentials: "include" })
+    const token = getToken();
+    if (!token) {
+      setIsAuthenticated(false);
+      return;
+    }
+    fetch("/api/auth/check", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => {
         setIsAuthenticated(res.ok);
+        if (!res.ok) clearToken();
       })
       .catch(() => {
         setIsAuthenticated(false);
+        clearToken();
       });
   }, []);
+
+  const handleLogout = () => {
+    clearToken();
+    queryClient.clear();
+    setIsAuthenticated(false);
+  };
 
   if (isAuthenticated === null) {
     return (
@@ -33,7 +48,7 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           {isAuthenticated ? (
-            <Dashboard onLogout={() => setIsAuthenticated(false)} />
+            <Dashboard onLogout={handleLogout} />
           ) : (
             <Login onLogin={() => setIsAuthenticated(true)} />
           )}

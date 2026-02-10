@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileUp, UserCheck, Key, Package, AlertTriangle, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { getToken } from "@/lib/queryClient";
 import type { MfaReport, LicenseReport } from "@shared/schema";
 
 interface CippReportsProps {
@@ -37,10 +37,14 @@ export function CippReports({
       const formData = new FormData();
       formData.append("file", file);
 
+      const headers: Record<string, string> = {};
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch(`/api/reports/${type}`, {
         method: "POST",
+        headers,
         body: formData,
-        credentials: "include",
       });
 
       if (!res.ok) {

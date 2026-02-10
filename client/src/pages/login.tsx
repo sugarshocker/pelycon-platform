@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Shield, Lock, Eye, EyeOff } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { setToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface LoginProps {
@@ -22,7 +22,14 @@ export default function Login({ onLogin }: LoginProps) {
     setIsLoading(true);
 
     try {
-      await apiRequest("POST", "/api/auth/login", { password });
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) throw new Error("Login failed");
+      const data = await res.json();
+      setToken(data.token);
       queryClient.clear();
       onLogin();
     } catch (err: any) {
