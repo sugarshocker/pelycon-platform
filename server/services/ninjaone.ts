@@ -1,10 +1,14 @@
 import type { Organization, DeviceHealthSummary, DeviceInfo } from "@shared/schema";
 import { log } from "../index";
 
-const INSTANCE = process.env.NINJAONE_INSTANCE || "app";
+function cleanEnv(key: string, fallback?: string): string {
+  return (process.env[key] || fallback || "").replace(/[\s\r\n\\n]+/g, "");
+}
+
+const INSTANCE = cleanEnv("NINJAONE_INSTANCE", "app");
 const BASE_URL = `https://${INSTANCE}.ninjarmm.com`;
-const CLIENT_ID = process.env.NINJAONE_CLIENT_ID;
-const CLIENT_SECRET = process.env.NINJAONE_CLIENT_SECRET;
+const CLIENT_ID = cleanEnv("NINJAONE_CLIENT_ID");
+const CLIENT_SECRET = cleanEnv("NINJAONE_CLIENT_SECRET");
 
 let accessToken: string | null = null;
 let tokenExpiry = 0;
@@ -18,26 +22,34 @@ async function getToken(): Promise<string> {
     return accessToken;
   }
 
-  const res = await fetch(`${BASE_URL}/ws/oauth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: CLIENT_ID!,
-      client_secret: CLIENT_SECRET!,
-      scope: "monitoring management",
-    }),
-  });
+  const tokenUrl = `${BASE_URL}/ws/oauth/token`;
+  log(`NinjaOne auth attempt: ${tokenUrl}`);
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`NinjaOne auth failed: ${res.status} ${text}`);
+  try {
+    const res = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: CLIENT_ID!,
+        client_secret: CLIENT_SECRET!,
+        scope: "monitoring management",
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`NinjaOne auth failed: ${res.status} ${text}`);
+    }
+
+    const data = await res.json();
+    accessToken = data.access_token;
+    tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+    return accessToken!;
+  } catch (err: any) {
+    log(`NinjaOne token error: ${err.message} (cause: ${err.cause || "none"})`);
+    throw err;
   }
-
-  const data = await res.json();
-  accessToken = data.access_token;
-  tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
-  return accessToken!;
 }
 
 async function apiGet(path: string): Promise<any> {
