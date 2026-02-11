@@ -115,11 +115,19 @@ export async function getOrganizations(): Promise<Organization[]> {
 }
 
 export async function getDeviceNames(orgId: number): Promise<string[]> {
+  const devices = await getDeviceNamesWithLastSeen(orgId);
+  return devices.map(d => d.name);
+}
+
+export async function getDeviceNamesWithLastSeen(orgId: number): Promise<{ name: string; lastSeen: string | null }[]> {
   const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
   const VALID_NODE_CLASSES = new Set(["WINDOWS_WORKSTATION", "WINDOWS_SERVER", "MAC"]);
   return basicDevices
     .filter((d: any) => VALID_NODE_CLASSES.has((d.nodeClass || "").toUpperCase()))
-    .map((d: any) => (d.systemName || d.dnsName || `Device ${d.id}`));
+    .map((d: any) => ({
+      name: d.systemName || d.dnsName || `Device ${d.id}`,
+      lastSeen: d.lastContact ? new Date(d.lastContact * 1000).toISOString() : null,
+    }));
 }
 
 export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummary> {

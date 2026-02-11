@@ -6,10 +6,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap } from "lucide-react";
 import type { SecuritySummary, Organization } from "@shared/schema";
 
+interface MissingDevice {
+  name: string;
+  lastSeen: string | null;
+}
+
 interface CoverageGap {
   ninjaCount: number;
   huntressCount: number;
-  missingFromHuntress: string[];
+  missingFromHuntress: MissingDevice[];
   missingFromNinja: string[];
 }
 
@@ -174,17 +179,34 @@ export function SecuritySection({ client }: SecuritySectionProps) {
               </span>
             </div>
             <div className="grid gap-1.5">
-              {coverageGap.missingFromHuntress.map((name, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 px-3 py-1.5"
-                  data-testid={`missing-huntress-${i}`}
-                >
-                  <ShieldAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                  <span className="text-sm text-red-700 dark:text-red-300 font-medium">{name}</span>
-                  <Badge variant="destructive" className="ml-auto text-xs">No Huntress</Badge>
-                </div>
-              ))}
+              {coverageGap.missingFromHuntress.map((device, i) => {
+                let lastSeenLabel = "";
+                if (device.lastSeen) {
+                  const d = new Date(device.lastSeen);
+                  const now = new Date();
+                  const diffDays = Math.floor((now.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
+                  if (diffDays === 0) lastSeenLabel = "today";
+                  else if (diffDays === 1) lastSeenLabel = "yesterday";
+                  else if (diffDays < 30) lastSeenLabel = `${diffDays}d ago`;
+                  else lastSeenLabel = d.toLocaleDateString();
+                }
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 px-3 py-1.5"
+                    data-testid={`missing-huntress-${i}`}
+                  >
+                    <ShieldAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                    <span className="text-sm text-red-700 dark:text-red-300 font-medium">{device.name}</span>
+                    {lastSeenLabel && (
+                      <span className="text-xs text-muted-foreground" data-testid={`last-seen-${i}`}>
+                        Last seen {lastSeenLabel}
+                      </span>
+                    )}
+                    <Badge variant="destructive" className="ml-auto text-xs flex-shrink-0">No Huntress</Badge>
+                  </div>
+                );
+              })}
             </div>
             {coverageGap.missingFromNinja.length > 0 && (
               <div className="text-xs text-muted-foreground px-1">

@@ -185,25 +185,27 @@ export async function registerRoutes(
         return res.json({ ninjaDevices: [], huntressAgents: [], missingFromHuntress: [], missingFromNinja: [] });
       }
 
-      const ninjaNames = await ninjaone.getDeviceNames(orgId);
+      const ninjaDevices = await ninjaone.getDeviceNamesWithLastSeen(orgId);
       const huntressNames = await huntress.getAgentHostnames(orgName);
 
       const normalizeHostname = (name: string): string =>
         name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-      const ninjaSet = new Map<string, string>();
-      for (const n of ninjaNames) ninjaSet.set(normalizeHostname(n), n);
+      const ninjaSet = new Map<string, { name: string; lastSeen: string | null }>();
+      for (const d of ninjaDevices) ninjaSet.set(normalizeHostname(d.name), d);
 
       const huntressSet = new Map<string, string>();
       for (const h of huntressNames) huntressSet.set(normalizeHostname(h), h);
 
-      const missingFromHuntress = ninjaNames.filter(n => !huntressSet.has(normalizeHostname(n)));
+      const missingFromHuntress = ninjaDevices
+        .filter(d => !huntressSet.has(normalizeHostname(d.name)))
+        .map(d => ({ name: d.name, lastSeen: d.lastSeen }));
       const missingFromNinja = huntressNames.filter(h => !ninjaSet.has(normalizeHostname(h)));
 
-      log(`Coverage gap for "${orgName}": ${ninjaNames.length} Ninja, ${huntressNames.length} Huntress, ${missingFromHuntress.length} missing from Huntress, ${missingFromNinja.length} missing from Ninja`);
+      log(`Coverage gap for "${orgName}": ${ninjaDevices.length} Ninja, ${huntressNames.length} Huntress, ${missingFromHuntress.length} missing from Huntress, ${missingFromNinja.length} missing from Ninja`);
 
       res.json({
-        ninjaCount: ninjaNames.length,
+        ninjaCount: ninjaDevices.length,
         huntressCount: huntressNames.length,
         missingFromHuntress,
         missingFromNinja,
