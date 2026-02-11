@@ -100,6 +100,13 @@ export async function registerRoutes(
           totalDevices: 0,
           workstations: 0,
           servers: 0,
+          deviceTypeCounts: {
+            windowsDesktops: 0,
+            windowsLaptops: 0,
+            macDesktops: 0,
+            macLaptops: 0,
+            windowsServers: 0,
+          },
           oldDevices: [],
           eolOsDevices: [],
           needsReplacementCount: 0,

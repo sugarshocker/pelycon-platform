@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { Organization, DeviceHealthSummary, DeviceInfo } from "@shared/schema";
+import type { Organization, DeviceHealthSummary, DeviceInfo, DeviceCategory, DeviceTypeCounts } from "@shared/schema";
 import { log } from "../index";
 
 function cleanEnv(key: string, fallback?: string): string {
@@ -117,14 +117,27 @@ export async function getOrganizations(): Promise<Organization[]> {
 export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummary> {
   const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
 
+  const VALID_NODE_CLASSES = new Set([
+    "WINDOWS_WORKSTATION",
+    "WINDOWS_SERVER",
+    "MAC",
+  ]);
+
+  const eligibleDevices = basicDevices.filter((d: any) => {
+    const nc = (d.nodeClass || "").toUpperCase();
+    return VALID_NODE_CLASSES.has(nc);
+  });
+
+  log(`NinjaOne org ${orgId}: ${basicDevices.length} total devices, ${eligibleDevices.length} eligible (filtered to Windows/Mac endpoints + servers)`);
+
   const now = new Date();
   const fiveYearsAgo = new Date(now);
   fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
 
   const detailedDevices: any[] = [];
   const batchSize = 10;
-  for (let i = 0; i < basicDevices.length; i += batchSize) {
-    const batch = basicDevices.slice(i, i + batchSize);
+  for (let i = 0; i < eligibleDevices.length; i += batchSize) {
+    const batch = eligibleDevices.slice(i, i + batchSize);
     const details = await Promise.all(
       batch.map(async (bd: any) => {
         try {
@@ -139,10 +152,15 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
 
   let workstations = 0;
   let servers = 0;
+  const typeCounts: DeviceTypeCounts = {
+    windowsDesktops: 0,
+    windowsLaptops: 0,
+    macDesktops: 0,
+    macLaptops: 0,
+    windowsServers: 0,
+  };
   const oldDevices: DeviceInfo[] = [];
   const eolOsDevices: DeviceInfo[] = [];
-  let patchedCount = 0;
-  let totalPatchable = 0;
 
   const EOL_OS_PATTERNS = [
     "windows 10",
@@ -154,11 +172,27 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     "windows server 2008",
   ];
 
+  function classifyDevice(d: any): DeviceCategory {
+    const nc = (d.nodeClass || "").toUpperCase();
+    const chassis = (d.system?.chassisType || "").toUpperCase();
+
+    if (nc === "WINDOWS_SERVER") return "Windows Server";
+    if (nc === "MAC") {
+      return chassis === "LAPTOP" ? "Mac Laptop" : "Mac Desktop";
+    }
+    return chassis === "LAPTOP" ? "Windows Laptop" : "Windows Desktop";
+  }
+
   for (const d of detailedDevices) {
-    const role = (d.nodeClass || d.role || "").toUpperCase();
-    const isServer = role.includes("SERVER");
-    if (isServer) servers++;
-    else workstations++;
+    const deviceType = classifyDevice(d);
+
+    switch (deviceType) {
+      case "Windows Server": servers++; typeCounts.windowsServers++; break;
+      case "Windows Desktop": workstations++; typeCounts.windowsDesktops++; break;
+      case "Windows Laptop": workstations++; typeCounts.windowsLaptops++; break;
+      case "Mac Desktop": workstations++; typeCounts.macDesktops++; break;
+      case "Mac Laptop": workstations++; typeCounts.macLaptops++; break;
+    }
 
     const osName = d.os?.name || "";
     const systemName = d.systemName || d.dnsName || `Device ${d.id}`;
@@ -183,12 +217,10 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       }
     }
 
-    const patchStatus = d.patches?.status || d.patchStatus || "";
-
     const deviceInfo: DeviceInfo = {
       id: d.id,
       systemName,
-      deviceType: isServer ? "Server" : "Workstation",
+      deviceType,
       osName,
       lastContact: d.lastContact
         ? new Date(d.lastContact * 1000).toISOString()
@@ -256,6 +288,7 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     totalDevices: detailedDevices.length,
     workstations,
     servers,
+    deviceTypeCounts: typeCounts,
     oldDevices,
     eolOsDevices,
     needsReplacementCount,

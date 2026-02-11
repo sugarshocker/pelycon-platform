@@ -12,10 +12,12 @@ export interface Organization {
   description?: string;
 }
 
+export type DeviceCategory = "Windows Desktop" | "Windows Laptop" | "Mac Desktop" | "Mac Laptop" | "Windows Server";
+
 export interface DeviceInfo {
   id: number;
   systemName: string;
-  deviceType: string;
+  deviceType: DeviceCategory;
   osName: string;
   lastContact?: string;
   purchaseDate?: string;
@@ -25,10 +27,19 @@ export interface DeviceInfo {
   patchStatus?: string;
 }
 
+export interface DeviceTypeCounts {
+  windowsDesktops: number;
+  windowsLaptops: number;
+  macDesktops: number;
+  macLaptops: number;
+  windowsServers: number;
+}
+
 export interface DeviceHealthSummary {
   totalDevices: number;
   workstations: number;
   servers: number;
+  deviceTypeCounts: DeviceTypeCounts;
   oldDevices: DeviceInfo[];
   eolOsDevices: DeviceInfo[];
   needsReplacementCount: number;

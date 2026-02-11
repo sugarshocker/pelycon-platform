@@ -30,12 +30,21 @@ function buildPrompt(
 
   if (data.deviceHealth) {
     const dh = data.deviceHealth;
+    const tc = dh.deviceTypeCounts;
+    const typeBreakdown = tc ? [
+      tc.windowsLaptops > 0 ? `${tc.windowsLaptops} Windows Laptops` : "",
+      tc.windowsDesktops > 0 ? `${tc.windowsDesktops} Windows Desktops` : "",
+      tc.macLaptops > 0 ? `${tc.macLaptops} Mac Laptops` : "",
+      tc.macDesktops > 0 ? `${tc.macDesktops} Mac Desktops` : "",
+      tc.windowsServers > 0 ? `${tc.windowsServers} Windows Servers` : "",
+    ].filter(Boolean).join(", ") : `${dh.workstations} workstations, ${dh.servers} servers`;
     sections.push(`
 DEVICE HEALTH:
-- Total devices: ${dh.totalDevices} (${dh.workstations} workstations, ${dh.servers} servers)
-- Devices over 4 years old: ${dh.oldDevices.length} (${dh.oldDevices.map((d) => `${d.systemName}: ${d.age} years`).join(", ") || "none"})
+- Total managed devices: ${dh.totalDevices} (${typeBreakdown})
+- Devices over 5 years old: ${dh.oldDevices.length} (${dh.oldDevices.map((d) => `${d.systemName}: ${d.deviceType}, ${d.age} years`).join(", ") || "none"})
 - Devices with unsupported OS: ${dh.eolOsDevices.length} (${dh.eolOsDevices.map((d) => `${d.systemName}: ${d.osName}`).join(", ") || "none"})
-- Software updates compliance: ${dh.patchCompliancePercent}%
+- Devices needing replacement (old or unsupported OS): ${dh.needsReplacementCount}
+- Pending software patches: ${dh.pendingPatchCount}
 - Critical alerts: ${dh.criticalAlerts.length} unresolved`);
   }
 

@@ -53,6 +53,15 @@ export function generateSummaryHtml(data: {
           ? "#d97706"
           : "#dc2626";
 
+    const tc = dh.deviceTypeCounts;
+    const typeBreakdown = tc ? [
+      tc.windowsLaptops > 0 ? `${tc.windowsLaptops} Win Laptops` : "",
+      tc.windowsDesktops > 0 ? `${tc.windowsDesktops} Win Desktops` : "",
+      tc.macLaptops > 0 ? `${tc.macLaptops} Mac Laptops` : "",
+      tc.macDesktops > 0 ? `${tc.macDesktops} Mac Desktops` : "",
+      tc.windowsServers > 0 ? `${tc.windowsServers} Servers` : "",
+    ].filter(Boolean).join(" | ") : "";
+
     sections += `
     <div class="section">
       <h2>Device Health</h2>
@@ -70,11 +79,13 @@ export function generateSummaryHtml(data: {
           <div class="metric-label">Servers</div>
         </div>
         <div class="metric">
-          <div class="metric-value" style="color: ${patchColor}">${dh.patchCompliancePercent}%</div>
-          <div class="metric-label">Systems Up to Date</div>
+          <div class="metric-value" style="color: ${dh.needsReplacementCount > 0 ? "#dc2626" : "#16a34a"}">${dh.needsReplacementCount}</div>
+          <div class="metric-label">Needs Replacement</div>
         </div>
       </div>
-      ${dh.oldDevices.length > 0 ? `<p class="flag-red">Aging Hardware: ${dh.oldDevices.map((d) => `${d.systemName} (${d.age}yr)`).join(", ")}</p>` : ""}
+      ${typeBreakdown ? `<p style="font-size: 12px; color: #6b7280; margin-top: 4px;">${typeBreakdown}</p>` : ""}
+      ${dh.pendingPatchCount > 0 ? `<p class="flag-amber">${dh.pendingPatchCount} patches awaiting installation</p>` : ""}
+      ${dh.oldDevices.length > 0 ? `<p class="flag-red">Aging Hardware: ${dh.oldDevices.map((d) => `${d.systemName} (${d.deviceType}, ${d.age}yr)`).join(", ")}</p>` : ""}
       ${dh.eolOsDevices.length > 0 ? `<p class="flag-amber">Unsupported OS: ${dh.eolOsDevices.map((d) => `${d.systemName} (${d.osName})`).join(", ")}</p>` : ""}
       ${dh.criticalAlerts.length > 0 ? `<p class="flag-red">${dh.criticalAlerts.length} critical alert(s) require attention</p>` : ""}
     </div>`;

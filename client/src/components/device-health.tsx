@@ -3,7 +3,8 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusIndicator, StatusDot } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Monitor, Server, AlertTriangle, ShieldAlert, RefreshCw } from "lucide-react";
+import { Monitor, Server, AlertTriangle, ShieldAlert, RefreshCw, Laptop } from "lucide-react";
+
 import type { DeviceHealthSummary, Organization } from "@shared/schema";
 
 interface DeviceHealthProps {
@@ -42,9 +43,18 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
 
     if (!data) return null;
 
+    const tc = data.deviceTypeCounts;
+    const deviceTypes = [
+      { label: "Win Laptops", count: tc?.windowsLaptops ?? 0, icon: <Laptop className="h-3.5 w-3.5" /> },
+      { label: "Win Desktops", count: tc?.windowsDesktops ?? 0, icon: <Monitor className="h-3.5 w-3.5" /> },
+      { label: "Mac Laptops", count: tc?.macLaptops ?? 0, icon: <Laptop className="h-3.5 w-3.5" /> },
+      { label: "Mac Desktops", count: tc?.macDesktops ?? 0, icon: <Monitor className="h-3.5 w-3.5" /> },
+      { label: "Win Servers", count: tc?.windowsServers ?? 0, icon: <Server className="h-3.5 w-3.5" /> },
+    ].filter(t => t.count > 0);
+
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
             <span className="text-2xl font-bold" data-testid="text-total-devices">{data.totalDevices}</span>
             <span className="text-xs text-muted-foreground">Total Devices</span>
@@ -58,13 +68,6 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
           </div>
           <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
             <div className="flex items-center gap-1.5">
-              <Server className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold" data-testid="text-servers">{data.servers}</span>
-            </div>
-            <span className="text-xs text-muted-foreground">Servers</span>
-          </div>
-          <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
-            <div className="flex items-center gap-1.5">
               <RefreshCw className="h-4 w-4 text-muted-foreground" />
               <span className={`text-2xl font-bold ${data.needsReplacementCount > 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid="text-needs-replacement">
                 {data.needsReplacementCount}
@@ -73,6 +76,21 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
             <span className="text-xs text-muted-foreground text-center">Needs Replacement</span>
           </div>
         </div>
+
+        {deviceTypes.length > 0 && (
+          <div className="flex flex-wrap gap-2" data-testid="device-type-breakdown">
+            {deviceTypes.map((t) => (
+              <div
+                key={t.label}
+                className="flex items-center gap-1.5 rounded-md bg-muted/30 px-3 py-1.5"
+              >
+                {t.icon}
+                <span className="text-sm font-semibold">{t.count}</span>
+                <span className="text-xs text-muted-foreground">{t.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {data.pendingPatchCount > 0 && (
           <div className="flex items-center gap-3 rounded-md bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
