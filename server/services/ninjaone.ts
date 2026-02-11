@@ -105,6 +105,11 @@ async function apiGet(v2Path: string): Promise<any> {
   }
 }
 
+export async function getDeviceCustomFields(deviceId: number): Promise<any> {
+  return apiGet(`/v2/device/${deviceId}/custom-fields`);
+}
+
+
 export async function getOrganizations(): Promise<Organization[]> {
   const orgs = await apiGet("/v2/organizations");
   return orgs.map((o: any) => ({
