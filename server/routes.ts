@@ -197,35 +197,54 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const csvText = req.file.buffer.toString("utf-8");
-      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      const csvText = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: (h: string) => h.trim() });
 
       if (parsed.errors.length > 0) {
         log(`MFA CSV parse warnings: ${JSON.stringify(parsed.errors.slice(0, 3))}`);
       }
 
-      const isYes = (val: string | undefined | null): boolean => {
-        if (!val) return false;
-        return ["yes", "true", "1"].includes(val.toString().trim().toLowerCase());
+      const getCol = (row: any, ...keys: string[]): string => {
+        for (const key of keys) {
+          if (row[key] !== undefined && row[key] !== null && row[key] !== "") return row[key].toString().trim();
+        }
+        return "";
+      };
+
+      const isYes = (val: string): boolean => {
+        return ["yes", "true", "1"].includes(val.toLowerCase());
+      };
+
+      const isCACovered = (val: string): boolean => {
+        const lower = val.toLowerCase();
+        if (["not enforced", "no", "false", "0", ""].includes(lower)) return false;
+        return lower.includes("enforced") || isYes(val);
+      };
+
+      const isSDCovered = (val: string): boolean => {
+        return isYes(val);
       };
 
       const allRows = parsed.data as any[];
       const activeUsers = allRows.filter((row: any) => {
-        const email = row["User Principal Name"] || row["userPrincipalName"] || row["email"] || row["Email"] || "";
+        const email = getCol(row, "UPN", "User Principal Name", "userPrincipalName", "email", "Email");
         if (!email) return false;
-        const accountEnabled = row["Account Enabled"] || row["accountEnabled"] || "";
-        const isLicensed = row["isLicensed"] || row["IsLicensed"] || row["Is Licensed"] || "";
-        return isYes(accountEnabled) && isYes(isLicensed);
+        const accountEnabled = getCol(row, "AccountEnabled", "Account Enabled", "accountEnabled");
+        const licensed = getCol(row, "isLicensed", "IsLicensed", "Is Licensed");
+        return isYes(accountEnabled) && isYes(licensed);
       });
 
       const users = activeUsers.map((row: any) => {
-        const email = row["User Principal Name"] || row["userPrincipalName"] || row["email"] || row["Email"] || "";
-        const displayName = row["Display Name"] || row["displayName"] || row["name"] || row["Name"] || "";
+        const email = getCol(row, "UPN", "User Principal Name", "userPrincipalName", "email", "Email");
+        const displayName = getCol(row, "Display Name", "DisplayName", "displayName", "name", "Name") || email.split("@")[0];
 
-        const coveredByCA = isYes(row["CoveredByCA"] || row["coveredByCA"] || row["Covered By CA"] || "");
-        const coveredBySD = isYes(row["CoveredBySD"] || row["coveredBySD"] || row["Covered By SD"] || "");
-        const perUserRaw = (row["PerUser"] || row["perUser"] || row["Per User"] || row["Per User MFA"] || "").toString().trim().toLowerCase();
+        const caRaw = getCol(row, "CoveredByCA", "coveredByCA", "Covered By CA");
+        const sdRaw = getCol(row, "CoveredBySD", "coveredBySD", "Covered By SD");
+        const perUserRaw = getCol(row, "PerUser", "perUser", "Per User", "Per User MFA").toLowerCase() || "disabled";
         const perUserEnabled = ["enabled", "enforced"].includes(perUserRaw);
+
+        const coveredByCA = isCACovered(caRaw);
+        const coveredBySD = isSDCovered(sdRaw);
 
         const isCovered = perUserEnabled || coveredByCA || coveredBySD;
         let coverageMethod: "perUser" | "conditionalAccess" | "securityDefaults" | null = null;
@@ -236,7 +255,7 @@ export async function registerRoutes(
         return {
           displayName,
           email,
-          perUserMfa: perUserRaw || "disabled",
+          perUserMfa: perUserRaw,
           coveredByCA,
           coveredBySD,
           isCovered,
