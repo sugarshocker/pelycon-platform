@@ -62,11 +62,14 @@ SUPPORT REQUESTS:
 
   if (data.mfaReport) {
     const mfa = data.mfaReport;
+    const coveragePct = mfa.totalUsers > 0 ? Math.round((mfa.coveredCount / mfa.totalUsers) * 100) : 100;
     sections.push(`
-MFA STATUS:
-- Total users: ${mfa.totalUsers}
-- MFA enabled: ${mfa.mfaEnabledCount}
-- MFA NOT enabled: ${mfa.mfaDisabledCount} (${mfa.usersWithoutMfa.map((u) => u.displayName).join(", ")})`);
+MFA STATUS (CRITICAL - this is one of the most important security measures):
+- Active licensed users: ${mfa.totalUsers}
+- Users with MFA coverage: ${mfa.coveredCount} (${coveragePct}%)
+- Users WITHOUT any MFA coverage: ${mfa.uncoveredCount}${mfa.uncoveredCount > 0 ? ` — THIS IS A CRITICAL SECURITY GAP. These users can be compromised with just a stolen password.` : ""}
+- Coverage methods: ${mfa.coveredByCA} via Conditional Access, ${mfa.coveredBySD} via Security Defaults, ${mfa.coveredByPerUser} via Per-User MFA
+${mfa.uncoveredUsers.length > 0 ? `- Unprotected users: ${mfa.uncoveredUsers.map((u) => u.displayName).join(", ")}` : "- All users are protected"}`);
   }
 
   if (data.licenseReport) {

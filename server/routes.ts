@@ -204,22 +204,57 @@ export async function registerRoutes(
         log(`MFA CSV parse warnings: ${JSON.stringify(parsed.errors.slice(0, 3))}`);
       }
 
-      const users = parsed.data.map((row: any) => {
+      const isYes = (val: string | undefined | null): boolean => {
+        if (!val) return false;
+        return ["yes", "true", "1"].includes(val.toString().trim().toLowerCase());
+      };
+
+      const allRows = parsed.data as any[];
+      const activeUsers = allRows.filter((row: any) => {
+        const email = row["User Principal Name"] || row["userPrincipalName"] || row["email"] || row["Email"] || "";
+        if (!email) return false;
+        const accountEnabled = row["Account Enabled"] || row["accountEnabled"] || "";
+        const isLicensed = row["isLicensed"] || row["IsLicensed"] || row["Is Licensed"] || "";
+        return isYes(accountEnabled) && isYes(isLicensed);
+      });
+
+      const users = activeUsers.map((row: any) => {
         const email = row["User Principal Name"] || row["userPrincipalName"] || row["email"] || row["Email"] || "";
         const displayName = row["Display Name"] || row["displayName"] || row["name"] || row["Name"] || "";
-        const mfaRaw = row["MFA Status"] || row["mfaStatus"] || row["status"] || row["Status"] || row["Auth Methods Registered"] || "Unknown";
-        const mfaEnabled = ["enabled", "enforced", "yes", "true"].some(k => mfaRaw.toLowerCase().includes(k));
-        return { displayName, email, mfaEnabled };
-      }).filter((u: any) => u.email);
 
-      const enabledCount = users.filter((u: any) => u.mfaEnabled).length;
-      const usersWithoutMfa = users.filter((u: any) => !u.mfaEnabled);
+        const coveredByCA = isYes(row["CoveredByCA"] || row["coveredByCA"] || row["Covered By CA"] || "");
+        const coveredBySD = isYes(row["CoveredBySD"] || row["coveredBySD"] || row["Covered By SD"] || "");
+        const perUserRaw = (row["PerUser"] || row["perUser"] || row["Per User"] || row["Per User MFA"] || "").toString().trim().toLowerCase();
+        const perUserEnabled = ["enabled", "enforced"].includes(perUserRaw);
+
+        const isCovered = perUserEnabled || coveredByCA || coveredBySD;
+        let coverageMethod: "perUser" | "conditionalAccess" | "securityDefaults" | null = null;
+        if (coveredByCA) coverageMethod = "conditionalAccess";
+        else if (coveredBySD) coverageMethod = "securityDefaults";
+        else if (perUserEnabled) coverageMethod = "perUser";
+
+        return {
+          displayName,
+          email,
+          perUserMfa: perUserRaw || "disabled",
+          coveredByCA,
+          coveredBySD,
+          isCovered,
+          coverageMethod,
+        };
+      });
+
+      const coveredCount = users.filter((u: any) => u.isCovered).length;
+      const uncoveredUsers = users.filter((u: any) => !u.isCovered);
 
       const report: MfaReport = {
         totalUsers: users.length,
-        mfaEnabledCount: enabledCount,
-        mfaDisabledCount: users.length - enabledCount,
-        usersWithoutMfa,
+        coveredCount,
+        uncoveredCount: uncoveredUsers.length,
+        coveredByPerUser: users.filter((u: any) => ["enabled", "enforced"].includes(u.perUserMfa)).length,
+        coveredByCA: users.filter((u: any) => u.coveredByCA).length,
+        coveredBySD: users.filter((u: any) => u.coveredBySD).length,
+        uncoveredUsers,
       };
 
       res.json(report);

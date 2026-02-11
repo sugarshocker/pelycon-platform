@@ -3,7 +3,7 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusDot } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileUp, UserCheck, Key, Package, AlertTriangle, Check } from "lucide-react";
+import { FileUp, UserCheck, Key, Package, AlertTriangle, Check, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getToken } from "@/lib/queryClient";
 import type { MfaReport, LicenseReport } from "@shared/schema";
@@ -74,6 +74,10 @@ export function CippReports({
     }
   };
 
+  const coveragePercent = mfaReport && mfaReport.totalUsers > 0
+    ? Math.round((mfaReport.coveredCount / mfaReport.totalUsers) * 100)
+    : 0;
+
   return (
     <CollapsibleSection
       title="Account Security & Licensing"
@@ -116,38 +120,60 @@ export function CippReports({
 
             {mfaReport ? (
               <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
-                    <span className="text-xl font-bold">{mfaReport.totalUsers}</span>
-                    <span className="text-xs text-muted-foreground">Total Users</span>
+                    <span className="text-xl font-bold" data-testid="text-mfa-total">{mfaReport.totalUsers}</span>
+                    <span className="text-xs text-muted-foreground">Active Licensed Users</span>
                   </div>
-                  <div className="flex flex-col items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/30 p-3">
-                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                      {mfaReport.mfaEnabledCount}
+                  <div className={`flex flex-col items-center gap-1 rounded-md p-3 ${
+                    mfaReport.uncoveredCount > 0
+                      ? "bg-red-50 dark:bg-red-950/30"
+                      : "bg-emerald-50 dark:bg-emerald-950/30"
+                  }`}>
+                    <span className={`text-xl font-bold ${
+                      mfaReport.uncoveredCount > 0
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`} data-testid="text-mfa-coverage">
+                      {coveragePercent}%
                     </span>
-                    <span className="text-xs text-muted-foreground">MFA On</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1 rounded-md bg-red-50 dark:bg-red-950/30 p-3">
-                    <span className="text-xl font-bold text-red-600 dark:text-red-400">
-                      {mfaReport.mfaDisabledCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">MFA Off</span>
+                    <span className="text-xs text-muted-foreground">MFA Coverage</span>
                   </div>
                 </div>
-                {mfaReport.usersWithoutMfa.length > 0 && (
-                  <div className="space-y-1">
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Coverage Breakdown</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col items-center gap-1 rounded-md bg-muted/30 p-2">
+                      <span className="text-sm font-semibold" data-testid="text-mfa-ca">{mfaReport.coveredByCA}</span>
+                      <span className="text-[10px] text-muted-foreground text-center leading-tight">Conditional Access</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 rounded-md bg-muted/30 p-2">
+                      <span className="text-sm font-semibold" data-testid="text-mfa-sd">{mfaReport.coveredBySD}</span>
+                      <span className="text-[10px] text-muted-foreground text-center leading-tight">Security Defaults</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 rounded-md bg-muted/30 p-2">
+                      <span className="text-sm font-semibold" data-testid="text-mfa-peruser">{mfaReport.coveredByPerUser}</span>
+                      <span className="text-[10px] text-muted-foreground text-center leading-tight">Per-User MFA</span>
+                    </div>
+                  </div>
+                </div>
+
+                {mfaReport.uncoveredUsers.length > 0 && (
+                  <div className="space-y-1.5">
                     <p className="text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      Users Without MFA:
+                      <ShieldAlert className="h-3 w-3" />
+                      {mfaReport.uncoveredCount} User{mfaReport.uncoveredCount !== 1 ? "s" : ""} Without MFA Protection:
                     </p>
-                    <div className="grid gap-1">
-                      {mfaReport.usersWithoutMfa.map((user, i) => (
+                    <div className="grid gap-1 max-h-48 overflow-y-auto">
+                      {mfaReport.uncoveredUsers.map((user, i) => (
                         <div
                           key={i}
                           className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/20 px-3 py-1.5 text-sm"
+                          data-testid={`row-mfa-uncovered-${i}`}
                         >
                           <StatusDot status="action" />
-                          <span className="truncate">{user.displayName}</span>
+                          <span className="truncate font-medium">{user.displayName}</span>
                           <span className="text-xs text-muted-foreground truncate ml-auto">
                             {user.email}
                           </span>
@@ -156,9 +182,12 @@ export function CippReports({
                     </div>
                   </div>
                 )}
-                {mfaReport.usersWithoutMfa.length === 0 && (
-                  <div className="text-center py-2">
-                    <StatusDot status="good" label="All users have MFA enabled" />
+                {mfaReport.uncoveredUsers.length === 0 && (
+                  <div className="text-center py-2 flex items-center justify-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                    <span className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                      All users have MFA coverage
+                    </span>
                   </div>
                 )}
               </div>

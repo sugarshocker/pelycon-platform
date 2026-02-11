@@ -125,24 +125,30 @@ export function generateSummaryHtml(data: {
 
   if (data.mfaReport) {
     const mfa = data.mfaReport;
+    const coveragePct = mfa.totalUsers > 0 ? Math.round((mfa.coveredCount / mfa.totalUsers) * 100) : 100;
     sections += `
     <div class="section">
       <h2>Account Security (MFA)</h2>
       <div class="metrics">
         <div class="metric">
           <div class="metric-value">${mfa.totalUsers}</div>
-          <div class="metric-label">Total Users</div>
+          <div class="metric-label">Active Licensed Users</div>
         </div>
         <div class="metric">
-          <div class="metric-value" style="color: #16a34a">${mfa.mfaEnabledCount}</div>
-          <div class="metric-label">MFA Enabled</div>
+          <div class="metric-value" style="color: #16a34a">${mfa.coveredCount}</div>
+          <div class="metric-label">MFA Covered</div>
         </div>
         <div class="metric">
-          <div class="metric-value" style="color: ${mfa.mfaDisabledCount > 0 ? "#dc2626" : "#16a34a"}">${mfa.mfaDisabledCount}</div>
-          <div class="metric-label">MFA Disabled</div>
+          <div class="metric-value" style="color: ${mfa.uncoveredCount > 0 ? "#dc2626" : "#16a34a"}">${mfa.uncoveredCount}</div>
+          <div class="metric-label">No MFA</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">${coveragePct}%</div>
+          <div class="metric-label">Coverage</div>
         </div>
       </div>
-      ${mfa.usersWithoutMfa.length > 0 ? `<p class="flag-red">Users without MFA: ${mfa.usersWithoutMfa.map((u) => u.displayName).join(", ")}</p>` : ""}
+      <p style="font-size: 12px; color: #6b7280; margin-top: 4px;">Coverage: ${mfa.coveredByCA} Conditional Access, ${mfa.coveredBySD} Security Defaults, ${mfa.coveredByPerUser} Per-User MFA</p>
+      ${mfa.uncoveredUsers.length > 0 ? `<p class="flag-red">Users without MFA protection: ${mfa.uncoveredUsers.map((u) => u.displayName).join(", ")}</p>` : ""}
     </div>`;
   }
 
