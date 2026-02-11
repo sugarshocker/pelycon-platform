@@ -245,6 +245,12 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       isStale = lastContactDate < thirtyDaysAgo;
     }
 
+    const manufacturer = d.system?.manufacturer || undefined;
+    const model = d.system?.model || undefined;
+    const createdDate = d.created
+      ? new Date(typeof d.created === "number" ? d.created * 1000 : d.created).toISOString()
+      : undefined;
+
     const deviceInfo: DeviceInfo = {
       id: d.id,
       systemName,
@@ -261,6 +267,9 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       isEolOs: isEol,
       isStale,
       daysSinceContact,
+      manufacturer: manufacturer !== "To Be Filled By O.E.M." ? manufacturer : undefined,
+      model: model !== "To Be Filled By O.E.M." ? model : undefined,
+      createdDate,
     };
 
     if (isOld) oldDevices.push(deviceInfo);

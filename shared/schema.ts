@@ -67,6 +67,9 @@ export interface DeviceInfo {
   isStale: boolean;
   daysSinceContact?: number;
   patchStatus?: string;
+  manufacturer?: string;
+  model?: string;
+  createdDate?: string;
 }
 
 export interface DeviceTypeCounts {

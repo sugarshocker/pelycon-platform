@@ -139,35 +139,53 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
               Needs Attention — {data.eolOsDevices.length} device{data.eolOsDevices.length !== 1 ? "s" : ""}
             </h4>
             <div className="grid gap-2">
-              {data.eolOsDevices.map((device) => (
-                <div
-                  key={device.id}
-                  className="flex items-center justify-between gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2"
-                  data-testid={`device-eol-${device.id}`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StatusDot status={device.isOld ? "action" : "warning"} />
-                    <span className="text-sm font-medium truncate">
-                      {device.systemName}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      ({device.deviceType})
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                    {device.isEolOs && (
-                      <Badge variant="outline">
-                        {device.osName}
-                      </Badge>
+              {data.eolOsDevices.map((device) => {
+                const modelLabel = device.model
+                  ? (device.manufacturer ? `${device.manufacturer} ${device.model}` : device.model)
+                  : null;
+                const managedSince = device.createdDate
+                  ? new Date(device.createdDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+                  : null;
+
+                return (
+                  <div
+                    key={device.id}
+                    className="rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2"
+                    data-testid={`device-eol-${device.id}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <StatusDot status={device.isOld ? "action" : "warning"} />
+                        <span className="text-sm font-medium truncate">
+                          {device.systemName}
+                        </span>
+                        <span className="text-xs text-muted-foreground hidden sm:inline">
+                          {device.deviceType}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                        {device.isEolOs && (
+                          <Badge variant="outline">
+                            {device.osName}
+                          </Badge>
+                        )}
+                        {device.isOld && device.age !== undefined && device.age >= 1 && (
+                          <Badge variant="destructive">
+                            {device.age} yr{device.age !== 1 ? "s" : ""} old
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    {(modelLabel || managedSince) && (
+                      <div className="flex items-center gap-2 mt-1 ml-5 text-xs text-muted-foreground flex-wrap">
+                        {modelLabel && <span>{modelLabel}</span>}
+                        {modelLabel && managedSince && <span>·</span>}
+                        {managedSince && <span>Managed since {managedSince}</span>}
+                      </div>
                     )}
-                    {device.isOld && device.age !== undefined && (
-                      <Badge variant="destructive">
-                        {device.age} yr{device.age !== 1 ? "s" : ""} old
-                      </Badge>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
