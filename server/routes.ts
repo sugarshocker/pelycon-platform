@@ -200,8 +200,12 @@ export async function registerRoutes(
       const ninjaDevices = await ninjaone.getDeviceNamesWithLastSeen(orgId);
       const huntressNames = await huntress.getAgentHostnames(orgName);
 
+      const extractHostname = (name: string): string => {
+        const parts = name.split(".");
+        return parts[0].toLowerCase().replace(/[^a-z0-9-]/g, "");
+      };
       const normalizeHostname = (name: string): string =>
-        name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        extractHostname(name).replace(/[^a-z0-9]/g, "");
 
       const ninjaSet = new Map<string, { name: string; lastSeen: string | null }>();
       for (const d of ninjaDevices) ninjaSet.set(normalizeHostname(d.name), d);
@@ -211,7 +215,7 @@ export async function registerRoutes(
 
       const missingFromHuntress = ninjaDevices
         .filter(d => !huntressSet.has(normalizeHostname(d.name)))
-        .map(d => ({ name: d.name, lastSeen: d.lastSeen }));
+        .map(d => ({ name: extractHostname(d.name), lastSeen: d.lastSeen }));
       const missingFromNinja = huntressNames.filter(h => !ninjaSet.has(normalizeHostname(h)));
 
       log(`Coverage gap for "${orgName}": ${ninjaDevices.length} Ninja, ${huntressNames.length} Huntress, ${missingFromHuntress.length} missing from Huntress, ${missingFromNinja.length} missing from Ninja`);

@@ -125,7 +125,7 @@ export async function getDeviceNamesWithLastSeen(orgId: number): Promise<{ name:
   return basicDevices
     .filter((d: any) => VALID_NODE_CLASSES.has((d.nodeClass || "").toUpperCase()))
     .map((d: any) => ({
-      name: d.systemName || d.dnsName || `Device ${d.id}`,
+      name: d.dnsName || d.systemName || `Device ${d.id}`,
       lastSeen: d.lastContact ? new Date(d.lastContact * 1000).toISOString() : null,
     }));
 }
