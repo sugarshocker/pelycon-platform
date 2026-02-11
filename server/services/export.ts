@@ -177,7 +177,7 @@ export function generateSummaryHtml(data: {
     }
 
     const patchGood = dh.patchCompliancePercent >= 90;
-    capItems.push(`<div class="check-item">${statusIndicator(patchGood, `Patch compliance at ${dh.patchCompliancePercent}%`, `Patch compliance at ${dh.patchCompliancePercent}% \u2014 ${dh.pendingPatchCount} patches pending`)}</div>`);
+    capItems.push(`<div class="check-item">${statusIndicator(patchGood, `Patch compliance at ${dh.patchCompliancePercent}%`, `Patch compliance at ${dh.patchCompliancePercent}% \u2014 ${dh.pendingPatchCount} patches pending 30+ days`)}</div>`);
 
     if (dh.staleDevices && dh.staleDevices.length > 0) {
       capItems.push(`<div class="check-item">${statusIndicator(false, "", `${dh.staleDevices.length} device(s) inactive for 30+ days (possibly decommissioned)`)}</div>`);

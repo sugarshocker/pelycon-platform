@@ -96,7 +96,7 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
           <div className="flex items-center gap-3 rounded-md bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
             <StatusDot status="warning" />
             <div className="flex-1">
-              <span className="text-sm font-medium" data-testid="text-pending-patches">{data.pendingPatchCount} patches awaiting installation</span>
+              <span className="text-sm font-medium" data-testid="text-pending-patches">{data.pendingPatchCount} patches awaiting installation (30+ days)</span>
             </div>
           </div>
         )}

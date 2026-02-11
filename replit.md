@@ -59,8 +59,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 5. **Progress Since Last Review** - Trend comparison table (when previous TBR exists)
 
 ## API Implementation Notes
-- **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X`. Device age uses warranty/purchase/created date.
-- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. SAT integration pulls from org detail + report endpoints (`/v1/reports`, `/v1/reports/sat`, `/v1/summary_reports`) with graceful fallback if endpoints aren't available. SecuritySummary includes: enrollment (learner count, coverage %), training completion (modules completed/assigned, completion %), phishing simulation (click rate, compromise rate, report rate, campaign count, recent campaigns).
+- **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X` — only patches pending 30+ days are counted as "awaiting installation." Device age uses warranty/purchase/created date.
+- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. SAT integration uses dedicated API key (HUNTRESS_SAT_API_KEY/SECRET) when available, falls back to standard Huntress credentials. Pulls from org detail + report endpoints (`/v1/reports`, `/v1/reports/sat`, `/v1/summary_reports`) with graceful fallback. Rate normalization handles both 0-1 ratios and 0-100 percentages. SecuritySummary includes: enrollment (learner count, coverage %), training completion (modules completed/assigned, completion %), phishing simulation (click rate, compromise rate, report rate, campaign count, recent campaigns).
 - **Auth**: Bearer token stored in sessionStorage, sent in Authorization header
 
 ## Environment Variables
@@ -68,6 +68,7 @@ All API keys stored as Replit Secrets:
 - NINJAONE_CLIENT_ID, NINJAONE_CLIENT_SECRET, NINJAONE_INSTANCE
 - NINJAONE_LEGACY_KEY_ID, NINJAONE_LEGACY_SECRET
 - HUNTRESS_API_KEY, HUNTRESS_API_SECRET
+- HUNTRESS_SAT_API_KEY, HUNTRESS_SAT_API_SECRET (optional, dedicated SAT API credentials)
 - CW_COMPANY_ID, CW_PUBLIC_KEY, CW_PRIVATE_KEY, CW_CLIENT_ID, CW_SITE_URL
 - DASHBOARD_PASSWORD
 - SESSION_SECRET

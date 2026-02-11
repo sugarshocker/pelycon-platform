@@ -73,6 +73,7 @@ export async function registerRoutes(
     res.json({
       ninjaone: ninjaone.isConfigured(),
       huntress: huntress.isConfigured(),
+      huntressSat: huntress.isSatConfigured(),
       connectwise: connectwise.isConfigured(),
     });
   });

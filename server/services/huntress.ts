@@ -7,14 +7,27 @@ function cleanEnv(key: string): string {
 
 const API_KEY = cleanEnv("HUNTRESS_API_KEY");
 const API_SECRET = cleanEnv("HUNTRESS_API_SECRET");
+const SAT_API_KEY = cleanEnv("HUNTRESS_SAT_API_KEY");
+const SAT_API_SECRET = cleanEnv("HUNTRESS_SAT_API_SECRET");
 const BASE_URL = "https://api.huntress.io/v1";
 
 export function isConfigured(): boolean {
   return !!(API_KEY && API_SECRET);
 }
 
+export function isSatConfigured(): boolean {
+  return !!(SAT_API_KEY && SAT_API_SECRET);
+}
+
 function getAuthHeader(): string {
   return "Basic " + Buffer.from(`${API_KEY}:${API_SECRET}`).toString("base64");
+}
+
+function getSatAuthHeader(): string {
+  if (SAT_API_KEY && SAT_API_SECRET) {
+    return "Basic " + Buffer.from(`${SAT_API_KEY}:${SAT_API_SECRET}`).toString("base64");
+  }
+  return getAuthHeader();
 }
 
 async function apiGet(path: string): Promise<any> {
@@ -30,12 +43,37 @@ async function apiGet(path: string): Promise<any> {
   return res.json();
 }
 
+async function apiGetSat(path: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { Authorization: getSatAuthHeader() },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Huntress SAT API error: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
 async function apiGetSafe(path: string): Promise<any | null> {
   try {
     return await apiGet(path);
   } catch (e: any) {
     if (e.message?.includes("404") || e.message?.includes("403")) {
       log(`Huntress endpoint not available: ${path}`);
+      return null;
+    }
+    throw e;
+  }
+}
+
+async function apiGetSatSafe(path: string): Promise<any | null> {
+  try {
+    return await apiGetSat(path);
+  } catch (e: any) {
+    if (e.message?.includes("404") || e.message?.includes("403")) {
+      log(`Huntress SAT endpoint not available: ${path}`);
       return null;
     }
     throw e;
@@ -162,9 +200,12 @@ async function fetchSatReportData(huntressOrgId: number): Promise<typeof emptySa
     `/summary_reports?organization_id=${huntressOrgId}`,
   ];
 
+  const useSatApi = !!(SAT_API_KEY && SAT_API_SECRET);
+  log(`Huntress SAT: Using ${useSatApi ? "dedicated SAT API key" : "standard API key"} for report endpoints`);
+
   for (const endpoint of reportEndpoints) {
     try {
-      const data = await apiGetSafe(endpoint);
+      const data = useSatApi ? await apiGetSatSafe(endpoint) : await apiGetSafe(endpoint);
       if (!data) continue;
 
       log(`Huntress SAT report response from ${endpoint}: ${JSON.stringify(data).slice(0, 500)}`);

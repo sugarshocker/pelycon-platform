@@ -276,18 +276,36 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
 
   let pendingPatchCount = 0;
   let installedPatchCount = 0;
+  let totalApprovedManual = 0;
+  let noTimestampCount = 0;
   try {
     const patchData = await apiGet(`/v2/queries/os-patches?df=org = ${orgId}&pageSize=500`);
     const results = patchData.results || [];
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     for (const p of results) {
       const status = (p.status || "").toUpperCase();
       if (status === "APPROVED" || status === "MANUAL") {
-        pendingPatchCount++;
+        totalApprovedManual++;
+        const patchTimestamp = p.timestamp || p.kbInstalledTimestamp || p.approvedTimestamp || p.created || null;
+        if (!patchTimestamp) {
+          noTimestampCount++;
+          continue;
+        }
+        const patchDate = typeof patchTimestamp === "number"
+          ? (patchTimestamp > 1e12 ? patchTimestamp : patchTimestamp * 1000)
+          : new Date(patchTimestamp).getTime();
+        if (isNaN(patchDate)) {
+          noTimestampCount++;
+          continue;
+        }
+        if (patchDate <= thirtyDaysAgo) {
+          pendingPatchCount++;
+        }
       } else if (status === "REJECTED") {
         installedPatchCount++;
       }
     }
-    log(`NinjaOne patches for org ${orgId}: pending=${pendingPatchCount}, rejected=${installedPatchCount}, total=${results.length}`);
+    log(`NinjaOne patches for org ${orgId}: approved/manual=${totalApprovedManual}, pending(30d+)=${pendingPatchCount}, skipped(no timestamp)=${noTimestampCount}, rejected=${installedPatchCount}, total=${results.length}`);
   } catch (e) {
     log(`Could not fetch os-patches for org ${orgId}: ${e}`);
   }
