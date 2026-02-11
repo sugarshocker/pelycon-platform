@@ -1,4 +1,4 @@
-import type { SecuritySummary } from "@shared/schema";
+import type { SecuritySummary, IncidentDetail } from "@shared/schema";
 import { log } from "../index";
 
 function cleanEnv(key: string): string {
@@ -112,7 +112,10 @@ export async function getSecuritySummary(
       totalIncidents: 0,
       resolvedIncidents: 0,
       pendingIncidents: 0,
+      recentIncidents: [],
       activeAgents: 0,
+      managedAntivirusCount: 0,
+      antivirusNotProtectedCount: 0,
       satCompletionPercent: null,
       phishingClickRate: null,
       trendDirection: "stable" as const,
@@ -120,35 +123,87 @@ export async function getSecuritySummary(
     };
   }
 
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
   let totalIncidents = 0;
   let resolvedIncidents = 0;
   let pendingIncidents = 0;
+  const recentIncidents: IncidentDetail[] = [];
 
   try {
-    const reports = await apiGet(
-      `/organizations/${huntressOrgId}/reports?page=1&per_page=100`
-    );
-    const reportsList = reports.reports || [];
-    totalIncidents = reportsList.length;
+    let page = 1;
+    const allReports: any[] = [];
+    while (page <= 10) {
+      const data = await apiGet(
+        `/incident_reports?organization_id=${huntressOrgId}&page=${page}&limit=100`
+      );
+      const reports = data.incident_reports || [];
+      allReports.push(...reports);
+      if (!data.pagination?.next_page) break;
+      page++;
+    }
 
-    for (const r of reportsList) {
-      const status = (r.status || "").toLowerCase();
-      if (status === "closed" || status === "resolved") {
-        resolvedIncidents++;
-      } else {
-        pendingIncidents++;
+    for (const r of allReports) {
+      const sentAt = r.sent_at ? new Date(r.sent_at) : null;
+      const isRecent = sentAt && sentAt > sixMonthsAgo;
+
+      if (isRecent) {
+        totalIncidents++;
+        const status = (r.status || "").toLowerCase();
+        if (status === "closed" || status === "resolved") {
+          resolvedIncidents++;
+        } else {
+          pendingIncidents++;
+        }
+        recentIncidents.push({
+          id: r.id,
+          subject: r.subject || "Incident Report",
+          severity: r.severity || "unknown",
+          status: r.status || "unknown",
+          sentAt: r.sent_at,
+          closedAt: r.closed_at || null,
+        });
       }
     }
+
+    log(`Huntress: ${allReports.length} total reports, ${totalIncidents} in last 6 months for org ${huntressOrgId}`);
   } catch (e) {
-    log(`Huntress reports error: ${e}`);
+    log(`Huntress incident_reports error: ${e}`);
   }
 
   let activeAgents = 0;
+  let managedAntivirusCount = 0;
+  let antivirusNotProtectedCount = 0;
+
   try {
-    const agents = await apiGet(
-      `/organizations/${huntressOrgId}/agents?page=1&per_page=1`
-    );
-    activeAgents = agents.pagination?.total_count || agents.total || 0;
+    const orgDetail = await apiGet(`/organizations/${huntressOrgId}`);
+    const org = orgDetail.organization || {};
+    activeAgents = org.agents_count || 0;
+    log(`Huntress org detail: agents_count=${activeAgents}`);
+  } catch (e) {
+    log(`Huntress org detail error: ${e}`);
+  }
+
+  try {
+    let page = 1;
+    while (page <= 10) {
+      const data = await apiGet(
+        `/agents?organization_id=${huntressOrgId}&page=${page}&limit=100`
+      );
+      const agents = data.agents || [];
+      for (const a of agents) {
+        const defenderStatus = (a.defender_status || "").toLowerCase();
+        if (defenderStatus === "protected") {
+          managedAntivirusCount++;
+        } else {
+          antivirusNotProtectedCount++;
+        }
+      }
+      if (!data.pagination?.next_page) break;
+      page++;
+    }
+    log(`Huntress: managed antivirus=${managedAntivirusCount}, not protected=${antivirusNotProtectedCount}`);
   } catch (e) {
     log(`Huntress agents error: ${e}`);
   }
@@ -157,9 +212,12 @@ export async function getSecuritySummary(
     totalIncidents,
     resolvedIncidents,
     pendingIncidents,
+    recentIncidents: recentIncidents.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()),
     activeAgents,
+    managedAntivirusCount,
+    antivirusNotProtectedCount,
     satCompletionPercent: null,
     phishingClickRate: null,
-    trendDirection: totalIncidents === 0 ? "stable" : pendingIncidents > resolvedIncidents ? "worse" : "better",
+    trendDirection: totalIncidents === 0 ? "stable" : pendingIncidents > 0 ? "worse" : "better",
   };
 }

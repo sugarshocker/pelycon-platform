@@ -9,7 +9,7 @@ import * as connectwise from "./services/connectwise";
 import * as roadmap from "./services/roadmap";
 import { generateSummaryHtml } from "./services/export";
 import { log } from "./index";
-import type { MfaReport, LicenseReport, SecuritySummary, TicketSummary } from "@shared/schema";
+import type { MfaReport, LicenseReport, SecuritySummary, TicketSummary, DeviceHealthSummary } from "@shared/schema";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -102,9 +102,12 @@ export async function registerRoutes(
           servers: 0,
           oldDevices: [],
           eolOsDevices: [],
+          needsReplacementCount: 0,
           patchCompliancePercent: 100,
+          pendingPatchCount: 0,
+          installedPatchCount: 0,
           criticalAlerts: [],
-        });
+        } satisfies DeviceHealthSummary);
       }
 
       const health = await ninjaone.getDeviceHealth(orgId);
@@ -136,7 +139,10 @@ export async function registerRoutes(
           totalIncidents: 0,
           resolvedIncidents: 0,
           pendingIncidents: 0,
+          recentIncidents: [],
           activeAgents: 0,
+          managedAntivirusCount: 0,
+          antivirusNotProtectedCount: 0,
           satCompletionPercent: null,
           phishingClickRate: null,
           trendDirection: "stable",

@@ -204,11 +204,33 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     if (isOld) oldDevices.push(deviceInfo);
     if (isEol) eolOsDevices.push(deviceInfo);
 
-    totalPatchable++;
-    if (patchStatus === "UP_TO_DATE" || patchStatus === "upToDate") {
-      patchedCount++;
-    }
   }
+
+  const replacementSet = new Set<number>();
+  for (const d of oldDevices) replacementSet.add(d.id);
+  for (const d of eolOsDevices) replacementSet.add(d.id);
+  const needsReplacementCount = replacementSet.size;
+
+  let pendingPatchCount = 0;
+  let installedPatchCount = 0;
+  try {
+    const patchData = await apiGet(`/v2/queries/os-patches?df=org = ${orgId}&pageSize=500`);
+    const results = patchData.results || [];
+    for (const p of results) {
+      const status = (p.status || "").toUpperCase();
+      if (status === "APPROVED" || status === "MANUAL") {
+        pendingPatchCount++;
+      } else if (status === "REJECTED") {
+        installedPatchCount++;
+      }
+    }
+    log(`NinjaOne patches for org ${orgId}: pending=${pendingPatchCount}, rejected=${installedPatchCount}, total=${results.length}`);
+  } catch (e) {
+    log(`Could not fetch os-patches for org ${orgId}: ${e}`);
+  }
+
+  const patchCompliancePercent =
+    pendingPatchCount > 0 ? 0 : 100;
 
   let criticalAlerts: DeviceHealthSummary["criticalAlerts"] = [];
   try {
@@ -230,18 +252,16 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     log(`Could not fetch alerts for org ${orgId}: ${e}`);
   }
 
-  const patchCompliancePercent =
-    totalPatchable > 0
-      ? Math.round((patchedCount / totalPatchable) * 100)
-      : 100;
-
   return {
     totalDevices: detailedDevices.length,
     workstations,
     servers,
     oldDevices,
     eolOsDevices,
+    needsReplacementCount,
     patchCompliancePercent,
+    pendingPatchCount,
+    installedPatchCount,
     criticalAlerts,
   };
 }

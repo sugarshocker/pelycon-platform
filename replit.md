@@ -24,18 +24,23 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `client/src/components/` - Dashboard section components
 
 ## API Routes
-- `POST /api/auth/login` - Password authentication
+- `POST /api/auth/login` - Password authentication (bearer token)
 - `GET /api/auth/check` - Session check
 - `POST /api/auth/logout` - Logout
 - `GET /api/status` - API connection status
 - `GET /api/organizations` - List clients from NinjaOne
-- `GET /api/devices/:orgId` - Device health from NinjaOne
-- `GET /api/security/:orgId` - Security data from Huntress
+- `GET /api/devices/:orgId` - Device health from NinjaOne (includes patch data from os-patches query, aging hardware, EOL OS, replacement count)
+- `GET /api/security/:orgId` - Security data from Huntress (incident reports filtered to last 6 months, managed antivirus from agents, org detail)
 - `GET /api/tickets/:orgId` - Ticket data from ConnectWise
 - `POST /api/reports/mfa` - Upload MFA CSV
 - `POST /api/reports/license` - Upload License CSV
 - `POST /api/roadmap/generate` - AI roadmap generation
 - `POST /api/export/summary` - HTML summary export
+
+## API Implementation Notes
+- **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X`. Device age uses warranty/purchase/created date.
+- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count.
+- **Auth**: Bearer token stored in sessionStorage, sent in Authorization header
 
 ## Environment Variables
 All API keys stored as Replit Secrets:

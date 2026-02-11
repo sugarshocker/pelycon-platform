@@ -3,7 +3,7 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusIndicator, StatusDot } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Monitor, Server, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Monitor, Server, AlertTriangle, ShieldAlert, RefreshCw } from "lucide-react";
 import type { DeviceHealthSummary, Organization } from "@shared/schema";
 
 interface DeviceHealthProps {
@@ -46,34 +46,48 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
       <div className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
-            <span className="text-2xl font-bold">{data.totalDevices}</span>
+            <span className="text-2xl font-bold" data-testid="text-total-devices">{data.totalDevices}</span>
             <span className="text-xs text-muted-foreground">Total Devices</span>
           </div>
           <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
             <div className="flex items-center gap-1.5">
               <Monitor className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">{data.workstations}</span>
+              <span className="text-2xl font-bold" data-testid="text-workstations">{data.workstations}</span>
             </div>
             <span className="text-xs text-muted-foreground">Workstations</span>
           </div>
           <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
             <div className="flex items-center gap-1.5">
               <Server className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">{data.servers}</span>
+              <span className="text-2xl font-bold" data-testid="text-servers">{data.servers}</span>
             </div>
             <span className="text-xs text-muted-foreground">Servers</span>
           </div>
-          <StatusIndicator
-            value={data.patchCompliancePercent}
-            label="Systems Up to Date"
-          />
+          <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
+            <div className="flex items-center gap-1.5">
+              <RefreshCw className="h-4 w-4 text-muted-foreground" />
+              <span className={`text-2xl font-bold ${data.needsReplacementCount > 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid="text-needs-replacement">
+                {data.needsReplacementCount}
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground text-center">Needs Replacement</span>
+          </div>
         </div>
+
+        {data.pendingPatchCount > 0 && (
+          <div className="flex items-center gap-3 rounded-md bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+            <StatusDot status="warning" />
+            <div className="flex-1">
+              <span className="text-sm font-medium" data-testid="text-pending-patches">{data.pendingPatchCount} patches awaiting installation</span>
+            </div>
+          </div>
+        )}
 
         {data.oldDevices.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-500" />
-              Aging Hardware (5+ Years Old)
+              Aging Hardware (5+ Years Old) — {data.oldDevices.length} device{data.oldDevices.length !== 1 ? "s" : ""}
             </h4>
             <div className="grid gap-2">
               {data.oldDevices.map((device) => (
@@ -87,9 +101,12 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
                     <span className="text-sm font-medium truncate">
                       {device.systemName}
                     </span>
+                    <span className="text-xs text-muted-foreground">
+                      ({device.deviceType})
+                    </span>
                   </div>
                   <Badge variant="destructive" className="flex-shrink-0">
-                    {device.age} years old
+                    {device.age} yr{device.age !== 1 ? "s" : ""} old
                   </Badge>
                 </div>
               ))}
@@ -101,7 +118,7 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
           <div className="space-y-2">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-500" />
-              Unsupported Operating Systems
+              Unsupported Operating Systems — {data.eolOsDevices.length} device{data.eolOsDevices.length !== 1 ? "s" : ""}
             </h4>
             <div className="grid gap-2">
               {data.eolOsDevices.map((device) => (
@@ -155,7 +172,8 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
 
         {data.oldDevices.length === 0 &&
           data.eolOsDevices.length === 0 &&
-          data.criticalAlerts.length === 0 && (
+          data.criticalAlerts.length === 0 &&
+          data.pendingPatchCount === 0 && (
             <div className="text-center py-4">
               <StatusDot status="good" label="All systems healthy — no issues found" />
             </div>

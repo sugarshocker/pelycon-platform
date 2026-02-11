@@ -31,7 +31,10 @@ export interface DeviceHealthSummary {
   servers: number;
   oldDevices: DeviceInfo[];
   eolOsDevices: DeviceInfo[];
+  needsReplacementCount: number;
   patchCompliancePercent: number;
+  pendingPatchCount: number;
+  installedPatchCount: number;
   criticalAlerts: Array<{
     id: number;
     message: string;
@@ -41,11 +44,23 @@ export interface DeviceHealthSummary {
   }>;
 }
 
+export interface IncidentDetail {
+  id: number;
+  subject: string;
+  severity: string;
+  status: string;
+  sentAt: string;
+  closedAt: string | null;
+}
+
 export interface SecuritySummary {
   totalIncidents: number;
   resolvedIncidents: number;
   pendingIncidents: number;
+  recentIncidents: IncidentDetail[];
   activeAgents: number;
+  managedAntivirusCount: number;
+  antivirusNotProtectedCount: number;
   satCompletionPercent: number | null;
   phishingClickRate: number | null;
   trendDirection: "better" | "worse" | "stable" | null;
