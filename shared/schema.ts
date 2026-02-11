@@ -49,6 +49,7 @@ export interface SecuritySummary {
   satCompletionPercent: number | null;
   phishingClickRate: number | null;
   trendDirection: "better" | "worse" | "stable" | null;
+  notInHuntress?: boolean;
 }
 
 export interface TicketSummary {

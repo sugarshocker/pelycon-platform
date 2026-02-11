@@ -38,6 +38,16 @@ export function SecuritySection({ client }: SecuritySectionProps) {
 
     if (!data) return null;
 
+    if (data.notInHuntress) {
+      return (
+        <div className="text-center py-8 text-muted-foreground">
+          <ShieldAlert className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p>This client was not found in Huntress.</p>
+          <p className="text-xs mt-1">The organization name may not match between NinjaOne and Huntress.</p>
+        </div>
+      );
+    }
+
     const resolvedPercent =
       data.totalIncidents > 0
         ? Math.round((data.resolvedIncidents / data.totalIncidents) * 100)

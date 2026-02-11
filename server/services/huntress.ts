@@ -38,19 +38,44 @@ export async function getOrganizations(): Promise<Array<{ id: number; name: stri
   }));
 }
 
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\s*\[.*?\]\s*/g, "")
+    .replace(/\s*\(.*?\)\s*/g, "")
+    .replace(/,?\s*(llc|inc|pllc|ltd|corp|co|llp|psc)\b\.?/gi, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
 export async function findOrgByName(name: string): Promise<number | null> {
   try {
     const orgs = await getOrganizations();
-    const match = orgs.find(
+
+    const exactMatch = orgs.find(
       (o) => o.name.toLowerCase() === name.toLowerCase()
     );
-    if (match) return match.id;
+    if (exactMatch) return exactMatch.id;
 
-    const partial = orgs.find((o) =>
-      o.name.toLowerCase().includes(name.toLowerCase()) ||
-      name.toLowerCase().includes(o.name.toLowerCase())
-    );
-    return partial?.id || null;
+    const normName = normalize(name);
+    const normMatch = orgs.find((o) => normalize(o.name) === normName);
+    if (normMatch) return normMatch.id;
+
+    const partialMatch = orgs.find((o) => {
+      const normOrg = normalize(o.name);
+      return normOrg.includes(normName) || normName.includes(normOrg);
+    });
+    if (partialMatch) return partialMatch.id;
+
+    const firstWord = normName.slice(0, Math.max(4, normName.indexOf(" ") > 0 ? normName.indexOf(" ") : normName.length));
+    const fuzzy = orgs.find((o) => normalize(o.name).startsWith(firstWord));
+    if (fuzzy) {
+      log(`Huntress fuzzy match: "${name}" -> "${fuzzy.name}"`);
+      return fuzzy.id;
+    }
+
+    log(`Huntress: no match for "${name}" among [${orgs.map(o => o.name).join(", ")}]`);
+    return null;
   } catch (e) {
     log(`Huntress findOrgByName error: ${e}`);
     return null;
@@ -63,7 +88,17 @@ export async function getSecuritySummary(
   const huntressOrgId = await findOrgByName(orgName);
 
   if (!huntressOrgId) {
-    throw new Error(`Organization "${orgName}" not found in Huntress`);
+    log(`Huntress: org "${orgName}" not found, returning empty security data`);
+    return {
+      totalIncidents: 0,
+      resolvedIncidents: 0,
+      pendingIncidents: 0,
+      activeAgents: 0,
+      satCompletionPercent: null,
+      phishingClickRate: null,
+      trendDirection: "stable" as const,
+      notInHuntress: true,
+    };
   }
 
   let totalIncidents = 0;
