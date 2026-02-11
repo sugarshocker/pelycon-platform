@@ -203,6 +203,7 @@ const emptySatFields = {
   phishingCompromiseRate: null as number | null,
   phishingReportRate: null as number | null,
   recentPhishingCampaigns: [] as SatCampaignDetail[],
+  satUnenrolledUsers: [] as Array<{ name: string; email: string }>,
 };
 
 function normalizeRate(value: number): number {
@@ -293,8 +294,22 @@ async function fetchSatCurriculaData(orgName: string): Promise<typeof emptySatFi
 
     if (learnersList.length > 0) {
       const activeLearners = learnersList.filter((l: any) => (l.attributes?.status || "").toLowerCase() !== "inactive");
+      const inactiveLearners = learnersList.filter((l: any) => (l.attributes?.status || "").toLowerCase() === "inactive");
       result.satLearnerCount = activeLearners.length || learnersList.length;
       result.satTotalUsers = learnersList.length;
+
+      if (inactiveLearners.length > 0) {
+        result.satUnenrolledUsers = inactiveLearners.map((l: any) => {
+          const a = l.attributes || {};
+          const firstName = a.firstName || a.first_name || "";
+          const lastName = a.lastName || a.last_name || "";
+          return {
+            name: `${firstName} ${lastName}`.trim() || a.email || "Unknown",
+            email: a.email || "",
+          };
+        });
+        log(`Huntress SAT: ${inactiveLearners.length} inactive learners: ${result.satUnenrolledUsers.map(u => u.name).join(", ")}`);
+      }
 
       let completedModules = 0;
       let assignedModules = 0;

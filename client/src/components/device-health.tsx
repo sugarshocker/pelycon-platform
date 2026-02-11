@@ -143,9 +143,6 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
                 const modelLabel = device.model
                   ? (device.manufacturer ? `${device.manufacturer} ${device.model}` : device.model)
                   : null;
-                const managedSince = device.createdDate
-                  ? new Date(device.createdDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })
-                  : null;
 
                 return (
                   <div
@@ -176,11 +173,9 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
                         )}
                       </div>
                     </div>
-                    {(modelLabel || managedSince) && (
+                    {modelLabel && (
                       <div className="flex items-center gap-2 mt-1 ml-5 text-xs text-muted-foreground flex-wrap">
-                        {modelLabel && <span>{modelLabel}</span>}
-                        {modelLabel && managedSince && <span>·</span>}
-                        {managedSince && <span>Managed since {managedSince}</span>}
+                        <span>{modelLabel}</span>
                       </div>
                     )}
                   </div>

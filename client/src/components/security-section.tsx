@@ -145,11 +145,23 @@ function SatSubsection({ data }: { data: SecuritySummary }) {
       </div>
 
       {data.satTotalUsers && data.satLearnerCount !== null && data.satLearnerCount < data.satTotalUsers && (
-        <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
-          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-          <span className="text-sm text-amber-700 dark:text-amber-300">
-            {data.satTotalUsers - data.satLearnerCount} user{data.satTotalUsers - data.satLearnerCount !== 1 ? "s" : ""} not enrolled in security training
-          </span>
+        <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <span className="text-sm text-amber-700 dark:text-amber-300">
+              {data.satTotalUsers - data.satLearnerCount} user{data.satTotalUsers - data.satLearnerCount !== 1 ? "s" : ""} not enrolled in security training
+            </span>
+          </div>
+          {data.satUnenrolledUsers && data.satUnenrolledUsers.length > 0 && (
+            <div className="ml-6 space-y-0.5" data-testid="sat-unenrolled-list">
+              {data.satUnenrolledUsers.map((user, i) => (
+                <div key={i} className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2 flex-wrap">
+                  <span className="font-medium">{user.name}</span>
+                  {user.email && <span className="text-xs text-muted-foreground">{user.email}</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

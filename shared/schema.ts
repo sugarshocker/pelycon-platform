@@ -141,6 +141,7 @@ export interface SecuritySummary {
   phishingCompromiseRate: number | null;
   phishingReportRate: number | null;
   recentPhishingCampaigns: SatCampaignDetail[];
+  satUnenrolledUsers: Array<{ name: string; email: string }>;
   trendDirection: "better" | "worse" | "stable" | null;
   notInHuntress?: boolean;
 }

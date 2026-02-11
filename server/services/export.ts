@@ -87,6 +87,9 @@ export function generateSummaryHtml(data: {
       const satGap = sec.satTotalUsers ? sec.satTotalUsers - sec.satLearnerCount : 0;
       const satGood = satGap === 0;
       opItems.push(`<div class="check-item">${statusIndicator(satGood, `All users enrolled in security awareness training (${sec.satLearnerCount})`, `${satGap} user(s) not enrolled in security awareness training (${sec.satLearnerCount}${sec.satTotalUsers ? ` of ${sec.satTotalUsers}` : ""} enrolled)`)}</div>`);
+      if (sec.satUnenrolledUsers && sec.satUnenrolledUsers.length > 0) {
+        opItems.push(`<p class="detail flag-amber">Not enrolled: ${sec.satUnenrolledUsers.map(u => u.name + (u.email ? ` (${u.email})` : "")).join(", ")}</p>`);
+      }
     }
 
     if (sec.satCompletionPercent !== null) {
