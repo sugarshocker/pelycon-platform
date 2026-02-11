@@ -62,6 +62,7 @@ export interface DeviceInfo {
   lastContact?: string;
   purchaseDate?: string;
   age?: number;
+  ageSource?: "warranty" | "purchase" | "model" | "created";
   isOld: boolean;
   isEolOs: boolean;
   isStale: boolean;

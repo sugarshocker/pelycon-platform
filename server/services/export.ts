@@ -170,7 +170,7 @@ export function generateSummaryHtml(data: {
     const noReplacements = dh.needsReplacementCount === 0;
     capItems.push(`<div class="check-item">${statusIndicator(noReplacements, "No devices flagged for replacement", `${dh.needsReplacementCount} device(s) approaching or past end of life`)}</div>`);
     if (dh.oldDevices.length > 0) {
-      capItems.push(`<p class="detail flag-red">Aging hardware: ${dh.oldDevices.map(d => `${d.systemName} (${d.deviceType}, ${d.age}yr)`).join(", ")}</p>`);
+      capItems.push(`<p class="detail flag-red">Aging hardware: ${dh.oldDevices.map(d => `${d.systemName} (${d.deviceType}, ${d.ageSource === "model" ? "~" : ""}${d.age}yr${d.ageSource === "model" && d.model ? ` est. from ${d.model}` : ""})`).join(", ")}</p>`);
     }
 
     const noEol = dh.eolOsDevices.length === 0;

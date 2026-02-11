@@ -135,6 +135,160 @@ export async function getDeviceNamesWithLastSeen(orgId: number): Promise<{ name:
     }));
 }
 
+function estimateAgeFromModel(model: string | undefined, manufacturer: string | undefined): number | null {
+  if (!model) return null;
+  const m = model.toLowerCase().replace(/\s+/g, " ").trim();
+  const mfr = (manufacturer || "").toLowerCase();
+
+  const patterns: Array<{ regex: RegExp; year: number }> = [
+    // Dell OptiPlex (desktops) — specific models first, then broad fallback
+    { regex: /optiplex\s*(30|50|70)10\b/i, year: 2023 },
+    { regex: /optiplex\s*(30|50|70)00\b/i, year: 2022 },
+    { regex: /optiplex\s*[357]090/i, year: 2021 },
+    { regex: /optiplex\s*[357]080/i, year: 2020 },
+    { regex: /optiplex\s*[357]070/i, year: 2019 },
+    { regex: /optiplex\s*[357]060/i, year: 2018 },
+    { regex: /optiplex\s*[357]050/i, year: 2017 },
+    { regex: /optiplex\s*[357]040/i, year: 2016 },
+    { regex: /optiplex\s*[3579]0[0-3]\d/i, year: 2013 },
+    // Dell Latitude (laptops) — specific ending digits first
+    { regex: /latitude\s*5[3-5]50/i, year: 2024 },
+    { regex: /latitude\s*5[3-5]40/i, year: 2023 },
+    { regex: /latitude\s*5[3-5]30/i, year: 2022 },
+    { regex: /latitude\s*[357][3-5]20/i, year: 2021 },
+    { regex: /latitude\s*[357][3-5]10/i, year: 2020 },
+    { regex: /latitude\s*[57][2-5]90/i, year: 2018 },
+    { regex: /latitude\s*[57][2-5]80/i, year: 2017 },
+    { regex: /latitude\s*[57][2-5][4-7]0/i, year: 2016 },
+    { regex: /latitude\s*e[5-7]\d{3}/i, year: 2013 },
+    // Dell Precision (workstations)
+    { regex: /precision\s*(3[5-6]80|5[5-6]80|7[5-7]80)/i, year: 2023 },
+    { regex: /precision\s*(3[5-6]70|5[5-6]70|7[5-7]70)/i, year: 2022 },
+    { regex: /precision\s*(3[5-6]60|5[5-6]60|7[5-7]60)/i, year: 2021 },
+    { regex: /precision\s*(3[5-6]50|5[5-6]50|7[5-7]50)/i, year: 2020 },
+    { regex: /precision\s*(3[5-6]40|5[5-6]40|7[5-7]40)/i, year: 2019 },
+    { regex: /precision\s*(3[5-6]30|5[5-6]30|7[5-7]30)/i, year: 2018 },
+    { regex: /precision\s*(3[5-6]\d0|5[5-6]\d0|7[5-7]\d0)/i, year: 2016 },
+    // Dell Inspiron desktops (3x4x, 3x6x are desktop towers from ~2013)
+    { regex: /inspiron\s*3[6-8]4\d/i, year: 2013 },
+    { regex: /inspiron\s*3[6-8]6\d/i, year: 2013 },
+    { regex: /inspiron\s*660\b/i, year: 2012 },
+    // Dell Inspiron laptops (newer 35xx, 55xx, 75xx naming)
+    { regex: /inspiron\s*[357]5[4-5]\d/i, year: 2024 },
+    { regex: /inspiron\s*[357]5[2-3]\d/i, year: 2022 },
+    { regex: /inspiron\s*[357]5[0-1]\d/i, year: 2020 },
+    // Dell PowerEdge servers
+    { regex: /poweredge\s*t[1-3]0\b/i, year: 2016 },
+    { regex: /poweredge\s*t[1-3]40/i, year: 2018 },
+    { regex: /poweredge\s*t[1-5]50/i, year: 2021 },
+    { regex: /poweredge\s*r[2-7][1-3]0/i, year: 2017 },
+    { regex: /poweredge\s*r[2-7][4-5]0/i, year: 2019 },
+    { regex: /poweredge\s*r[2-7][6-7]0/i, year: 2022 },
+    // HP EliteDesk / ProDesk (desktops)
+    { regex: /elitedesk\s*800\s*g1/i, year: 2013 },
+    { regex: /elitedesk\s*800\s*g2/i, year: 2015 },
+    { regex: /elitedesk\s*800\s*g3/i, year: 2017 },
+    { regex: /elitedesk\s*800\s*g4/i, year: 2018 },
+    { regex: /elitedesk\s*800\s*g5/i, year: 2019 },
+    { regex: /elitedesk\s*800\s*g6/i, year: 2020 },
+    { regex: /elitedesk\s*800\s*g8/i, year: 2021 },
+    { regex: /elitedesk\s*800\s*g9/i, year: 2022 },
+    { regex: /prodesk\s*400\s*g[1-3]/i, year: 2015 },
+    { regex: /prodesk\s*400\s*g[4-5]/i, year: 2018 },
+    { regex: /prodesk\s*400\s*g[6-7]/i, year: 2020 },
+    { regex: /prodesk\s*600\s*g[1-3]/i, year: 2015 },
+    { regex: /prodesk\s*600\s*g[4-5]/i, year: 2018 },
+    { regex: /prodesk\s*600\s*g6/i, year: 2020 },
+    // HP EliteBook / ProBook (laptops)
+    { regex: /elitebook\s*8[0-9]0\s*g1/i, year: 2013 },
+    { regex: /elitebook\s*8[0-9]0\s*g2/i, year: 2015 },
+    { regex: /elitebook\s*8[0-9]0\s*g3/i, year: 2016 },
+    { regex: /elitebook\s*8[0-9]0\s*g4/i, year: 2017 },
+    { regex: /elitebook\s*8[0-9]0\s*g5/i, year: 2018 },
+    { regex: /elitebook\s*8[0-9]0\s*g6/i, year: 2019 },
+    { regex: /elitebook\s*8[0-9]0\s*g7/i, year: 2020 },
+    { regex: /elitebook\s*8[0-9]0\s*g8/i, year: 2021 },
+    { regex: /elitebook\s*8[0-9]0\s*g9/i, year: 2022 },
+    { regex: /elitebook\s*8[0-9]0\s*g10/i, year: 2023 },
+    { regex: /probook\s*4[0-9]0\s*g[1-3]/i, year: 2014 },
+    { regex: /probook\s*4[0-9]0\s*g[4-5]/i, year: 2017 },
+    { regex: /probook\s*4[0-9]0\s*g[6-7]/i, year: 2019 },
+    { regex: /probook\s*4[0-9]0\s*g[8-9]/i, year: 2021 },
+    { regex: /probook\s*4[0-9]0\s*g10/i, year: 2023 },
+    // HP ZBook (workstation laptops)
+    { regex: /zbook\s*\d+\s*g[1-3]/i, year: 2015 },
+    { regex: /zbook\s*\d+\s*g[4-5]/i, year: 2017 },
+    { regex: /zbook\s*\d+\s*g6/i, year: 2019 },
+    { regex: /zbook\s*\d+\s*g7/i, year: 2020 },
+    { regex: /zbook\s*\d+\s*g8/i, year: 2021 },
+    { regex: /zbook\s*\d+\s*g9/i, year: 2022 },
+    { regex: /zbook\s*\d+\s*g10/i, year: 2023 },
+    // Lenovo ThinkPad
+    { regex: /thinkpad\s*t4[0-3]\d/i, year: 2013 },
+    { regex: /thinkpad\s*t4[4-5]\d/i, year: 2015 },
+    { regex: /thinkpad\s*t460/i, year: 2016 },
+    { regex: /thinkpad\s*t470/i, year: 2017 },
+    { regex: /thinkpad\s*t480/i, year: 2018 },
+    { regex: /thinkpad\s*t490/i, year: 2019 },
+    { regex: /thinkpad\s*t14\s*(gen\s*1)?$/i, year: 2020 },
+    { regex: /thinkpad\s*t14\s*gen\s*2/i, year: 2021 },
+    { regex: /thinkpad\s*t14\s*gen\s*3/i, year: 2022 },
+    { regex: /thinkpad\s*t14\s*gen\s*4/i, year: 2023 },
+    { regex: /thinkpad\s*t14\s*gen\s*5/i, year: 2024 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?[1-4]/i, year: 2015 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?5/i, year: 2017 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?6/i, year: 2018 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?7/i, year: 2019 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?8/i, year: 2020 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?9/i, year: 2021 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?10/i, year: 2022 },
+    { regex: /thinkpad\s*x1\s*carbon\s*(gen\s*)?11/i, year: 2023 },
+    // Lenovo ThinkCentre (desktops)
+    { regex: /thinkcentre\s*m[79]\d{2}/i, year: 2015 },
+    { regex: /thinkcentre\s*m[79]\d0[a-z]/i, year: 2018 },
+    { regex: /thinkcentre\s*m[79]0[a-z]/i, year: 2020 },
+    // Microsoft Surface
+    { regex: /surface\s*pro\s*3/i, year: 2014 },
+    { regex: /surface\s*pro\s*4/i, year: 2015 },
+    { regex: /surface\s*pro\s*(2017|5)/i, year: 2017 },
+    { regex: /surface\s*pro\s*6/i, year: 2018 },
+    { regex: /surface\s*pro\s*7/i, year: 2019 },
+    { regex: /surface\s*pro\s*8/i, year: 2021 },
+    { regex: /surface\s*pro\s*9/i, year: 2022 },
+    { regex: /surface\s*pro\s*10/i, year: 2024 },
+    { regex: /surface\s*laptop\s*[1-2]/i, year: 2017 },
+    { regex: /surface\s*laptop\s*3/i, year: 2019 },
+    { regex: /surface\s*laptop\s*4/i, year: 2021 },
+    { regex: /surface\s*laptop\s*5/i, year: 2022 },
+    { regex: /surface\s*laptop\s*6/i, year: 2024 },
+    // Apple MacBook
+    { regex: /macbook\s*(pro|air)?\s*\(?201[0-5]/i, year: 2014 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2016/i, year: 2016 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2017/i, year: 2017 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2018/i, year: 2018 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2019/i, year: 2019 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2020/i, year: 2020 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2021/i, year: 2021 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2022/i, year: 2022 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2023/i, year: 2023 },
+    { regex: /macbook\s*(pro|air)?\s*\(?2024/i, year: 2024 },
+    // iMac by year
+    { regex: /imac\s*\(?201[0-5]/i, year: 2014 },
+    { regex: /imac\s*\(?201[6-9]/i, year: 2018 },
+    { regex: /imac\s*\(?202[0-1]/i, year: 2021 },
+    { regex: /imac\s*\(?202[2-4]/i, year: 2023 },
+  ];
+
+  for (const p of patterns) {
+    if (p.regex.test(m) || p.regex.test(model)) {
+      const currentYear = new Date().getFullYear();
+      return currentYear - p.year;
+    }
+  }
+
+  return null;
+}
+
 export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummary> {
   const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
 
@@ -226,11 +380,46 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       osName.toLowerCase().includes(p)
     );
 
-    const warrantyStart = d.system?.warrantyDate || d.system?.purchaseDate || d.purchaseDate || d.created;
+    const manufacturer = d.system?.manufacturer || undefined;
+    const model = d.system?.model || undefined;
+    const cleanManufacturer = manufacturer !== "To Be Filled By O.E.M." ? manufacturer : undefined;
+    const cleanModel = model !== "To Be Filled By O.E.M." ? model : undefined;
+
+    const warrantyDate = d.system?.warrantyDate || d.system?.purchaseDate || d.purchaseDate;
+    const createdOnly = !warrantyDate && d.created;
+    const warrantyStart = warrantyDate || d.created;
     let age: number | undefined;
     let isOld = false;
+    let ageSource: "warranty" | "purchase" | "model" | "created" | undefined;
 
-    if (warrantyStart) {
+    const modelEstimatedAge = estimateAgeFromModel(cleanModel, cleanManufacturer);
+
+    if (warrantyDate) {
+      const wd = typeof warrantyDate === "number"
+        ? new Date(warrantyDate * 1000)
+        : new Date(warrantyDate);
+      if (!isNaN(wd.getTime())) {
+        age = Math.floor(
+          (now.getTime() - wd.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        );
+        isOld = wd < fiveYearsAgo;
+        ageSource = d.system?.warrantyDate ? "warranty" : "purchase";
+      }
+    }
+
+    if (modelEstimatedAge !== null) {
+      if (age === undefined || createdOnly) {
+        age = modelEstimatedAge;
+        isOld = modelEstimatedAge >= 5;
+        ageSource = "model";
+      } else if (modelEstimatedAge > age) {
+        age = modelEstimatedAge;
+        isOld = modelEstimatedAge >= 5;
+        ageSource = "model";
+      }
+    }
+
+    if (age === undefined && warrantyStart) {
       const wd = typeof warrantyStart === "number"
         ? new Date(warrantyStart * 1000)
         : new Date(warrantyStart);
@@ -239,6 +428,7 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
           (now.getTime() - wd.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
         );
         isOld = wd < fiveYearsAgo;
+        ageSource = "created";
       }
     }
 
@@ -250,11 +440,13 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       isStale = lastContactDate < thirtyDaysAgo;
     }
 
-    const manufacturer = d.system?.manufacturer || undefined;
-    const model = d.system?.model || undefined;
     const createdDate = d.created
       ? new Date(typeof d.created === "number" ? d.created * 1000 : d.created).toISOString()
       : undefined;
+
+    if (ageSource === "model" && cleanModel) {
+      log(`NinjaOne device ${systemName}: age estimated at ~${age}yr from model "${cleanModel}"`);
+    }
 
     const deviceInfo: DeviceInfo = {
       id: d.id,
@@ -268,12 +460,13 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
         ? (typeof warrantyStart === "number" ? new Date(warrantyStart * 1000) : new Date(warrantyStart)).toISOString()
         : undefined,
       age,
+      ageSource,
       isOld,
       isEolOs: isEol,
       isStale,
       daysSinceContact,
-      manufacturer: manufacturer !== "To Be Filled By O.E.M." ? manufacturer : undefined,
-      model: model !== "To Be Filled By O.E.M." ? model : undefined,
+      manufacturer: cleanManufacturer,
+      model: cleanModel,
       createdDate,
     };
 

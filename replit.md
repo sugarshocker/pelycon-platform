@@ -25,7 +25,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `client/src/pages/login.tsx` - Password login page (Pelycon branded)
 - `client/src/pages/dashboard.tsx` - Main dashboard with all sections + Finalize TBR
 - `client/src/components/` - Dashboard section components
-- `client/src/components/meeting-export.tsx` - Export buttons (passes previousSnapshot to export)
+- `client/src/components/meeting-export.tsx` - Export buttons: PDF download (html2pdf.js) and Print (passes previousSnapshot to export)
 
 ## API Routes
 - `POST /api/auth/login` - Password authentication (bearer token)
@@ -59,7 +59,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 5. **Progress Since Last Review** - Trend comparison table (when previous TBR exists)
 
 ## API Implementation Notes
-- **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X` — only patches pending 30+ days are counted as "awaiting installation." Device age uses warranty/purchase/created date.
+- **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X` — only patches pending 30+ days are counted as "awaiting installation." Device age uses warranty/purchase date when available, falls back to model-based estimation (comprehensive lookup table for Dell, HP, Lenovo, Microsoft Surface, Apple models), then created date. Model-estimated ages shown with `~` prefix in UI.
 - **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. Basic SAT enrollment data (learner count, coverage %) comes from Huntress org detail API.
 - **Curricula (Huntress SAT)**: OAuth2 Client Credentials flow to `https://mycurricula.com/oauth/token`, data from `https://mycurricula.com/api/v1/*`. Uses JSON:API format. HUNTRESS_SAT_API_KEY/SECRET are OAuth2 Client ID/Secret. Token expires after 60 minutes. Fetches `/accounts` to match org name to Curricula account, then per-account endpoints: `/accounts/{id}/learners` (active learner count, total users), `/accounts/{id}/assignments` (completion tracking by status), `/accounts/{id}/phishing-campaigns` (attemptStats with sent, uniqueClicks, compromised, reported). Accounts list cached 10 minutes. SecuritySummary includes: enrollment (learner count, coverage %), training completion (modules completed/assigned, completion %), phishing simulation (click rate, compromise rate, report rate, campaign count, recent campaigns with per-campaign stats).
 - **Auth**: Bearer token stored in sessionStorage, sent in Authorization header

@@ -108,26 +108,41 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
               Aging Hardware (5+ Years Old) — {data.oldDevices.length} device{data.oldDevices.length !== 1 ? "s" : ""}
             </h4>
             <div className="grid gap-2">
-              {data.oldDevices.map((device) => (
-                <div
-                  key={device.id}
-                  className="flex items-center justify-between gap-2 rounded-md bg-red-50 dark:bg-red-950/20 px-3 py-2"
-                  data-testid={`device-old-${device.id}`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StatusDot status="action" />
-                    <span className="text-sm font-medium truncate">
-                      {device.systemName}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      ({device.deviceType})
-                    </span>
+              {data.oldDevices.map((device) => {
+                const modelLabel = device.model
+                  ? (device.manufacturer ? `${device.manufacturer} ${device.model}` : device.model)
+                  : null;
+                return (
+                  <div
+                    key={device.id}
+                    className="rounded-md bg-red-50 dark:bg-red-950/20 px-3 py-2"
+                    data-testid={`device-old-${device.id}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <StatusDot status="action" />
+                        <span className="text-sm font-medium truncate">
+                          {device.systemName}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          ({device.deviceType})
+                        </span>
+                      </div>
+                      <Badge variant="destructive" className="flex-shrink-0">
+                        {device.ageSource === "model" ? "~" : ""}{device.age} yr{device.age !== 1 ? "s" : ""} old
+                      </Badge>
+                    </div>
+                    {modelLabel && (
+                      <div className="flex items-center gap-2 mt-1 ml-5 text-xs text-muted-foreground flex-wrap">
+                        <span>{modelLabel}</span>
+                        {device.ageSource === "model" && (
+                          <span className="text-[10px] italic">(est. from model)</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <Badge variant="destructive" className="flex-shrink-0">
-                    {device.age} yr{device.age !== 1 ? "s" : ""} old
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -168,7 +183,7 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
                         )}
                         {device.isOld && device.age !== undefined && device.age >= 1 && (
                           <Badge variant="destructive">
-                            {device.age} yr{device.age !== 1 ? "s" : ""} old
+                            {device.ageSource === "model" ? "~" : ""}{device.age} yr{device.age !== 1 ? "s" : ""} old
                           </Badge>
                         )}
                       </div>
