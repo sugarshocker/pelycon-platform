@@ -136,7 +136,7 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
           <div className="space-y-2">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-500" />
-              Unsupported Operating Systems — {data.eolOsDevices.length} device{data.eolOsDevices.length !== 1 ? "s" : ""}
+              Needs Attention — {data.eolOsDevices.length} device{data.eolOsDevices.length !== 1 ? "s" : ""}
             </h4>
             <div className="grid gap-2">
               {data.eolOsDevices.map((device) => (
@@ -146,14 +146,26 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
                   data-testid={`device-eol-${device.id}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <StatusDot status="warning" />
+                    <StatusDot status={device.isOld ? "action" : "warning"} />
                     <span className="text-sm font-medium truncate">
                       {device.systemName}
                     </span>
+                    <span className="text-xs text-muted-foreground">
+                      ({device.deviceType})
+                    </span>
                   </div>
-                  <Badge variant="outline" className="flex-shrink-0">
-                    {device.osName}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                    {device.isEolOs && (
+                      <Badge variant="outline">
+                        {device.osName}
+                      </Badge>
+                    )}
+                    {device.isOld && device.age !== undefined && (
+                      <Badge variant="destructive">
+                        {device.age} yr{device.age !== 1 ? "s" : ""} old
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

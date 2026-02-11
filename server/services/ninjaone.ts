@@ -264,7 +264,11 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     };
 
     if (isOld) oldDevices.push(deviceInfo);
-    if (isEol) eolOsDevices.push(deviceInfo);
+    if (isEol || isOld) {
+      if (!eolOsDevices.some(e => e.id === deviceInfo.id)) {
+        eolOsDevices.push(deviceInfo);
+      }
+    }
     if (isStale) staleDevices.push(deviceInfo);
 
   }
