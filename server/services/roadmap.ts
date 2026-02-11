@@ -161,6 +161,12 @@ RULES:
 - Priorities must be one of: "urgent" (address within 30 days), "plan_for" (address within 3-6 months), or "nice_to_have" (consider when budget allows).
 - IMPORTANT: If internal team observations are provided, incorporate their insights into your recommendations but NEVER quote them directly or reveal they came from internal notes. Diplomatically rephrase any observations about user behavior, training needs, or infrastructure concerns into professional, forward-looking recommendations. Never blame users or mention specific employee complaints. Frame issues as opportunities for improvement.
 
+MSP PRIORITY BIASES (apply these when ranking and shaping recommendations):
+1. MFA COVERAGE IS THE #1 PRIORITY. If any users lack MFA, this MUST be the first "urgent" item. The goal is 100% MFA coverage — no exceptions. Frame this as the single most impactful security measure they can take.
+2. BACKUP FAILURES: Only flag backup issues if they are CHRONIC or RECURRING patterns. Occasional one-off backup failures are normal and within acceptable standards — do NOT elevate these. Only mention backups if the data shows a persistent, repeated problem.
+3. REPEAT PROBLEM DEVICES/USERS: If the ticket data shows the same computer or user appearing repeatedly across multiple support requests, this deserves a dedicated mention. Recurring issues signal something that needs a permanent fix rather than repeated break-fix.
+4. LEAD ENGINEER NOTES GET PRIORITY: When internal engineer observations are provided, give them significant weight in shaping recommendations — they reflect hands-on knowledge of the environment. Where possible, corroborate engineer observations with supporting data from the other sections (device health, tickets, security). Engineer recommendations backed by data should be elevated in priority.
+
 Respond with ONLY valid JSON in this exact format:
 {
   "items": [
