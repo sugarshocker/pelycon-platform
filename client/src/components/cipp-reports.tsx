@@ -232,39 +232,65 @@ export function CippReports({
 
             {licenseReport ? (
               <div className="space-y-3">
-                {licenseReport.totalWasted > 0 && (
-                  <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                {licenseReport.totalMonthlyWaste > 0 && (
+                  <div className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/20 px-3 py-2">
+                    <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
                     <span className="text-sm">
-                      <strong>{licenseReport.totalWasted}</strong> unused licenses
-                      detected — potential cost savings
+                      <strong>{licenseReport.totalWasted}</strong> unused licenses wasting{" "}
+                      <strong className="text-red-600 dark:text-red-400">
+                        ${licenseReport.totalMonthlyWaste.toFixed(2)}/mo
+                      </strong>
+                      {" "}(${licenseReport.totalAnnualWaste.toFixed(2)}/yr)
                     </span>
                   </div>
                 )}
-                <div className="grid gap-2">
-                  {licenseReport.licenses.map((lic, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 flex-wrap"
-                    >
-                      <span className="text-sm font-medium truncate min-w-0">
-                        {lic.licenseName}
-                      </span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-muted-foreground">
-                          {lic.quantityUsed}/{lic.quantityAssigned} used
-                        </span>
-                        {lic.wasted > 0 && (
-                          <Badge variant="outline" className="text-amber-600 dark:text-amber-400">
-                            {lic.wasted} unused
-                          </Badge>
-                        )}
-                        {lic.wasted === 0 && (
-                          <Check className="h-4 w-4 text-emerald-500" />
-                        )}
+                {licenseReport.totalMonthlyWaste === 0 && licenseReport.totalWasted > 0 && (
+                  <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                    <span className="text-sm">
+                      <strong>{licenseReport.totalWasted}</strong> unused licenses detected
+                    </span>
+                  </div>
+                )}
+                <div className="grid gap-1.5">
+                  {licenseReport.licenses.map((lic, i) => {
+                    const hasWaste = lic.wasted > 0;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex items-center justify-between gap-2 rounded-md px-3 py-2 flex-wrap ${
+                          hasWaste
+                            ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40"
+                            : "bg-muted/50"
+                        }`}
+                        data-testid={`license-row-${i}`}
+                      >
+                        <div className="flex flex-col min-w-0">
+                          <span className={`text-sm font-medium truncate ${hasWaste ? "text-red-700 dark:text-red-300" : ""}`}>
+                            {lic.licenseName}
+                          </span>
+                          {lic.monthlyPricePerLicense > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              ${lic.monthlyPricePerLicense.toFixed(2)}/user/mo
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-muted-foreground">
+                            {lic.quantityUsed}/{lic.totalLicenses} used
+                          </span>
+                          {hasWaste ? (
+                            <Badge variant="destructive" className="text-xs">
+                              {lic.wasted} unused
+                              {lic.monthlyWastedCost > 0 && ` ($${lic.monthlyWastedCost.toFixed(2)}/mo)`}
+                            </Badge>
+                          ) : (
+                            <Check className="h-4 w-4 text-emerald-500" />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (

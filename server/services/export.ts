@@ -168,10 +168,10 @@ export function generateSummaryHtml(data: {
     sections += `
     <div class="section">
       <h2>License Usage</h2>
-      ${lic.totalWasted > 0 ? `<p class="flag-amber">${lic.totalWasted} unused license(s) detected — potential cost savings</p>` : ""}
+      ${lic.totalMonthlyWaste > 0 ? `<p class="flag-red">${lic.totalWasted} unused license(s) — wasting $${lic.totalMonthlyWaste.toFixed(2)}/mo ($${lic.totalAnnualWaste.toFixed(2)}/yr)</p>` : lic.totalWasted > 0 ? `<p class="flag-amber">${lic.totalWasted} unused license(s) detected</p>` : ""}
       <table>
-        <tr><th>License</th><th>In Use</th><th>Assigned</th><th>Unused</th></tr>
-        ${lic.licenses.map((l) => `<tr><td>${l.licenseName}</td><td>${l.quantityUsed}</td><td>${l.quantityAssigned}</td><td${l.wasted > 0 ? ' class="flag-amber"' : ""}>${l.wasted}</td></tr>`).join("")}
+        <tr><th>License</th><th>MSRP/mo</th><th>In Use</th><th>Total</th><th>Unused</th><th>Waste/mo</th></tr>
+        ${lic.licenses.map((l) => `<tr><td>${l.licenseName}</td><td>${l.monthlyPricePerLicense > 0 ? "$" + l.monthlyPricePerLicense.toFixed(2) : "—"}</td><td>${l.quantityUsed}</td><td>${l.totalLicenses}</td><td${l.wasted > 0 ? ' style="color:#dc2626;font-weight:bold"' : ""}>${l.wasted}</td><td${l.monthlyWastedCost > 0 ? ' style="color:#dc2626;font-weight:bold"' : ""}>${l.monthlyWastedCost > 0 ? "$" + l.monthlyWastedCost.toFixed(2) : "—"}</td></tr>`).join("")}
       </table>
     </div>`;
   }

@@ -85,10 +85,10 @@ ${mfa.uncoveredUsers.length > 0 ? `- Unprotected users: ${mfa.uncoveredUsers.map
     const lic = data.licenseReport;
     sections.push(`
 LICENSE USAGE:
-- Total unused licenses: ${lic.totalWasted}
+- Total unused licenses: ${lic.totalWasted} (wasting $${lic.totalMonthlyWaste.toFixed(2)}/mo, $${lic.totalAnnualWaste.toFixed(2)}/yr)
 ${lic.licenses
   .filter((l) => l.wasted > 0)
-  .map((l) => `- ${l.licenseName}: ${l.wasted} unused (${l.quantityUsed}/${l.quantityAssigned} in use)`)
+  .map((l) => `- ${l.licenseName}: ${l.wasted} unused at $${l.monthlyPricePerLicense.toFixed(2)}/user/mo = $${l.monthlyWastedCost.toFixed(2)}/mo wasted (${l.quantityUsed}/${l.totalLicenses} in use)`)
   .join("\n")}`);
   }
 

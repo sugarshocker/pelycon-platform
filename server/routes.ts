@@ -296,24 +296,104 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const csvText = req.file.buffer.toString("utf-8");
-      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      const MSRP_PRICES: Record<string, number> = {
+        "microsoft 365 business basic": 6.00,
+        "microsoft 365 business standard": 12.50,
+        "microsoft 365 business premium": 22.00,
+        "microsoft 365 apps for business": 8.25,
+        "microsoft 365 e3": 36.00,
+        "microsoft 365 e5": 57.00,
+        "microsoft 365 f1": 2.25,
+        "microsoft 365 f3": 8.00,
+        "office 365 e1": 10.00,
+        "office 365 e3": 23.00,
+        "office 365 e5": 38.00,
+        "exchange online (plan 1)": 4.00,
+        "exchange online (plan 2)": 8.00,
+        "exchange online kiosk": 2.00,
+        "azure information protection plan 1": 2.00,
+        "azure information protection premium p1": 2.00,
+        "azure information protection premium p2": 5.00,
+        "power bi pro": 10.00,
+        "power bi premium per user": 20.00,
+        "microsoft teams audio conferencing with dial-out to usa/can": 4.00,
+        "microsoft teams essentials": 4.00,
+        "microsoft defender for business": 3.00,
+        "microsoft defender for endpoint plan 1": 3.00,
+        "microsoft defender for endpoint plan 2": 5.20,
+        "microsoft defender for office 365 plan 1": 2.00,
+        "microsoft defender for office 365 plan 2": 5.00,
+        "microsoft intune plan 1": 8.00,
+        "azure ad premium p1": 6.00,
+        "azure ad premium p2": 9.00,
+        "entra id p1": 6.00,
+        "entra id p2": 9.00,
+        "visio plan 1": 5.00,
+        "visio plan 2": 15.00,
+        "project plan 1": 10.00,
+        "project plan 3": 30.00,
+        "project plan 5": 55.00,
+        "microsoft copilot": 30.00,
+      };
+
+      const FREE_SKUS = [
+        "rights management adhoc",
+        "rights management service basic content protection",
+        "common area phone",
+        "microsoft power automate free",
+        "microsoft power apps plan 2 trial",
+        "azure active directory free",
+      ];
+
+      function getMsrp(name: string): number {
+        const lower = name.toLowerCase().trim();
+        if (MSRP_PRICES[lower] !== undefined) return MSRP_PRICES[lower];
+        for (const [key, price] of Object.entries(MSRP_PRICES)) {
+          if (lower.includes(key) || key.includes(lower)) return price;
+        }
+        return 0;
+      }
+
+      function isFreesku(name: string): boolean {
+        const lower = name.toLowerCase().trim();
+        return FREE_SKUS.some(f => lower.includes(f));
+      }
+
+      const csvText = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: (h: string) => h.trim() });
 
       if (parsed.errors.length > 0) {
         log(`License CSV parse warnings: ${JSON.stringify(parsed.errors.slice(0, 3))}`);
       }
 
-      const licenses = parsed.data.map((row: any) => {
-        const licenseName = row["Product Name"] || row["productName"] || row["Product"] || row["License"] || "";
-        const quantityAssigned = parseInt(row["Assigned"] || row["assignedCount"] || row["Purchased"] || row["Total"] || "0") || 0;
-        const quantityUsed = parseInt(row["Used"] || row["quantityUsed"] || row["Active"] || "0") || 0;
-        const wasted = Math.max(0, quantityAssigned - quantityUsed);
-        return { licenseName, quantityAssigned, quantityUsed, wasted };
-      }).filter((l: any) => l.licenseName);
+      const getCol = (row: any, ...keys: string[]): string => {
+        for (const key of keys) {
+          if (row[key] !== undefined && row[key] !== null && row[key] !== "") return row[key].toString().trim();
+        }
+        return "";
+      };
+
+      const allRows = parsed.data as any[];
+      const licenses = allRows.map((row: any) => {
+        const licenseName = getCol(row, "License", "Product Name", "productName", "Product", "SKU");
+        const totalLicenses = parseInt(getCol(row, "TotalLicenses", "Total", "Purchased", "Assigned", "assignedCount") || "0") || 0;
+        const quantityUsed = parseInt(getCol(row, "CountUsed", "Used", "quantityUsed", "Active") || "0") || 0;
+        const quantityAvailable = parseInt(getCol(row, "CountAvailable", "Available") || "0") || 0;
+        const wasted = quantityAvailable > 0 ? quantityAvailable : Math.max(0, totalLicenses - quantityUsed);
+        const monthlyPricePerLicense = getMsrp(licenseName);
+        const monthlyWastedCost = wasted * monthlyPricePerLicense;
+
+        return { licenseName, totalLicenses, quantityUsed, quantityAvailable: wasted, wasted, monthlyPricePerLicense, monthlyWastedCost };
+      }).filter((l: any) => l.licenseName && !isFreesku(l.licenseName));
+
+      const totalWasted = licenses.reduce((sum: number, l: any) => sum + l.wasted, 0);
+      const totalMonthlyWaste = licenses.reduce((sum: number, l: any) => sum + l.monthlyWastedCost, 0);
 
       const report: LicenseReport = {
         licenses,
-        totalWasted: licenses.reduce((sum: number, l: any) => sum + l.wasted, 0),
+        totalWasted,
+        totalMonthlyWaste: Math.round(totalMonthlyWaste * 100) / 100,
+        totalAnnualWaste: Math.round(totalMonthlyWaste * 12 * 100) / 100,
       };
 
       res.json(report);

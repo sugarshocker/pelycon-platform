@@ -115,14 +115,19 @@ export interface MfaReport {
 
 export interface LicenseEntry {
   licenseName: string;
-  quantityAssigned: number;
+  totalLicenses: number;
   quantityUsed: number;
+  quantityAvailable: number;
   wasted: number;
+  monthlyPricePerLicense: number;
+  monthlyWastedCost: number;
 }
 
 export interface LicenseReport {
   licenses: LicenseEntry[];
   totalWasted: number;
+  totalMonthlyWaste: number;
+  totalAnnualWaste: number;
 }
 
 export interface RoadmapItem {
