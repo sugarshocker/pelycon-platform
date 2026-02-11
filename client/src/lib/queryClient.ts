@@ -25,6 +25,11 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      clearToken();
+      window.location.reload();
+      throw new Error("Session expired. Please log in again.");
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -71,8 +76,13 @@ export const getQueryFn: <T>(options: {
       headers: authHeaders(),
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      clearToken();
+      window.location.reload();
+      throw new Error("Session expired. Please log in again.");
     }
 
     await throwIfResNotOk(res);
