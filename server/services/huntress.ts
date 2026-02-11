@@ -7,27 +7,21 @@ function cleanEnv(key: string): string {
 
 const API_KEY = cleanEnv("HUNTRESS_API_KEY");
 const API_SECRET = cleanEnv("HUNTRESS_API_SECRET");
-const SAT_API_KEY = cleanEnv("HUNTRESS_SAT_API_KEY");
-const SAT_API_SECRET = cleanEnv("HUNTRESS_SAT_API_SECRET");
+const SAT_CLIENT_ID = cleanEnv("HUNTRESS_SAT_API_KEY");
+const SAT_CLIENT_SECRET = cleanEnv("HUNTRESS_SAT_API_SECRET");
 const BASE_URL = "https://api.huntress.io/v1";
+const SAT_BASE_URL = "https://mycurricula.com/api/v1";
 
 export function isConfigured(): boolean {
   return !!(API_KEY && API_SECRET);
 }
 
 export function isSatConfigured(): boolean {
-  return !!(SAT_API_KEY && SAT_API_SECRET);
+  return !!(SAT_CLIENT_ID && SAT_CLIENT_SECRET);
 }
 
 function getAuthHeader(): string {
   return "Basic " + Buffer.from(`${API_KEY}:${API_SECRET}`).toString("base64");
-}
-
-function getSatAuthHeader(): string {
-  if (SAT_API_KEY && SAT_API_SECRET) {
-    return "Basic " + Buffer.from(`${SAT_API_KEY}:${SAT_API_SECRET}`).toString("base64");
-  }
-  return getAuthHeader();
 }
 
 async function apiGet(path: string): Promise<any> {
@@ -38,19 +32,6 @@ async function apiGet(path: string): Promise<any> {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Huntress API error: ${res.status} ${text}`);
-  }
-
-  return res.json();
-}
-
-async function apiGetSat(path: string): Promise<any> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Authorization: getSatAuthHeader() },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Huntress SAT API error: ${res.status} ${text}`);
   }
 
   return res.json();
@@ -68,20 +49,79 @@ async function apiGetSafe(path: string): Promise<any | null> {
   }
 }
 
-async function apiGetSatSafe(path: string): Promise<any | null> {
+let satAccessToken: string | null = null;
+let satTokenExpiry = 0;
+
+async function getSatToken(): Promise<string | null> {
+  if (!SAT_CLIENT_ID || !SAT_CLIENT_SECRET) return null;
+  if (satAccessToken && Date.now() < satTokenExpiry) return satAccessToken;
+
   try {
-    return await apiGetSat(path);
-  } catch (e: any) {
-    if (e.message?.includes("404") || e.message?.includes("403")) {
-      log(`Huntress SAT endpoint not available: ${path}`);
+    const res = await fetch(`https://mycurricula.com/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: SAT_CLIENT_ID,
+        client_secret: SAT_CLIENT_SECRET,
+        scope: "account:read learners:read assignments:read assignments:learner-activity phishing-campaigns:read phishing-scenarios:read",
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      log(`Huntress SAT OAuth token error: ${res.status} ${text}`);
       return null;
     }
-    throw e;
+
+    const data = await res.json();
+    satAccessToken = data.access_token;
+    satTokenExpiry = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
+    const grantedScopes = data.scope || "none listed";
+    log(`Huntress SAT: OAuth token obtained, expires in ${data.expires_in || 3600}s, scopes: ${grantedScopes}`);
+    return satAccessToken;
+  } catch (e: any) {
+    log(`Huntress SAT OAuth error: ${e.message}`);
+    return null;
+  }
+}
+
+async function satApiGet(path: string): Promise<any | null> {
+  const token = await getSatToken();
+  if (!token) return null;
+
+  try {
+    const url = path.startsWith("http") ? path : `${SAT_BASE_URL}${path}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/vnd.api+json",
+        Accept: "application/vnd.api+json",
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      if (res.status === 404 || res.status === 403) {
+        log(`Huntress SAT endpoint not available: ${path} (${res.status})`);
+        return null;
+      }
+      log(`Huntress SAT API error: ${res.status} ${text.slice(0, 200)}`);
+      return null;
+    }
+
+    return res.json();
+  } catch (e: any) {
+    log(`Huntress SAT API request error: ${e.message}`);
+    return null;
   }
 }
 
 let cachedOrgs: Array<{ id: number; name: string }> | null = null;
 let cacheExpiry = 0;
+
+let satAccountsCache: any[] | null = null;
+let satAccountsCacheExpiry = 0;
 
 export async function getOrganizations(): Promise<Array<{ id: number; name: string }>> {
   if (cachedOrgs && Date.now() < cacheExpiry) return cachedOrgs;
@@ -191,100 +231,157 @@ function parseCampaign(c: any): SatCampaignDetail | null {
   };
 }
 
-async function fetchSatReportData(huntressOrgId: number): Promise<typeof emptySatFields> {
+async function fetchSatCurriculaData(orgName: string): Promise<typeof emptySatFields> {
   const result = { ...emptySatFields, recentPhishingCampaigns: [] as SatCampaignDetail[] };
 
-  const reportEndpoints = [
-    `/reports?organization_id=${huntressOrgId}`,
-    `/reports/sat?organization_id=${huntressOrgId}`,
-    `/summary_reports?organization_id=${huntressOrgId}`,
-  ];
+  if (!SAT_CLIENT_ID || !SAT_CLIENT_SECRET) {
+    log("Huntress SAT: No Curricula API credentials configured, skipping SAT data fetch");
+    return result;
+  }
 
-  const useSatApi = !!(SAT_API_KEY && SAT_API_SECRET);
-  log(`Huntress SAT: Using ${useSatApi ? "dedicated SAT API key" : "standard API key"} for report endpoints`);
+  log("Huntress SAT: Fetching data from Curricula API (mycurricula.com)");
 
-  for (const endpoint of reportEndpoints) {
-    try {
-      const data = useSatApi ? await apiGetSatSafe(endpoint) : await apiGetSafe(endpoint);
-      if (!data) continue;
+  if (!satAccountsCache || Date.now() > satAccountsCacheExpiry) {
+    const accountsData = await satApiGet("/accounts?page[size]=1000&sort=name");
+    if (!accountsData) {
+      log("Huntress SAT: Could not fetch accounts from Curricula API");
+      return result;
+    }
+    satAccountsCache = accountsData.data || [];
+    satAccountsCacheExpiry = Date.now() + 10 * 60 * 1000;
+  }
 
-      log(`Huntress SAT report response from ${endpoint}: ${JSON.stringify(data).slice(0, 500)}`);
+  const accountsList = Array.isArray(satAccountsCache) ? satAccountsCache : [];
+  log(`Huntress SAT: ${accountsList.length} accounts in Curricula`);
 
-      const reports = data.reports || data.summary_reports || data.sat_reports || [];
-      if (Array.isArray(reports)) {
-        for (const report of reports) {
-          if (report.type === "sat" || report.report_type === "sat" || report.category === "sat") {
-            if (typeof report.completion_rate === "number") {
-              result.satCompletionPercent = Math.round(normalizeRate(report.completion_rate));
-            }
-            if (typeof report.modules_completed === "number") {
-              result.satModulesCompleted = report.modules_completed;
-            }
-            if (typeof report.modules_assigned === "number") {
-              result.satModulesAssigned = report.modules_assigned;
-            }
-          }
+  const normTarget = normalize(orgName);
+  let satAccount: any = null;
+  for (const a of accountsList) {
+    const aName = a.attributes?.name || "";
+    if (aName.toLowerCase() === orgName.toLowerCase()) { satAccount = a; break; }
+    if (normalize(aName) === normTarget) { satAccount = a; break; }
+  }
+  if (!satAccount) {
+    for (const a of accountsList) {
+      const aName = a.attributes?.name || "";
+      const normAcc = normalize(aName);
+      if (normAcc.includes(normTarget) || normTarget.includes(normAcc)) { satAccount = a; break; }
+    }
+  }
+  if (!satAccount) {
+    const firstWord = normTarget.slice(0, Math.max(4, normTarget.length));
+    for (const a of accountsList) {
+      const aName = a.attributes?.name || "";
+      if (normalize(aName).startsWith(firstWord.slice(0, 4))) { satAccount = a; break; }
+    }
+  }
 
-          if (report.type === "phishing" || report.report_type === "phishing" || report.category === "phishing") {
-            if (typeof report.click_rate === "number") {
-              result.phishingClickRate = normalizeRate(report.click_rate);
-            }
-            if (typeof report.compromise_rate === "number") {
-              result.phishingCompromiseRate = normalizeRate(report.compromise_rate);
-            }
-            if (typeof report.report_rate === "number") {
-              result.phishingReportRate = normalizeRate(report.report_rate);
-            }
-            if (typeof report.campaign_count === "number") {
-              result.phishingCampaignCount = report.campaign_count;
-            }
-          }
-        }
+  if (!satAccount) {
+    log(`Huntress SAT: Org "${orgName}" not found in Curricula accounts (${accountsList.length} accounts: ${accountsList.slice(0, 10).map((a: any) => a.attributes?.name).join(", ")}...)`);
+    return result;
+  }
+
+  const satAccountId = satAccount.id;
+  const satAccountName = satAccount.attributes?.name || orgName;
+  log(`Huntress SAT: Matched "${orgName}" to Curricula account "${satAccountName}" (ID: ${satAccountId})`);
+
+  const learnersData = await satApiGet(`/accounts/${satAccountId}/learners?page[size]=500`);
+  if (learnersData) {
+    const learners = learnersData.data || [];
+    const learnersList = Array.isArray(learners) ? learners : [];
+    log(`Huntress SAT: ${learnersList.length} learners for "${satAccountName}"`);
+
+    if (learnersList.length > 0) {
+      const activeLearners = learnersList.filter((l: any) => (l.attributes?.status || "").toLowerCase() !== "inactive");
+      result.satLearnerCount = activeLearners.length || learnersList.length;
+      result.satTotalUsers = learnersList.length;
+
+      let completedModules = 0;
+      let assignedModules = 0;
+      for (const l of learnersList) {
+        const attrs = l.attributes || l;
+        completedModules += attrs.completed_assignments_count || attrs.modules_completed || 0;
+        assignedModules += attrs.total_assignments_count || attrs.modules_assigned || 0;
       }
+      if (assignedModules > 0) {
+        result.satModulesCompleted = completedModules;
+        result.satModulesAssigned = assignedModules;
+        result.satCompletionPercent = Math.round((completedModules / assignedModules) * 100);
+      }
+      log(`Huntress SAT: learner modules ${completedModules}/${assignedModules} completed`);
+    }
+  }
 
-      const campaigns = data.campaigns || data.phishing_campaigns || [];
-      if (Array.isArray(campaigns)) {
-        for (const c of campaigns) {
-          const parsed = parseCampaign(c);
-          if (parsed) result.recentPhishingCampaigns.push(parsed);
-        }
-        if (result.recentPhishingCampaigns.length > 0) {
-          result.recentPhishingCampaigns.sort((a, b) =>
-            new Date(b.launchedAt).getTime() - new Date(a.launchedAt).getTime()
-          );
-          result.recentPhishingCampaigns = result.recentPhishingCampaigns.slice(0, 10);
-          result.phishingCampaignCount = result.phishingCampaignCount ?? result.recentPhishingCampaigns.length;
+  const campaignsData = await satApiGet(`/accounts/${satAccountId}/phishing-campaigns?page[size]=100`);
+  if (campaignsData) {
+    const campaigns = campaignsData.data || [];
+    const campaignsList = Array.isArray(campaigns) ? campaigns : [];
+    log(`Huntress SAT: ${campaignsList.length} phishing campaigns for "${satAccountName}"`);
 
-          if (result.phishingClickRate === null && result.recentPhishingCampaigns.length > 0) {
-            const totalSent = result.recentPhishingCampaigns.reduce((s, c) => s + c.sentCount, 0);
-            const totalClicked = result.recentPhishingCampaigns.reduce((s, c) => s + c.clickCount, 0);
-            const totalCompromised = result.recentPhishingCampaigns.reduce((s, c) => s + c.compromiseCount, 0);
-            const totalReported = result.recentPhishingCampaigns.reduce((s, c) => s + c.reportCount, 0);
-            if (totalSent > 0) {
-              result.phishingClickRate = Math.round((totalClicked / totalSent) * 10000) / 100;
-              result.phishingCompromiseRate = Math.round((totalCompromised / totalSent) * 10000) / 100;
-              result.phishingReportRate = Math.round((totalReported / totalSent) * 10000) / 100;
-            }
-          }
-        }
-      }
+    let totalSent = 0, totalClicked = 0, totalCompromised = 0, totalReported = 0;
 
-      if (data.phishing_click_rate !== undefined && typeof data.phishing_click_rate === "number") {
-        result.phishingClickRate = normalizeRate(data.phishing_click_rate);
-      }
-      if (data.completion_rate !== undefined && typeof data.completion_rate === "number") {
-        result.satCompletionPercent = Math.round(normalizeRate(data.completion_rate));
-      }
-      if (data.compromise_rate !== undefined && typeof data.compromise_rate === "number") {
-        result.phishingCompromiseRate = normalizeRate(data.compromise_rate);
-      }
+    for (const c of campaignsList) {
+      const attrs = c.attributes || c;
+      const stats = attrs.attemptStats || {};
+      const name = attrs.title || attrs.name || `Campaign`;
+      const sent = stats.sent ?? stats.totalRecipients ?? 0;
+      const clicked = stats.uniqueClicks ?? stats.totalClicks ?? 0;
+      const compromised = stats.compromised ?? 0;
+      const reported = stats.reported ?? 0;
 
-      if (result.phishingClickRate !== null || result.satCompletionPercent !== null || result.recentPhishingCampaigns.length > 0) {
-        log(`Huntress SAT: Found report data from ${endpoint}`);
-        break;
+      totalSent += sent;
+      totalClicked += clicked;
+      totalCompromised += compromised;
+      totalReported += reported;
+
+      result.recentPhishingCampaigns.push({
+        name,
+        sentCount: sent,
+        clickCount: clicked,
+        compromiseCount: compromised,
+        reportCount: reported,
+        clickRate: sent > 0 ? Math.round((clicked / sent) * 10000) / 100 : 0,
+        compromiseRate: sent > 0 ? Math.round((compromised / sent) * 10000) / 100 : 0,
+        reportRate: sent > 0 ? Math.round((reported / sent) * 10000) / 100 : 0,
+        launchedAt: attrs.firstSentAt || attrs.campaignStartsAt || attrs.createdAt || new Date().toISOString(),
+      });
+    }
+
+    result.recentPhishingCampaigns.sort((a, b) =>
+      new Date(b.launchedAt).getTime() - new Date(a.launchedAt).getTime()
+    );
+    result.recentPhishingCampaigns = result.recentPhishingCampaigns.slice(0, 10);
+    result.phishingCampaignCount = campaignsList.length;
+
+    if (totalSent > 0) {
+      result.phishingClickRate = Math.round((totalClicked / totalSent) * 10000) / 100;
+      result.phishingCompromiseRate = Math.round((totalCompromised / totalSent) * 10000) / 100;
+      result.phishingReportRate = Math.round((totalReported / totalSent) * 10000) / 100;
+    }
+
+    log(`Huntress SAT: phishing totals: sent=${totalSent}, clicked=${totalClicked}, click rate=${result.phishingClickRate}%`);
+  }
+
+  const assignmentsData = await satApiGet(`/accounts/${satAccountId}/assignments?page[size]=500`);
+  if (assignmentsData) {
+    const assignments = assignmentsData.data || [];
+    const assignmentsList = Array.isArray(assignments) ? assignments : [];
+    log(`Huntress SAT: ${assignmentsList.length} assignments for "${satAccountName}"`);
+
+    if (assignmentsList.length > 0 && result.satModulesAssigned === null) {
+      let completed = 0, total = 0;
+      for (const a of assignmentsList) {
+        const attrs = a.attributes || a;
+        total++;
+        const status = (attrs.status || "").toLowerCase();
+        if (status === "completed" || status === "finished" || status === "complete") completed++;
       }
-    } catch (e: any) {
-      log(`Huntress SAT report endpoint ${endpoint} error: ${e.message}`);
+      result.satModulesAssigned = total;
+      result.satModulesCompleted = completed;
+      if (total > 0) {
+        result.satCompletionPercent = Math.round((completed / total) * 100);
+      }
+      log(`Huntress SAT: ${completed}/${total} assignments completed`);
     }
   }
 
@@ -413,14 +510,14 @@ export async function getSecuritySummary(
 
   let satReportData = { ...emptySatFields };
   try {
-    satReportData = await fetchSatReportData(huntressOrgId);
+    satReportData = await fetchSatCurriculaData(orgName);
   } catch (e) {
-    log(`Huntress SAT report fetch error: ${e}`);
+    log(`Huntress SAT Curricula fetch error: ${e}`);
   }
 
-  satReportData.satLearnerCount = satLearnerCount;
-  satReportData.satTotalUsers = satTotalUsers;
-  satReportData.satCoveragePercent = satCoveragePercent;
+  if (satReportData.satLearnerCount === null) satReportData.satLearnerCount = satLearnerCount;
+  if (satReportData.satTotalUsers === null) satReportData.satTotalUsers = satTotalUsers;
+  if (satReportData.satCoveragePercent === null) satReportData.satCoveragePercent = satCoveragePercent;
 
   return {
     totalIncidents,
