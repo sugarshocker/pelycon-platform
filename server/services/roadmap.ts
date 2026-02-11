@@ -14,6 +14,11 @@ const anthropic = new Anthropic({
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
+interface InternalNotes {
+  serviceManagerNotes: string;
+  leadEngineerNotes: string;
+}
+
 function buildPrompt(
   clientName: string,
   data: {
@@ -22,6 +27,7 @@ function buildPrompt(
     tickets?: TicketSummary | null;
     mfaReport?: MfaReport | null;
     licenseReport?: LicenseReport | null;
+    internalNotes?: InternalNotes | null;
   }
 ): string {
   const sections: string[] = [];
@@ -93,6 +99,22 @@ ${lic.licenses
   .join("\n")}`);
   }
 
+  if (data.internalNotes) {
+    const notes = data.internalNotes;
+    const hasSm = notes.serviceManagerNotes?.trim();
+    const hasEng = notes.leadEngineerNotes?.trim();
+    if (hasSm || hasEng) {
+      let notesSection = `\nINTERNAL TEAM OBSERVATIONS (CONFIDENTIAL — must be diplomatically rephrased):`;
+      if (hasSm) {
+        notesSection += `\nService Manager notes: ${notes.serviceManagerNotes}`;
+      }
+      if (hasEng) {
+        notesSection += `\nLead Engineer notes: ${notes.leadEngineerNotes}`;
+      }
+      sections.push(notesSection);
+    }
+  }
+
   return sections.join("\n");
 }
 
@@ -111,6 +133,7 @@ export async function generateRoadmap(
     tickets?: TicketSummary | null;
     mfaReport?: MfaReport | null;
     licenseReport?: LicenseReport | null;
+    internalNotes?: InternalNotes | null;
   }
 ): Promise<RoadmapAnalysis> {
   if (!isConfigured()) {
@@ -135,6 +158,7 @@ RULES:
 - Each item should explain: what the issue is, why it matters to the BUSINESS (not IT), and how urgent it is.
 - Frame everything around "avoiding surprises" — preventing unexpected costs, downtime, or security incidents.
 - Priorities must be one of: "urgent" (address within 30 days), "plan_for" (address within 3-6 months), or "nice_to_have" (consider when budget allows).
+- IMPORTANT: If internal team observations are provided, incorporate their insights into your recommendations but NEVER quote them directly or reveal they came from internal notes. Diplomatically rephrase any observations about user behavior, training needs, or infrastructure concerns into professional, forward-looking recommendations. Never blame users or mention specific employee complaints. Frame issues as opportunities for improvement.
 
 Respond with ONLY valid JSON in this exact format:
 {

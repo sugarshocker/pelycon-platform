@@ -5,6 +5,7 @@ import { DeviceHealth } from "@/components/device-health";
 import { SecuritySection } from "@/components/security-section";
 import { TicketTrends } from "@/components/ticket-trends";
 import { CippReports } from "@/components/cipp-reports";
+import { InternalNotesSection, type InternalNotes } from "@/components/internal-notes";
 import { AiRoadmap } from "@/components/ai-roadmap";
 import { MeetingExport } from "@/components/meeting-export";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [mfaReport, setMfaReport] = useState<MfaReport | null>(null);
   const [licenseReport, setLicenseReport] = useState<LicenseReport | null>(null);
   const [roadmap, setRoadmap] = useState<RoadmapAnalysis | null>(null);
+  const [internalNotes, setInternalNotes] = useState<InternalNotes>({ serviceManagerNotes: "", leadEngineerNotes: "" });
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
 
@@ -63,6 +65,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       setMfaReport(null);
       setLicenseReport(null);
       setRoadmap(null);
+      setInternalNotes({ serviceManagerNotes: "", leadEngineerNotes: "" });
     },
     []
   );
@@ -163,6 +166,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               onMfaUpload={setMfaReport}
               onLicenseUpload={setLicenseReport}
             />
+            <InternalNotesSection
+              notes={internalNotes}
+              onNotesChange={setInternalNotes}
+            />
             <AiRoadmap
               client={selectedClient}
               deviceHealth={deviceHealth || null}
@@ -170,6 +177,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               tickets={tickets || null}
               mfaReport={mfaReport}
               licenseReport={licenseReport}
+              internalNotes={internalNotes}
               roadmap={roadmap}
               onRoadmapGenerated={setRoadmap}
             />

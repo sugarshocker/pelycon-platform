@@ -15,6 +15,7 @@ import type {
   LicenseReport,
   Organization,
 } from "@shared/schema";
+import type { InternalNotes } from "./internal-notes";
 
 interface AiRoadmapProps {
   client: Organization;
@@ -23,6 +24,7 @@ interface AiRoadmapProps {
   tickets: TicketSummary | null;
   mfaReport: MfaReport | null;
   licenseReport: LicenseReport | null;
+  internalNotes?: InternalNotes;
   roadmap: RoadmapAnalysis | null;
   onRoadmapGenerated: (roadmap: RoadmapAnalysis) => void;
 }
@@ -69,6 +71,7 @@ export function AiRoadmap({
   tickets,
   mfaReport,
   licenseReport,
+  internalNotes,
   roadmap,
   onRoadmapGenerated,
 }: AiRoadmapProps) {
@@ -92,6 +95,7 @@ export function AiRoadmap({
           tickets,
           mfaReport,
           licenseReport,
+          internalNotes: internalNotes?.serviceManagerNotes || internalNotes?.leadEngineerNotes ? internalNotes : undefined,
         }),
       });
 

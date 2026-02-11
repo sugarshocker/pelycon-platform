@@ -62,7 +62,7 @@ export function ClientSelector({
           <SelectValue placeholder="Select a client..." />
         </SelectTrigger>
         <SelectContent>
-          {organizations.map((org) => (
+          {[...organizations].sort((a, b) => a.name.localeCompare(b.name)).map((org) => (
             <SelectItem
               key={org.id}
               value={org.id.toString()}
