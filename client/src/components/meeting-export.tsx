@@ -60,6 +60,7 @@ export function MeetingExport({
         }),
       });
 
+      if (res.status === 401) throw new Error("Session expired. Please log in again.");
       if (!res.ok) throw new Error("Export failed");
 
       const html = await res.text();
@@ -91,7 +92,7 @@ export function MeetingExport({
     } catch (err: any) {
       toast({
         title: "Export Failed",
-        description: "Could not generate the summary. Please try again.",
+        description: err.message || "Could not generate the summary. Please try again.",
         variant: "destructive",
       });
     } finally {

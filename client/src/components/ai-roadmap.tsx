@@ -99,6 +99,7 @@ export function AiRoadmap({
         }),
       });
 
+      if (res.status === 401) throw new Error("Session expired. Please log in again.");
       if (!res.ok) {
         const err = await res.text();
         throw new Error(err);

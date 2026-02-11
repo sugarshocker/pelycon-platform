@@ -92,7 +92,7 @@ export async function registerRoutes(
 
   app.get("/api/devices/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orgId = parseInt(req.params.orgId);
+      const orgId = parseInt(req.params.orgId as string);
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
@@ -130,7 +130,7 @@ export async function registerRoutes(
 
   app.get("/api/security/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orgId = parseInt(req.params.orgId);
+      const orgId = parseInt(req.params.orgId as string);
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
@@ -155,6 +155,9 @@ export async function registerRoutes(
           antivirusNotProtectedCount: 0,
           satCompletionPercent: null,
           phishingClickRate: null,
+          satLearnerCount: null,
+          satTotalUsers: null,
+          satCoveragePercent: null,
           trendDirection: "stable",
         } satisfies SecuritySummary);
       }
@@ -169,7 +172,7 @@ export async function registerRoutes(
 
   app.get("/api/coverage-gap/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orgId = parseInt(req.params.orgId);
+      const orgId = parseInt(req.params.orgId as string);
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
@@ -220,7 +223,7 @@ export async function registerRoutes(
 
   app.get("/api/tickets/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orgId = parseInt(req.params.orgId);
+      const orgId = parseInt(req.params.orgId as string);
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
@@ -535,7 +538,7 @@ export async function registerRoutes(
 
   app.get("/api/tbr/history/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orgId = parseInt(req.params.orgId);
+      const orgId = parseInt(req.params.orgId as string);
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
@@ -549,7 +552,7 @@ export async function registerRoutes(
 
   app.get("/api/tbr/latest/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
-      const orgId = parseInt(req.params.orgId);
+      const orgId = parseInt(req.params.orgId as string);
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
