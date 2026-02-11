@@ -60,7 +60,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 
 ## API Implementation Notes
 - **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X`. Device age uses warranty/purchase/created date.
-- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. SAT detailed report endpoints (phishing click rate, completion rate) not yet available via public API.
+- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. SAT integration pulls from org detail + report endpoints (`/v1/reports`, `/v1/reports/sat`, `/v1/summary_reports`) with graceful fallback if endpoints aren't available. SecuritySummary includes: enrollment (learner count, coverage %), training completion (modules completed/assigned, completion %), phishing simulation (click rate, compromise rate, report rate, campaign count, recent campaigns).
 - **Auth**: Bearer token stored in sessionStorage, sent in Authorization header
 
 ## Environment Variables

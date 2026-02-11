@@ -3,7 +3,7 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusDot, TrendIndicator } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap, Crosshair, BookOpen, Users } from "lucide-react";
 import type { SecuritySummary, Organization } from "@shared/schema";
 
 interface MissingDevice {
@@ -31,6 +31,159 @@ function severityBadgeVariant(severity: string): "destructive" | "outline" | "se
     default:
       return "secondary";
   }
+}
+
+function SatSubsection({ data }: { data: SecuritySummary }) {
+  const hasSatData = data.satLearnerCount !== null || data.satTotalUsers !== null;
+  const hasPhishingData = data.phishingClickRate !== null || data.phishingCampaignCount !== null;
+  const hasCompletionData = data.satCompletionPercent !== null || data.satModulesCompleted !== null;
+
+  if (!hasSatData && !hasPhishingData && !hasCompletionData) return null;
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-sm font-medium flex items-center gap-2">
+        <GraduationCap className="h-4 w-4 text-muted-foreground" />
+        Security Awareness Training (SAT)
+      </h4>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {hasSatData && (
+          <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span
+              className={`text-2xl font-bold ${
+                data.satCoveragePercent !== null && data.satCoveragePercent < 80
+                  ? "text-amber-600 dark:text-amber-400"
+                  : data.satLearnerCount !== null && data.satLearnerCount > 0
+                  ? "text-green-600 dark:text-green-400"
+                  : ""
+              }`}
+              data-testid="text-sat-enrollment"
+            >
+              {data.satCoveragePercent !== null ? `${data.satCoveragePercent}%` : data.satLearnerCount ?? "N/A"}
+            </span>
+            <span className="text-xs text-muted-foreground text-center">
+              {data.satCoveragePercent !== null ? "Enrolled" : "Learners"}
+            </span>
+            {data.satLearnerCount !== null && data.satTotalUsers !== null && (
+              <span className="text-xs text-muted-foreground">
+                {data.satLearnerCount} of {data.satTotalUsers}
+              </span>
+            )}
+          </div>
+        )}
+
+        {hasCompletionData && (
+          <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <span
+              className={`text-2xl font-bold ${
+                data.satCompletionPercent !== null && data.satCompletionPercent >= 80
+                  ? "text-green-600 dark:text-green-400"
+                  : data.satCompletionPercent !== null
+                  ? "text-amber-600 dark:text-amber-400"
+                  : ""
+              }`}
+              data-testid="text-sat-completion"
+            >
+              {data.satCompletionPercent !== null ? `${data.satCompletionPercent}%` : "N/A"}
+            </span>
+            <span className="text-xs text-muted-foreground text-center">Completion</span>
+            {data.satModulesCompleted !== null && data.satModulesAssigned !== null && (
+              <span className="text-xs text-muted-foreground">
+                {data.satModulesCompleted} of {data.satModulesAssigned} modules
+              </span>
+            )}
+          </div>
+        )}
+
+        {(data.phishingClickRate !== null || hasPhishingData) && (
+          <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
+            <Crosshair className="h-4 w-4 text-muted-foreground" />
+            <span
+              className={`text-2xl font-bold ${
+                data.phishingClickRate !== null && data.phishingClickRate <= 5
+                  ? "text-green-600 dark:text-green-400"
+                  : data.phishingClickRate !== null && data.phishingClickRate <= 15
+                  ? "text-amber-600 dark:text-amber-400"
+                  : data.phishingClickRate !== null
+                  ? "text-red-600 dark:text-red-400"
+                  : ""
+              }`}
+              data-testid="text-phishing-click-rate"
+            >
+              {data.phishingClickRate !== null ? `${data.phishingClickRate}%` : "N/A"}
+            </span>
+            <span className="text-xs text-muted-foreground text-center">Phishing Click Rate</span>
+            {data.phishingCampaignCount !== null && (
+              <span className="text-xs text-muted-foreground">
+                {data.phishingCampaignCount} campaign{data.phishingCampaignCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
+
+        {data.phishingReportRate !== null && (
+          <div className="flex flex-col items-center gap-1 rounded-md bg-muted/50 p-3">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            <span
+              className={`text-2xl font-bold ${
+                data.phishingReportRate >= 70
+                  ? "text-green-600 dark:text-green-400"
+                  : data.phishingReportRate >= 40
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}
+              data-testid="text-phishing-report-rate"
+            >
+              {data.phishingReportRate}%
+            </span>
+            <span className="text-xs text-muted-foreground text-center">Report Rate</span>
+          </div>
+        )}
+      </div>
+
+      {data.satTotalUsers && data.satLearnerCount !== null && data.satLearnerCount < data.satTotalUsers && (
+        <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <span className="text-sm text-amber-700 dark:text-amber-300">
+            {data.satTotalUsers - data.satLearnerCount} user{data.satTotalUsers - data.satLearnerCount !== 1 ? "s" : ""} not enrolled in security training
+          </span>
+        </div>
+      )}
+
+      {data.recentPhishingCampaigns.length > 0 && (
+        <div className="space-y-2">
+          <h5 className="text-xs font-medium text-muted-foreground">Recent Phishing Campaigns</h5>
+          <div className="grid gap-1.5">
+            {data.recentPhishingCampaigns.slice(0, 5).map((campaign, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2"
+                data-testid={`phishing-campaign-${i}`}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Crosshair className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm truncate">{campaign.name}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                  <Badge
+                    variant={campaign.clickRate <= 5 ? "secondary" : campaign.clickRate <= 15 ? "outline" : "destructive"}
+                  >
+                    {campaign.clickRate}% clicked
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(campaign.launchedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SecuritySection({ client }: SecuritySectionProps) {
@@ -144,28 +297,7 @@ export function SecuritySection({ client }: SecuritySectionProps) {
           </div>
         </div>
 
-        {(data.satLearnerCount !== null || data.satTotalUsers !== null) && (
-          <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
-            <GraduationCap className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Security Awareness Training</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-lg font-bold ${data.satCoveragePercent !== null && data.satCoveragePercent < 80 ? "text-amber-600 dark:text-amber-400" : data.satLearnerCount !== null && data.satLearnerCount > 0 ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} data-testid="text-sat-learners">
-                  {data.satLearnerCount !== null ? data.satLearnerCount : "N/A"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  enrolled{data.satTotalUsers ? ` of ${data.satTotalUsers} users` : ""}
-                  {data.satCoveragePercent !== null ? ` (${data.satCoveragePercent}%)` : ""}
-                </span>
-              </div>
-              {data.satTotalUsers && data.satLearnerCount !== null && data.satLearnerCount < data.satTotalUsers && (
-                <span className="text-xs text-amber-600 dark:text-amber-400">
-                  {data.satTotalUsers - data.satLearnerCount} user{data.satTotalUsers - data.satLearnerCount !== 1 ? "s" : ""} not enrolled in training
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+        <SatSubsection data={data} />
 
         {coverageGap && coverageGap.missingFromHuntress.length > 0 && (
           <div className="space-y-2">

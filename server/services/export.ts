@@ -88,6 +88,28 @@ export function generateSummaryHtml(data: {
       const satGood = satGap === 0;
       opItems.push(`<div class="check-item">${statusIndicator(satGood, `All users enrolled in security awareness training (${sec.satLearnerCount})`, `${satGap} user(s) not enrolled in security awareness training (${sec.satLearnerCount}${sec.satTotalUsers ? ` of ${sec.satTotalUsers}` : ""} enrolled)`)}</div>`);
     }
+
+    if (sec.satCompletionPercent !== null) {
+      const completionGood = sec.satCompletionPercent >= 80;
+      opItems.push(`<div class="check-item">${statusIndicator(completionGood, `Training completion at ${sec.satCompletionPercent}%`, `Training completion at ${sec.satCompletionPercent}% \u2014 needs improvement`)}</div>`);
+      if (sec.satModulesCompleted !== null && sec.satModulesAssigned !== null) {
+        opItems.push(`<p class="detail">${sec.satModulesCompleted} of ${sec.satModulesAssigned} training modules completed</p>`);
+      }
+    }
+
+    if (sec.phishingClickRate !== null) {
+      const phishGood = sec.phishingClickRate <= 5;
+      opItems.push(`<div class="check-item">${statusIndicator(phishGood, `Phishing click rate at ${sec.phishingClickRate}% \u2014 well below industry average`, `Phishing click rate at ${sec.phishingClickRate}% \u2014 ${sec.phishingClickRate > 15 ? "significantly above" : "above"} target of 5%`)}</div>`);
+      if (sec.phishingCampaignCount !== null) {
+        opItems.push(`<p class="detail">${sec.phishingCampaignCount} phishing simulation campaign${sec.phishingCampaignCount !== 1 ? "s" : ""} conducted</p>`);
+      }
+      if (sec.phishingReportRate !== null) {
+        opItems.push(`<p class="detail">Phishing report rate: ${sec.phishingReportRate}% (employees correctly flagging simulations)</p>`);
+      }
+      if (sec.phishingCompromiseRate !== null) {
+        opItems.push(`<p class="detail ${sec.phishingCompromiseRate > 3 ? "flag-amber" : ""}">Compromise rate: ${sec.phishingCompromiseRate}% (employees entering credentials)</p>`);
+      }
+    }
   }
 
   if (data.mfaReport) {

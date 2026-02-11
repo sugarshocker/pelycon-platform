@@ -1,4 +1,4 @@
-import type { SecuritySummary, IncidentDetail } from "@shared/schema";
+import type { SecuritySummary, IncidentDetail, SatCampaignDetail } from "@shared/schema";
 import { log } from "../index";
 
 function cleanEnv(key: string): string {
@@ -28,6 +28,18 @@ async function apiGet(path: string): Promise<any> {
   }
 
   return res.json();
+}
+
+async function apiGetSafe(path: string): Promise<any | null> {
+  try {
+    return await apiGet(path);
+  } catch (e: any) {
+    if (e.message?.includes("404") || e.message?.includes("403")) {
+      log(`Huntress endpoint not available: ${path}`);
+      return null;
+    }
+    throw e;
+  }
 }
 
 let cachedOrgs: Array<{ id: number; name: string }> | null = null;
@@ -101,6 +113,143 @@ export async function findOrgByName(name: string): Promise<number | null> {
   }
 }
 
+const emptySatFields = {
+  satCompletionPercent: null as number | null,
+  phishingClickRate: null as number | null,
+  satLearnerCount: null as number | null,
+  satTotalUsers: null as number | null,
+  satCoveragePercent: null as number | null,
+  satModulesCompleted: null as number | null,
+  satModulesAssigned: null as number | null,
+  phishingCampaignCount: null as number | null,
+  phishingCompromiseRate: null as number | null,
+  phishingReportRate: null as number | null,
+  recentPhishingCampaigns: [] as SatCampaignDetail[],
+};
+
+function normalizeRate(value: number): number {
+  if (value > 1 && value <= 100) return Math.round(value * 100) / 100;
+  if (value >= 0 && value <= 1) return Math.round(value * 10000) / 100;
+  return Math.round(value * 100) / 100;
+}
+
+function parseCampaign(c: any): SatCampaignDetail | null {
+  const name = c.name || c.scenario_name || c.title || c.subject || "";
+  if (!name) return null;
+  const sent = c.sent_count ?? c.recipients_count ?? c.total ?? 0;
+  const clicked = c.click_count ?? c.clicks ?? 0;
+  const compromised = c.compromise_count ?? c.compromises ?? 0;
+  const reported = c.report_count ?? c.reports ?? 0;
+  return {
+    name,
+    sentCount: sent,
+    clickCount: clicked,
+    compromiseCount: compromised,
+    reportCount: reported,
+    clickRate: sent > 0 ? Math.round((clicked / sent) * 10000) / 100 : 0,
+    compromiseRate: sent > 0 ? Math.round((compromised / sent) * 10000) / 100 : 0,
+    reportRate: sent > 0 ? Math.round((reported / sent) * 10000) / 100 : 0,
+    launchedAt: c.launched_at || c.sent_at || c.created_at || new Date().toISOString(),
+  };
+}
+
+async function fetchSatReportData(huntressOrgId: number): Promise<typeof emptySatFields> {
+  const result = { ...emptySatFields, recentPhishingCampaigns: [] as SatCampaignDetail[] };
+
+  const reportEndpoints = [
+    `/reports?organization_id=${huntressOrgId}`,
+    `/reports/sat?organization_id=${huntressOrgId}`,
+    `/summary_reports?organization_id=${huntressOrgId}`,
+  ];
+
+  for (const endpoint of reportEndpoints) {
+    try {
+      const data = await apiGetSafe(endpoint);
+      if (!data) continue;
+
+      log(`Huntress SAT report response from ${endpoint}: ${JSON.stringify(data).slice(0, 500)}`);
+
+      const reports = data.reports || data.summary_reports || data.sat_reports || [];
+      if (Array.isArray(reports)) {
+        for (const report of reports) {
+          if (report.type === "sat" || report.report_type === "sat" || report.category === "sat") {
+            if (typeof report.completion_rate === "number") {
+              result.satCompletionPercent = Math.round(normalizeRate(report.completion_rate));
+            }
+            if (typeof report.modules_completed === "number") {
+              result.satModulesCompleted = report.modules_completed;
+            }
+            if (typeof report.modules_assigned === "number") {
+              result.satModulesAssigned = report.modules_assigned;
+            }
+          }
+
+          if (report.type === "phishing" || report.report_type === "phishing" || report.category === "phishing") {
+            if (typeof report.click_rate === "number") {
+              result.phishingClickRate = normalizeRate(report.click_rate);
+            }
+            if (typeof report.compromise_rate === "number") {
+              result.phishingCompromiseRate = normalizeRate(report.compromise_rate);
+            }
+            if (typeof report.report_rate === "number") {
+              result.phishingReportRate = normalizeRate(report.report_rate);
+            }
+            if (typeof report.campaign_count === "number") {
+              result.phishingCampaignCount = report.campaign_count;
+            }
+          }
+        }
+      }
+
+      const campaigns = data.campaigns || data.phishing_campaigns || [];
+      if (Array.isArray(campaigns)) {
+        for (const c of campaigns) {
+          const parsed = parseCampaign(c);
+          if (parsed) result.recentPhishingCampaigns.push(parsed);
+        }
+        if (result.recentPhishingCampaigns.length > 0) {
+          result.recentPhishingCampaigns.sort((a, b) =>
+            new Date(b.launchedAt).getTime() - new Date(a.launchedAt).getTime()
+          );
+          result.recentPhishingCampaigns = result.recentPhishingCampaigns.slice(0, 10);
+          result.phishingCampaignCount = result.phishingCampaignCount ?? result.recentPhishingCampaigns.length;
+
+          if (result.phishingClickRate === null && result.recentPhishingCampaigns.length > 0) {
+            const totalSent = result.recentPhishingCampaigns.reduce((s, c) => s + c.sentCount, 0);
+            const totalClicked = result.recentPhishingCampaigns.reduce((s, c) => s + c.clickCount, 0);
+            const totalCompromised = result.recentPhishingCampaigns.reduce((s, c) => s + c.compromiseCount, 0);
+            const totalReported = result.recentPhishingCampaigns.reduce((s, c) => s + c.reportCount, 0);
+            if (totalSent > 0) {
+              result.phishingClickRate = Math.round((totalClicked / totalSent) * 10000) / 100;
+              result.phishingCompromiseRate = Math.round((totalCompromised / totalSent) * 10000) / 100;
+              result.phishingReportRate = Math.round((totalReported / totalSent) * 10000) / 100;
+            }
+          }
+        }
+      }
+
+      if (data.phishing_click_rate !== undefined && typeof data.phishing_click_rate === "number") {
+        result.phishingClickRate = normalizeRate(data.phishing_click_rate);
+      }
+      if (data.completion_rate !== undefined && typeof data.completion_rate === "number") {
+        result.satCompletionPercent = Math.round(normalizeRate(data.completion_rate));
+      }
+      if (data.compromise_rate !== undefined && typeof data.compromise_rate === "number") {
+        result.phishingCompromiseRate = normalizeRate(data.compromise_rate);
+      }
+
+      if (result.phishingClickRate !== null || result.satCompletionPercent !== null || result.recentPhishingCampaigns.length > 0) {
+        log(`Huntress SAT: Found report data from ${endpoint}`);
+        break;
+      }
+    } catch (e: any) {
+      log(`Huntress SAT report endpoint ${endpoint} error: ${e.message}`);
+    }
+  }
+
+  return result;
+}
+
 export async function getSecuritySummary(
   orgName: string
 ): Promise<SecuritySummary> {
@@ -116,11 +265,7 @@ export async function getSecuritySummary(
       activeAgents: 0,
       managedAntivirusCount: 0,
       antivirusNotProtectedCount: 0,
-      satCompletionPercent: null,
-      phishingClickRate: null,
-      satLearnerCount: null,
-      satTotalUsers: null,
-      satCoveragePercent: null,
+      ...emptySatFields,
       trendDirection: "stable" as const,
       notInHuntress: true,
     };
@@ -225,6 +370,17 @@ export async function getSecuritySummary(
     log(`Huntress agents error: ${e}`);
   }
 
+  let satReportData = { ...emptySatFields };
+  try {
+    satReportData = await fetchSatReportData(huntressOrgId);
+  } catch (e) {
+    log(`Huntress SAT report fetch error: ${e}`);
+  }
+
+  satReportData.satLearnerCount = satLearnerCount;
+  satReportData.satTotalUsers = satTotalUsers;
+  satReportData.satCoveragePercent = satCoveragePercent;
+
   return {
     totalIncidents,
     resolvedIncidents,
@@ -233,11 +389,7 @@ export async function getSecuritySummary(
     activeAgents,
     managedAntivirusCount,
     antivirusNotProtectedCount,
-    satCompletionPercent: null,
-    phishingClickRate: null,
-    satLearnerCount,
-    satTotalUsers,
-    satCoveragePercent,
+    ...satReportData,
     trendDirection: totalIncidents === 0 ? "stable" : pendingIncidents > 0 ? "worse" : "better",
   };
 }

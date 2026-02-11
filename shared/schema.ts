@@ -107,6 +107,18 @@ export interface IncidentDetail {
   closedAt: string | null;
 }
 
+export interface SatCampaignDetail {
+  name: string;
+  sentCount: number;
+  clickCount: number;
+  compromiseCount: number;
+  reportCount: number;
+  clickRate: number;
+  compromiseRate: number;
+  reportRate: number;
+  launchedAt: string;
+}
+
 export interface SecuritySummary {
   totalIncidents: number;
   resolvedIncidents: number;
@@ -120,6 +132,12 @@ export interface SecuritySummary {
   satLearnerCount: number | null;
   satTotalUsers: number | null;
   satCoveragePercent: number | null;
+  satModulesCompleted: number | null;
+  satModulesAssigned: number | null;
+  phishingCampaignCount: number | null;
+  phishingCompromiseRate: number | null;
+  phishingReportRate: number | null;
+  recentPhishingCampaigns: SatCampaignDetail[];
   trendDirection: "better" | "worse" | "stable" | null;
   notInHuntress?: boolean;
 }

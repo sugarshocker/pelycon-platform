@@ -158,6 +158,12 @@ export async function registerRoutes(
           satLearnerCount: null,
           satTotalUsers: null,
           satCoveragePercent: null,
+          satModulesCompleted: null,
+          satModulesAssigned: null,
+          phishingCampaignCount: null,
+          phishingCompromiseRate: null,
+          phishingReportRate: null,
+          recentPhishingCampaigns: [],
           trendDirection: "stable",
         } satisfies SecuritySummary);
       }
