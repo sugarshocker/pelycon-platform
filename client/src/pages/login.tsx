@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Lock, Eye, EyeOff } from "lucide-react";
 import { setToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 
 interface LoginProps {
   onLogin: () => void;
@@ -48,9 +49,7 @@ export default function Login({ onLogin }: LoginProps) {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-md flex items-center justify-center font-bold text-2xl text-white" style={{ backgroundColor: "#E77125" }}>
-              P
-            </div>
+            <img src={pelyconLogo} alt="Pelycon Technologies" className="h-10 w-10 object-contain" />
             <span className="text-xl font-semibold tracking-tight">
               Pelycon Technologies
             </span>

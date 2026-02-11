@@ -9,7 +9,9 @@ import * as connectwise from "./services/connectwise";
 import * as roadmap from "./services/roadmap";
 import { generateSummaryHtml } from "./services/export";
 import { log } from "./index";
-import type { MfaReport, LicenseReport, SecuritySummary, TicketSummary, DeviceHealthSummary } from "@shared/schema";
+import { insertTbrSnapshotSchema } from "@shared/schema";
+import type { MfaReport, LicenseReport, SecuritySummary, TicketSummary, DeviceHealthSummary, InsertTbrSnapshot } from "@shared/schema";
+import { storage } from "./storage";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -473,6 +475,89 @@ export async function registerRoutes(
       res.send(html);
     } catch (err: any) {
       log(`Export error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/tbr/finalize", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { orgId, orgName, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap: roadmapData } = req.body;
+
+      if (!orgId || !orgName) {
+        return res.status(400).json({ message: "Organization ID and name are required" });
+      }
+
+      const mfaCoveragePct = mfaReport?.totalUsers > 0
+        ? Math.round((mfaReport.coveredCount / mfaReport.totalUsers) * 100)
+        : null;
+
+      const snapshotData = {
+        orgId,
+        orgName,
+        totalDevices: deviceHealth?.totalDevices ?? 0,
+        workstations: deviceHealth?.workstations ?? 0,
+        servers: deviceHealth?.servers ?? 0,
+        needsReplacementCount: deviceHealth?.needsReplacementCount ?? 0,
+        patchCompliancePercent: deviceHealth?.patchCompliancePercent ?? 100,
+        pendingPatchCount: deviceHealth?.pendingPatchCount ?? 0,
+        eolOsCount: deviceHealth?.eolOsDevices?.length ?? 0,
+        staleDeviceCount: deviceHealth?.staleDevices?.length ?? 0,
+        totalIncidents: security?.totalIncidents ?? 0,
+        pendingIncidents: security?.pendingIncidents ?? 0,
+        activeAgents: security?.activeAgents ?? 0,
+        satLearnerCount: security?.satLearnerCount ?? null,
+        satTotalUsers: security?.satTotalUsers ?? null,
+        totalTickets: tickets?.totalTickets ?? 0,
+        oldOpenTicketCount: tickets?.oldOpenTickets?.length ?? 0,
+        mfaTotalUsers: mfaReport?.totalUsers ?? null,
+        mfaCoveredCount: mfaReport?.coveredCount ?? null,
+        mfaCoveragePercent: mfaCoveragePct,
+        licenseTotalWasted: licenseReport?.totalWasted ?? null,
+        licenseMonthlyWaste: licenseReport?.totalMonthlyWaste ?? null,
+        licenseAnnualWaste: licenseReport?.totalAnnualWaste ?? null,
+        roadmapItemCount: roadmapData?.items?.length ?? 0,
+        urgentItemCount: roadmapData?.items?.filter((i: any) => i.priority === "urgent").length ?? 0,
+      };
+
+      const parsed = insertTbrSnapshotSchema.safeParse(snapshotData);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid snapshot data", errors: parsed.error.flatten().fieldErrors });
+      }
+
+      const result = await storage.createTbrSnapshot(parsed.data);
+      log(`TBR finalized for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}`);
+      res.json(result);
+    } catch (err: any) {
+      log(`TBR finalize error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/tbr/history/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId);
+      if (isNaN(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+      const snapshots = await storage.getTbrSnapshotsByOrg(orgId);
+      res.json(snapshots);
+    } catch (err: any) {
+      log(`TBR history error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/tbr/latest/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId);
+      if (isNaN(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+      const latest = await storage.getLatestTbrSnapshot(orgId);
+      const previous = await storage.getPreviousTbrSnapshot(orgId);
+      res.json({ latest: latest || null, previous: previous || null });
+    } catch (err: any) {
+      log(`TBR latest error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

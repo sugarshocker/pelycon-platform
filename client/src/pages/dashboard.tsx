@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { ClientSelector } from "@/components/client-selector";
 import { DeviceHealth } from "@/components/device-health";
 import { SecuritySection } from "@/components/security-section";
@@ -10,10 +10,12 @@ import { AiRoadmap } from "@/components/ai-roadmap";
 import { MeetingExport } from "@/components/meeting-export";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { useTheme } from "@/components/theme-provider";
-import { Sun, Moon, LogOut, CheckCircle2, XCircle } from "lucide-react";
-import { apiRequest, clearToken } from "@/lib/queryClient";
+import { Sun, Moon, LogOut, CheckCircle2, XCircle, Save, Loader2, History, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { apiRequest, clearToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 import type {
   Organization,
   DeviceHealthSummary,
@@ -23,6 +25,7 @@ import type {
   LicenseReport,
   RoadmapAnalysis,
   ApiStatus,
+  TbrSnapshot,
 } from "@shared/schema";
 
 interface DashboardProps {
@@ -59,6 +62,41 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     enabled: !!selectedClient,
   });
 
+  const { data: tbrHistory } = useQuery<{ latest: TbrSnapshot | null; previous: TbrSnapshot | null }>({
+    queryKey: [`/api/tbr/latest/${selectedClient?.id}`],
+    enabled: !!selectedClient,
+  });
+
+  const finalizeMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedClient) throw new Error("No client selected");
+      return apiRequest("POST", "/api/tbr/finalize", {
+        orgId: selectedClient.id,
+        orgName: selectedClient.name,
+        deviceHealth: deviceHealth || null,
+        security: security || null,
+        tickets: tickets || null,
+        mfaReport: mfaReport,
+        licenseReport: licenseReport,
+        roadmap: roadmap,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tbr/latest/${selectedClient?.id}`] });
+      toast({
+        title: "TBR Finalized",
+        description: `This review has been recorded for ${selectedClient?.name}. The next review will show trends compared to this snapshot.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to finalize the TBR. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleClientSelect = useCallback(
     (client: Organization) => {
       setSelectedClient(client);
@@ -83,14 +121,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const nextTbr = new Date(today);
   nextTbr.setMonth(nextTbr.getMonth() + 6);
 
+  const previousSnapshot = tbrHistory?.previous || null;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-md flex items-center justify-center font-bold text-lg text-white flex-shrink-0" style={{ backgroundColor: "#E77125" }}>
-              P
-            </div>
+            <img src={pelyconLogo} alt="Pelycon Technologies" className="h-8 w-8 object-contain flex-shrink-0" />
             <div>
               <h1 className="text-base font-semibold leading-none" data-testid="text-dashboard-title">
                 Technology Business Review
@@ -143,17 +181,36 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onSelectClient={handleClientSelect}
           />
           {selectedClient && (
-            <MeetingExport
-              client={selectedClient}
-              deviceHealth={deviceHealth || null}
-              security={security || null}
-              tickets={tickets || null}
-              mfaReport={mfaReport}
-              licenseReport={licenseReport}
-              roadmap={roadmap}
-            />
+            <div className="flex items-center gap-2">
+              <MeetingExport
+                client={selectedClient}
+                deviceHealth={deviceHealth || null}
+                security={security || null}
+                tickets={tickets || null}
+                mfaReport={mfaReport}
+                licenseReport={licenseReport}
+                roadmap={roadmap}
+                previousSnapshot={previousSnapshot}
+              />
+              <Button
+                onClick={() => finalizeMutation.mutate()}
+                disabled={finalizeMutation.isPending}
+                data-testid="button-finalize-tbr"
+              >
+                {finalizeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1.5" />
+                )}
+                Finalize TBR
+              </Button>
+            </div>
           )}
         </div>
+
+        {previousSnapshot && selectedClient && (
+          <PreviousTbrBanner snapshot={previousSnapshot} />
+        )}
 
         {selectedClient ? (
           <div className="space-y-4">
@@ -195,9 +252,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           </div>
         ) : (
           <div className="text-center py-20">
-            <div className="h-16 w-16 rounded-md flex items-center justify-center mx-auto mb-4 text-white font-bold text-3xl" style={{ backgroundColor: "#E77125" }}>
-              P
-            </div>
+            <img src={pelyconLogo} alt="Pelycon Technologies" className="h-16 w-16 object-contain mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2" data-testid="text-select-prompt">
               Select a Client
             </h2>
@@ -209,6 +264,29 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         )}
       </main>
     </div>
+  );
+}
+
+function PreviousTbrBanner({ snapshot }: { snapshot: TbrSnapshot }) {
+  const date = new Date(snapshot.createdAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return (
+    <Card>
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center gap-2 text-sm">
+          <History className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-muted-foreground">
+            Previous TBR recorded on <strong className="text-foreground">{date}</strong>
+            {" "}&mdash; {snapshot.totalDevices} devices, {snapshot.totalIncidents} incidents
+            {snapshot.mfaCoveragePercent !== null && `, ${snapshot.mfaCoveragePercent}% MFA coverage`}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

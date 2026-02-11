@@ -1,4 +1,44 @@
 import { z } from "zod";
+import { pgTable, serial, integer, text, timestamp, real } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+
+export const tbrSnapshots = pgTable("tbr_snapshots", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull(),
+  orgName: text("org_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  totalDevices: integer("total_devices").default(0).notNull(),
+  workstations: integer("workstations").default(0).notNull(),
+  servers: integer("servers").default(0).notNull(),
+  needsReplacementCount: integer("needs_replacement_count").default(0).notNull(),
+  patchCompliancePercent: real("patch_compliance_percent").default(100).notNull(),
+  pendingPatchCount: integer("pending_patch_count").default(0).notNull(),
+  eolOsCount: integer("eol_os_count").default(0).notNull(),
+  staleDeviceCount: integer("stale_device_count").default(0).notNull(),
+  totalIncidents: integer("total_incidents").default(0).notNull(),
+  pendingIncidents: integer("pending_incidents").default(0).notNull(),
+  activeAgents: integer("active_agents").default(0).notNull(),
+  satLearnerCount: integer("sat_learner_count"),
+  satTotalUsers: integer("sat_total_users"),
+  totalTickets: integer("total_tickets").default(0).notNull(),
+  oldOpenTicketCount: integer("old_open_ticket_count").default(0).notNull(),
+  mfaTotalUsers: integer("mfa_total_users"),
+  mfaCoveredCount: integer("mfa_covered_count"),
+  mfaCoveragePercent: real("mfa_coverage_percent"),
+  licenseTotalWasted: integer("license_total_wasted"),
+  licenseMonthlyWaste: real("license_monthly_waste"),
+  licenseAnnualWaste: real("license_annual_waste"),
+  roadmapItemCount: integer("roadmap_item_count").default(0).notNull(),
+  urgentItemCount: integer("urgent_item_count").default(0).notNull(),
+});
+
+export const insertTbrSnapshotSchema = createInsertSchema(tbrSnapshots).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTbrSnapshot = z.infer<typeof insertTbrSnapshotSchema>;
+export type TbrSnapshot = typeof tbrSnapshots.$inferSelect;
 
 export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),

@@ -1,27 +1,31 @@
 # MSP Technology Business Review (TBR) Dashboard
 
 ## Overview
-A client-facing TBR dashboard for MSP owners to screen-share during 30-minute semi-annual client review meetings. Pulls live data from MSP tools (NinjaOne, Huntress, ConnectWise), accepts manual CSV report uploads, and uses AI to generate a plain-language priority roadmap.
+A client-facing TBR dashboard for MSP owners to screen-share during 30-minute semi-annual client review meetings. Pulls live data from MSP tools (NinjaOne, Huntress, ConnectWise), accepts manual CSV report uploads, and uses AI to generate a plain-language priority roadmap. Features TBR snapshot history for trend tracking across reviews.
 
 ## Architecture
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui components
 - **Backend**: Express.js API routes
-- **Auth**: Simple password-protected login (session-based, no database)
+- **Database**: PostgreSQL (Neon-backed) for TBR snapshot history
+- **Auth**: Simple password-protected login (bearer token, no user accounts)
 - **AI**: Anthropic Claude via Replit AI Integrations for roadmap generation
-- **Storage**: In-memory only (no database - live-pull dashboard)
+- **Brand**: Pelycon Technologies (Orange #E77125, Storm Gray #394442, Poppins font)
 
 ## Key Files
-- `shared/schema.ts` - TypeScript interfaces for all data types
-- `server/routes.ts` - All API routes (auth, proxy to MSP APIs, CSV parsing, AI, export)
-- `server/services/ninjaone.ts` - NinjaOne API integration (OAuth2 client credentials)
+- `shared/schema.ts` - TypeScript interfaces + Drizzle table definitions (tbrSnapshots)
+- `server/db.ts` - PostgreSQL database connection (drizzle-orm/node-postgres)
+- `server/storage.ts` - Storage interface for TBR snapshot CRUD operations
+- `server/routes.ts` - All API routes (auth, proxy to MSP APIs, CSV parsing, AI, export, TBR finalization)
+- `server/services/ninjaone.ts` - NinjaOne API integration (Legacy API Keys, HMAC-SHA1)
 - `server/services/huntress.ts` - Huntress API integration (Basic auth)
 - `server/services/connectwise.ts` - ConnectWise Manage API integration (Basic auth)
 - `server/services/roadmap.ts` - Claude AI roadmap generation
-- `server/services/export.ts` - HTML summary export generation
+- `server/services/export.ts` - HTML summary export ("No Surprises" framework)
 - `client/src/App.tsx` - Main app with auth state management
-- `client/src/pages/login.tsx` - Password login page
-- `client/src/pages/dashboard.tsx` - Main dashboard with all sections
+- `client/src/pages/login.tsx` - Password login page (Pelycon branded)
+- `client/src/pages/dashboard.tsx` - Main dashboard with all sections + Finalize TBR
 - `client/src/components/` - Dashboard section components
+- `client/src/components/meeting-export.tsx` - Export buttons (passes previousSnapshot to export)
 
 ## API Routes
 - `POST /api/auth/login` - Password authentication (bearer token)
@@ -29,25 +33,43 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `POST /api/auth/logout` - Logout
 - `GET /api/status` - API connection status
 - `GET /api/organizations` - List clients from NinjaOne
-- `GET /api/devices/:orgId` - Device health from NinjaOne (includes patch data from os-patches query, aging hardware, EOL OS, replacement count)
-- `GET /api/security/:orgId` - Security data from Huntress (incident reports filtered to last 6 months, managed antivirus from agents, org detail)
-- `GET /api/coverage-gap/:orgId` - Compare NinjaOne devices vs Huntress agents, list missing devices
+- `GET /api/devices/:orgId` - Device health from NinjaOne
+- `GET /api/security/:orgId` - Security data from Huntress
+- `GET /api/coverage-gap/:orgId` - Compare NinjaOne devices vs Huntress agents
 - `GET /api/tickets/:orgId` - Ticket data from ConnectWise
 - `POST /api/reports/mfa` - Upload MFA CSV
 - `POST /api/reports/license` - Upload License CSV
 - `POST /api/roadmap/generate` - AI roadmap generation
-- `POST /api/export/summary` - HTML summary export
+- `POST /api/export/summary` - HTML summary export (accepts previousSnapshot for trends)
+- `POST /api/tbr/finalize` - Save TBR snapshot to database
+- `GET /api/tbr/history/:orgId` - List all TBR snapshots for an org
+- `GET /api/tbr/latest/:orgId` - Get latest + previous snapshot for trend comparison
+
+## TBR Snapshot System
+- **Finalize TBR**: Records key metrics (devices, patches, incidents, MFA, licenses, roadmap items) as a database snapshot
+- **Trend Tracking**: Next TBR shows deltas vs previous (arrows, change indicators)
+- **Export Integration**: HTML export includes "Progress Since Last Review" table when previous snapshot exists
+- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, and ~20 metric columns
+
+## Export Report Structure ("No Surprises" Framework)
+1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status
+2. **Capacity Planning** - Device inventory, aging hardware, EOL OS, patch compliance, stale devices
+3. **Financial Efficiency** - License utilization, waste calculations, cost trends
+4. **Recommended Actions** - AI-generated priority roadmap items
+5. **Progress Since Last Review** - Trend comparison table (when previous TBR exists)
 
 ## API Implementation Notes
 - **NinjaOne**: Uses Legacy API Keys with HMAC-SHA1 signatures (instance: us2.ninjarmm.com). Device details fetched per-device in batches of 10. Patch data from `/v2/queries/os-patches?df=org=X`. Device age uses warranty/purchase/created date.
-- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. SAT detailed report endpoints (phishing click rate, completion rate) not yet available via public API — only enrollment counts from org detail.
+- **Huntress**: Paginates through all organizations (91+). Incidents from `/v1/incident_reports?organization_id=X` using `sent_at` field (not `created_at`). Agents from `/v1/agents?organization_id=X` with `defender_status` for managed antivirus. Org detail from `/v1/organizations/{id}` for agents_count, sat_learner_count, microsoft_365_users_count. SAT detailed report endpoints (phishing click rate, completion rate) not yet available via public API.
 - **Auth**: Bearer token stored in sessionStorage, sent in Authorization header
 
 ## Environment Variables
 All API keys stored as Replit Secrets:
 - NINJAONE_CLIENT_ID, NINJAONE_CLIENT_SECRET, NINJAONE_INSTANCE
+- NINJAONE_LEGACY_KEY_ID, NINJAONE_LEGACY_SECRET
 - HUNTRESS_API_KEY, HUNTRESS_API_SECRET
 - CW_COMPANY_ID, CW_PUBLIC_KEY, CW_PRIVATE_KEY, CW_CLIENT_ID, CW_SITE_URL
 - DASHBOARD_PASSWORD
 - SESSION_SECRET
+- DATABASE_URL (auto-configured)
 - AI_INTEGRATIONS_ANTHROPIC_API_KEY, AI_INTEGRATIONS_ANTHROPIC_BASE_URL (auto-configured)
