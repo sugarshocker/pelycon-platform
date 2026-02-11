@@ -158,6 +158,9 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     detailedDevices.push(...details);
   }
 
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   let workstations = 0;
   let servers = 0;
   const typeCounts: DeviceTypeCounts = {
@@ -169,6 +172,7 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
   };
   const oldDevices: DeviceInfo[] = [];
   const eolOsDevices: DeviceInfo[] = [];
+  const staleDevices: DeviceInfo[] = [];
 
   const EOL_OS_PATTERNS = [
     "windows 10",
@@ -225,6 +229,14 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       }
     }
 
+    let isStale = false;
+    let daysSinceContact: number | undefined;
+    if (d.lastContact) {
+      const lastContactDate = new Date(d.lastContact * 1000);
+      daysSinceContact = Math.floor((now.getTime() - lastContactDate.getTime()) / (24 * 60 * 60 * 1000));
+      isStale = lastContactDate < thirtyDaysAgo;
+    }
+
     const deviceInfo: DeviceInfo = {
       id: d.id,
       systemName,
@@ -239,10 +251,13 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       age,
       isOld,
       isEolOs: isEol,
+      isStale,
+      daysSinceContact,
     };
 
     if (isOld) oldDevices.push(deviceInfo);
     if (isEol) eolOsDevices.push(deviceInfo);
+    if (isStale) staleDevices.push(deviceInfo);
 
   }
 
@@ -299,6 +314,7 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     deviceTypeCounts: typeCounts,
     oldDevices,
     eolOsDevices,
+    staleDevices,
     needsReplacementCount,
     patchCompliancePercent,
     pendingPatchCount,

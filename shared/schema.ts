@@ -24,6 +24,8 @@ export interface DeviceInfo {
   age?: number;
   isOld: boolean;
   isEolOs: boolean;
+  isStale: boolean;
+  daysSinceContact?: number;
   patchStatus?: string;
 }
 
@@ -42,6 +44,7 @@ export interface DeviceHealthSummary {
   deviceTypeCounts: DeviceTypeCounts;
   oldDevices: DeviceInfo[];
   eolOsDevices: DeviceInfo[];
+  staleDevices: DeviceInfo[];
   needsReplacementCount: number;
   patchCompliancePercent: number;
   pendingPatchCount: number;

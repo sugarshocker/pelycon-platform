@@ -109,6 +109,7 @@ export async function registerRoutes(
           },
           oldDevices: [],
           eolOsDevices: [],
+          staleDevices: [],
           needsReplacementCount: 0,
           patchCompliancePercent: 100,
           pendingPatchCount: 0,

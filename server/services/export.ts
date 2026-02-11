@@ -87,6 +87,7 @@ export function generateSummaryHtml(data: {
       ${dh.pendingPatchCount > 0 ? `<p class="flag-amber">${dh.pendingPatchCount} patches awaiting installation</p>` : ""}
       ${dh.oldDevices.length > 0 ? `<p class="flag-red">Aging Hardware: ${dh.oldDevices.map((d) => `${d.systemName} (${d.deviceType}, ${d.age}yr)`).join(", ")}</p>` : ""}
       ${dh.eolOsDevices.length > 0 ? `<p class="flag-amber">Unsupported OS: ${dh.eolOsDevices.map((d) => `${d.systemName} (${d.osName})`).join(", ")}</p>` : ""}
+      ${dh.staleDevices && dh.staleDevices.length > 0 ? `<p class="flag-amber">Inactive 30+ Days (possibly decommissioned): ${dh.staleDevices.map((d) => `${d.systemName} (${d.daysSinceContact} days)`).join(", ")}</p>` : ""}
       ${dh.criticalAlerts.length > 0 ? `<p class="flag-red">${dh.criticalAlerts.length} critical alert(s) require attention</p>` : ""}
     </div>`;
   }

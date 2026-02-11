@@ -3,7 +3,7 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusIndicator, StatusDot } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Monitor, Server, AlertTriangle, ShieldAlert, RefreshCw, Laptop } from "lucide-react";
+import { Monitor, Server, AlertTriangle, ShieldAlert, RefreshCw, Laptop, Clock } from "lucide-react";
 
 import type { DeviceHealthSummary, Organization } from "@shared/schema";
 
@@ -160,6 +160,37 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
           </div>
         )}
 
+        {data.staleDevices && data.staleDevices.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-500" />
+              Inactive Devices (30+ Days) — {data.staleDevices.length} device{data.staleDevices.length !== 1 ? "s" : ""}
+            </h4>
+            <div className="grid gap-2">
+              {data.staleDevices.map((device) => (
+                <div
+                  key={device.id}
+                  className="flex items-center justify-between gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2"
+                  data-testid={`device-stale-${device.id}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <StatusDot status="warning" />
+                    <span className="text-sm font-medium truncate">
+                      {device.systemName}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      ({device.deviceType})
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="flex-shrink-0 text-amber-600 dark:text-amber-400">
+                    {device.daysSinceContact} days offline
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {data.criticalAlerts.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium flex items-center gap-2">
@@ -190,6 +221,7 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
 
         {data.oldDevices.length === 0 &&
           data.eolOsDevices.length === 0 &&
+          (!data.staleDevices || data.staleDevices.length === 0) &&
           data.criticalAlerts.length === 0 &&
           data.pendingPatchCount === 0 && (
             <div className="text-center py-4">

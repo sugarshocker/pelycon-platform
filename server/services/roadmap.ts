@@ -44,6 +44,7 @@ DEVICE HEALTH:
 - Devices over 5 years old: ${dh.oldDevices.length} (${dh.oldDevices.map((d) => `${d.systemName}: ${d.deviceType}, ${d.age} years`).join(", ") || "none"})
 - Devices with unsupported OS: ${dh.eolOsDevices.length} (${dh.eolOsDevices.map((d) => `${d.systemName}: ${d.osName}`).join(", ") || "none"})
 - Devices needing replacement (old or unsupported OS): ${dh.needsReplacementCount}
+- Inactive devices (30+ days no contact, possibly decommissioned): ${dh.staleDevices ? dh.staleDevices.length : 0}${dh.staleDevices && dh.staleDevices.length > 0 ? ` (${dh.staleDevices.map((d) => `${d.systemName}: ${d.daysSinceContact} days`).join(", ")})` : ""}
 - Pending software patches: ${dh.pendingPatchCount}
 - Critical alerts: ${dh.criticalAlerts.length} unresolved`);
   }
