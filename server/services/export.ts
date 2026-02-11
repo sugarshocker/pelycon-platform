@@ -205,16 +205,20 @@ export function generateSummaryHtml(data: {
 <html>
 <head>
   <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <title>Technology Business Review — ${data.clientName}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; max-width: 800px; margin: 0 auto; padding: 40px 24px; line-height: 1.5; }
-    .header { text-align: center; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #2563eb; }
-    .header h1 { font-size: 24px; color: #2563eb; margin-bottom: 4px; }
+    body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #394442; max-width: 800px; margin: 0 auto; padding: 40px 24px; line-height: 1.5; }
+    .header { text-align: center; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #E77125; }
+    .header .logo { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .header .logo-mark { width: 36px; height: 36px; background: #E77125; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 20px; }
+    .header .logo-text { font-size: 16px; font-weight: 600; color: #394442; }
+    .header h1 { font-size: 24px; color: #E77125; margin-bottom: 4px; }
     .header .client { font-size: 20px; font-weight: 600; }
     .header .date { color: #6b7280; font-size: 14px; margin-top: 4px; }
     .section { margin-bottom: 28px; }
-    .section h2 { font-size: 16px; color: #2563eb; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
+    .section h2 { font-size: 16px; color: #E77125; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
     .metrics { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
     .metric { text-align: center; padding: 12px 16px; background: #f9fafb; border-radius: 8px; min-width: 100px; flex: 1; }
     .metric-value { font-size: 24px; font-weight: 700; }
@@ -234,6 +238,10 @@ export function generateSummaryHtml(data: {
 </head>
 <body>
   <div class="header">
+    <div class="logo">
+      <div class="logo-mark">P</div>
+      <span class="logo-text">Pelycon Technologies</span>
+    </div>
     <h1>Technology Business Review</h1>
     <div class="client">${data.clientName}</div>
     <div class="date">${today}</div>

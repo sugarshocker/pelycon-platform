@@ -11,7 +11,7 @@ import { MeetingExport } from "@/components/meeting-export";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/theme-provider";
-import { Sun, Moon, LogOut, Shield, CheckCircle2, XCircle } from "lucide-react";
+import { Sun, Moon, LogOut, CheckCircle2, XCircle } from "lucide-react";
 import { apiRequest, clearToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -88,15 +88,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center flex-shrink-0">
-              <Shield className="h-4 w-4 text-primary-foreground" />
+            <div className="h-8 w-8 rounded-md flex items-center justify-center font-bold text-lg text-white flex-shrink-0" style={{ backgroundColor: "#E77125" }}>
+              P
             </div>
             <div>
               <h1 className="text-base font-semibold leading-none" data-testid="text-dashboard-title">
                 Technology Business Review
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {today.toLocaleDateString("en-US", {
+                Pelycon Technologies &middot; {today.toLocaleDateString("en-US", {
                   month: "long",
                   day: "numeric",
                   year: "numeric",
@@ -195,8 +195,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           </div>
         ) : (
           <div className="text-center py-20">
-            <div className="h-16 w-16 rounded-md bg-muted flex items-center justify-center mx-auto mb-4">
-              <Shield className="h-8 w-8 text-muted-foreground" />
+            <div className="h-16 w-16 rounded-md flex items-center justify-center mx-auto mb-4 text-white font-bold text-3xl" style={{ backgroundColor: "#E77125" }}>
+              P
             </div>
             <h2 className="text-xl font-semibold mb-2" data-testid="text-select-prompt">
               Select a Client

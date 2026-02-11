@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Shield, Lock, Eye, EyeOff } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import { setToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -46,9 +46,14 @@ export default function Login({ onLogin }: LoginProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center gap-6 mb-8">
-          <div className="h-16 w-16 rounded-md bg-primary flex items-center justify-center">
-            <Shield className="h-8 w-8 text-primary-foreground" />
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md flex items-center justify-center font-bold text-2xl text-white" style={{ backgroundColor: "#E77125" }}>
+              P
+            </div>
+            <span className="text-xl font-semibold tracking-tight">
+              Pelycon Technologies
+            </span>
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight" data-testid="text-login-title">
