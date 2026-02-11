@@ -114,6 +114,14 @@ export async function getOrganizations(): Promise<Organization[]> {
   }));
 }
 
+export async function getDeviceNames(orgId: number): Promise<string[]> {
+  const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
+  const VALID_NODE_CLASSES = new Set(["WINDOWS_WORKSTATION", "WINDOWS_SERVER", "MAC"]);
+  return basicDevices
+    .filter((d: any) => VALID_NODE_CLASSES.has((d.nodeClass || "").toUpperCase()))
+    .map((d: any) => (d.systemName || d.dnsName || `Device ${d.id}`));
+}
+
 export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummary> {
   const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
 

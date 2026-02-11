@@ -3,24 +3,18 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusDot, TrendIndicator } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShieldCheck, ShieldAlert, Shield } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Shield, AlertTriangle } from "lucide-react";
 import type { SecuritySummary, Organization } from "@shared/schema";
+
+interface CoverageGap {
+  ninjaCount: number;
+  huntressCount: number;
+  missingFromHuntress: string[];
+  missingFromNinja: string[];
+}
 
 interface SecuritySectionProps {
   client: Organization;
-}
-
-function severityColor(severity: string): string {
-  switch (severity.toLowerCase()) {
-    case "critical":
-      return "text-red-600 dark:text-red-400";
-    case "high":
-      return "text-orange-600 dark:text-orange-400";
-    case "low":
-      return "text-blue-600 dark:text-blue-400";
-    default:
-      return "text-muted-foreground";
-  }
 }
 
 function severityBadgeVariant(severity: string): "destructive" | "outline" | "secondary" {
@@ -38,6 +32,11 @@ export function SecuritySection({ client }: SecuritySectionProps) {
   const { data, isLoading, error } = useQuery<SecuritySummary>({
     queryKey: ["/api/security", client.id],
     enabled: !!client.id,
+  });
+
+  const { data: coverageGap } = useQuery<CoverageGap>({
+    queryKey: ["/api/coverage-gap", client.id],
+    enabled: !!client.id && !!data && !data.notInHuntress,
   });
 
   const renderContent = () => {
@@ -139,6 +138,38 @@ export function SecuritySection({ client }: SecuritySectionProps) {
             </div>
           </div>
         </div>
+
+        {coverageGap && coverageGap.missingFromHuntress.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/20 px-3 py-2">
+              <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+              <span className="text-sm">
+                <strong>{coverageGap.missingFromHuntress.length}</strong> device{coverageGap.missingFromHuntress.length !== 1 ? "s" : ""} in NinjaOne missing Huntress agent
+                <span className="text-xs text-muted-foreground ml-1">
+                  ({coverageGap.ninjaCount} NinjaOne vs {coverageGap.huntressCount} Huntress)
+                </span>
+              </span>
+            </div>
+            <div className="grid gap-1.5">
+              {coverageGap.missingFromHuntress.map((name, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 px-3 py-1.5"
+                  data-testid={`missing-huntress-${i}`}
+                >
+                  <ShieldAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                  <span className="text-sm text-red-700 dark:text-red-300 font-medium">{name}</span>
+                  <Badge variant="destructive" className="ml-auto text-xs">No Huntress</Badge>
+                </div>
+              ))}
+            </div>
+            {coverageGap.missingFromNinja.length > 0 && (
+              <div className="text-xs text-muted-foreground px-1">
+                {coverageGap.missingFromNinja.length} Huntress agent{coverageGap.missingFromNinja.length !== 1 ? "s" : ""} not in NinjaOne: {coverageGap.missingFromNinja.join(", ")}
+              </div>
+            )}
+          </div>
+        )}
 
         {data.recentIncidents.length > 0 && (
           <div className="space-y-2">

@@ -164,6 +164,55 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/coverage-gap/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId);
+      if (isNaN(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+
+      let orgName = `Organization ${orgId}`;
+      try {
+        if (ninjaone.isConfigured()) {
+          const orgs = await ninjaone.getOrganizations();
+          const org = orgs.find((o) => o.id === orgId);
+          if (org) orgName = org.name;
+        }
+      } catch {}
+
+      if (!ninjaone.isConfigured() || !huntress.isConfigured()) {
+        return res.json({ ninjaDevices: [], huntressAgents: [], missingFromHuntress: [], missingFromNinja: [] });
+      }
+
+      const ninjaNames = await ninjaone.getDeviceNames(orgId);
+      const huntressNames = await huntress.getAgentHostnames(orgName);
+
+      const normalizeHostname = (name: string): string =>
+        name.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      const ninjaSet = new Map<string, string>();
+      for (const n of ninjaNames) ninjaSet.set(normalizeHostname(n), n);
+
+      const huntressSet = new Map<string, string>();
+      for (const h of huntressNames) huntressSet.set(normalizeHostname(h), h);
+
+      const missingFromHuntress = ninjaNames.filter(n => !huntressSet.has(normalizeHostname(n)));
+      const missingFromNinja = huntressNames.filter(h => !ninjaSet.has(normalizeHostname(h)));
+
+      log(`Coverage gap for "${orgName}": ${ninjaNames.length} Ninja, ${huntressNames.length} Huntress, ${missingFromHuntress.length} missing from Huntress, ${missingFromNinja.length} missing from Ninja`);
+
+      res.json({
+        ninjaCount: ninjaNames.length,
+        huntressCount: huntressNames.length,
+        missingFromHuntress,
+        missingFromNinja,
+      });
+    } catch (err: any) {
+      log(`Coverage gap error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/tickets/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
       const orgId = parseInt(req.params.orgId);
@@ -345,19 +394,19 @@ export async function registerRoutes(
         "azure active directory free",
       ];
 
-      function getMsrp(name: string): number {
+      const getMsrp = (name: string): number => {
         const lower = name.toLowerCase().trim();
         if (MSRP_PRICES[lower] !== undefined) return MSRP_PRICES[lower];
         for (const [key, price] of Object.entries(MSRP_PRICES)) {
           if (lower.includes(key) || key.includes(lower)) return price;
         }
         return 0;
-      }
+      };
 
-      function isFreesku(name: string): boolean {
+      const isFreesku = (name: string): boolean => {
         const lower = name.toLowerCase().trim();
         return FREE_SKUS.some(f => lower.includes(f));
-      }
+      };
 
       const csvText = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
       const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: (h: string) => h.trim() });

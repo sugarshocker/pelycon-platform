@@ -31,6 +31,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `GET /api/organizations` - List clients from NinjaOne
 - `GET /api/devices/:orgId` - Device health from NinjaOne (includes patch data from os-patches query, aging hardware, EOL OS, replacement count)
 - `GET /api/security/:orgId` - Security data from Huntress (incident reports filtered to last 6 months, managed antivirus from agents, org detail)
+- `GET /api/coverage-gap/:orgId` - Compare NinjaOne devices vs Huntress agents, list missing devices
 - `GET /api/tickets/:orgId` - Ticket data from ConnectWise
 - `POST /api/reports/mfa` - Upload MFA CSV
 - `POST /api/reports/license` - Upload License CSV

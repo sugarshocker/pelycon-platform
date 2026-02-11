@@ -221,3 +221,23 @@ export async function getSecuritySummary(
     trendDirection: totalIncidents === 0 ? "stable" : pendingIncidents > 0 ? "worse" : "better",
   };
 }
+
+export async function getAgentHostnames(orgName: string): Promise<string[]> {
+  const huntressOrgId = await findOrgByName(orgName);
+  if (!huntressOrgId) return [];
+
+  const hostnames: string[] = [];
+  let page = 1;
+  while (page <= 20) {
+    const data = await apiGet(`/agents?organization_id=${huntressOrgId}&page=${page}&limit=100`);
+    const agents = data.agents || [];
+    for (const a of agents) {
+      const name = a.host_name || a.hostname || a.name || "";
+      if (name) hostnames.push(name);
+    }
+    if (!data.pagination?.next_page) break;
+    page++;
+  }
+  log(`Huntress: collected ${hostnames.length} agent hostnames for "${orgName}"`);
+  return hostnames;
+}
