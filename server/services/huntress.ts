@@ -118,6 +118,9 @@ export async function getSecuritySummary(
       antivirusNotProtectedCount: 0,
       satCompletionPercent: null,
       phishingClickRate: null,
+      satLearnerCount: null,
+      satTotalUsers: null,
+      satCoveragePercent: null,
       trendDirection: "stable" as const,
       notInHuntress: true,
     };
@@ -175,11 +178,25 @@ export async function getSecuritySummary(
   let activeAgents = 0;
   let managedAntivirusCount = 0;
   let antivirusNotProtectedCount = 0;
+  let satLearnerCount: number | null = null;
+  let satTotalUsers: number | null = null;
+  let satCoveragePercent: number | null = null;
 
   try {
     const orgDetail = await apiGet(`/organizations/${huntressOrgId}`);
     const org = orgDetail.organization || {};
     activeAgents = org.agents_count || 0;
+
+    if (typeof org.sat_learner_count === "number") {
+      satLearnerCount = org.sat_learner_count;
+      const m365Users = org.microsoft_365_users_count || org.billable_identity_count || 0;
+      satTotalUsers = m365Users > 0 ? m365Users : null;
+      if (satTotalUsers && satTotalUsers > 0 && satLearnerCount !== null) {
+        satCoveragePercent = Math.round((satLearnerCount / satTotalUsers) * 100);
+      }
+      log(`Huntress SAT: ${satLearnerCount} learners, ${satTotalUsers ?? "unknown"} total users, ${satCoveragePercent ?? "N/A"}% coverage`);
+    }
+
     log(`Huntress org detail: agents_count=${activeAgents}`);
   } catch (e) {
     log(`Huntress org detail error: ${e}`);
@@ -218,6 +235,9 @@ export async function getSecuritySummary(
     antivirusNotProtectedCount,
     satCompletionPercent: null,
     phishingClickRate: null,
+    satLearnerCount,
+    satTotalUsers,
+    satCoveragePercent,
     trendDirection: totalIncidents === 0 ? "stable" : pendingIncidents > 0 ? "worse" : "better",
   };
 }

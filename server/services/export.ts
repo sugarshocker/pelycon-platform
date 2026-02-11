@@ -94,6 +94,10 @@ export function generateSummaryHtml(data: {
 
   if (data.security) {
     const sec = data.security;
+    const satHtml = sec.satLearnerCount !== null ? `
+      <p style="margin-top: 8px; font-size: 13px;"><strong>Security Awareness Training:</strong> ${sec.satLearnerCount} enrolled${sec.satTotalUsers ? ` of ${sec.satTotalUsers} users (${sec.satCoveragePercent}%)` : ""}</p>
+      ${sec.satTotalUsers && sec.satLearnerCount < sec.satTotalUsers ? `<p class="flag-amber">${sec.satTotalUsers - sec.satLearnerCount} user(s) not enrolled in security awareness training</p>` : ""}` : "";
+
     sections += `
     <div class="section">
       <h2>Security Overview</h2>
@@ -114,7 +118,7 @@ export function generateSummaryHtml(data: {
           <div class="metric-value">${sec.activeAgents}</div>
           <div class="metric-label">Protected Devices</div>
         </div>
-      </div>
+      </div>${satHtml}
     </div>`;
   }
 

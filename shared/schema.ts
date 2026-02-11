@@ -77,6 +77,9 @@ export interface SecuritySummary {
   antivirusNotProtectedCount: number;
   satCompletionPercent: number | null;
   phishingClickRate: number | null;
+  satLearnerCount: number | null;
+  satTotalUsers: number | null;
+  satCoveragePercent: number | null;
   trendDirection: "better" | "worse" | "stable" | null;
   notInHuntress?: boolean;
 }

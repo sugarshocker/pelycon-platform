@@ -63,7 +63,8 @@ SECURITY:
 - Resolved: ${sec.resolvedIncidents}, Pending: ${sec.pendingIncidents}
 - Protected devices (EDR agents): ${sec.activeAgents}
 - Security training completion: ${sec.satCompletionPercent !== null ? sec.satCompletionPercent + "%" : "N/A"}
-- Phishing test pass rate: ${sec.phishingClickRate !== null ? sec.phishingClickRate + "%" : "N/A"}`);
+- Phishing test pass rate: ${sec.phishingClickRate !== null ? sec.phishingClickRate + "%" : "N/A"}
+- Security Awareness Training enrolled: ${sec.satLearnerCount !== null ? sec.satLearnerCount : "N/A"}${sec.satTotalUsers ? ` of ${sec.satTotalUsers} users (${sec.satCoveragePercent}% coverage)` : ""}${sec.satTotalUsers && sec.satLearnerCount !== null && sec.satLearnerCount < sec.satTotalUsers ? ` — ${sec.satTotalUsers - sec.satLearnerCount} users NOT enrolled in security awareness training` : ""}`);
   }
 
   if (data.tickets) {

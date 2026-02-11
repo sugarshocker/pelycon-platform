@@ -3,7 +3,7 @@ import { CollapsibleSection } from "./collapsible-section";
 import { StatusDot, TrendIndicator } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShieldCheck, ShieldAlert, Shield, AlertTriangle } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap } from "lucide-react";
 import type { SecuritySummary, Organization } from "@shared/schema";
 
 interface CoverageGap {
@@ -138,6 +138,29 @@ export function SecuritySection({ client }: SecuritySectionProps) {
             </div>
           </div>
         </div>
+
+        {(data.satLearnerCount !== null || data.satTotalUsers !== null) && (
+          <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
+            <GraduationCap className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+            <div className="flex-1">
+              <div className="text-sm font-medium">Security Awareness Training</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-lg font-bold ${data.satCoveragePercent !== null && data.satCoveragePercent < 80 ? "text-amber-600 dark:text-amber-400" : data.satLearnerCount !== null && data.satLearnerCount > 0 ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} data-testid="text-sat-learners">
+                  {data.satLearnerCount !== null ? data.satLearnerCount : "N/A"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  enrolled{data.satTotalUsers ? ` of ${data.satTotalUsers} users` : ""}
+                  {data.satCoveragePercent !== null ? ` (${data.satCoveragePercent}%)` : ""}
+                </span>
+              </div>
+              {data.satTotalUsers && data.satLearnerCount !== null && data.satLearnerCount < data.satTotalUsers && (
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  {data.satTotalUsers - data.satLearnerCount} user{data.satTotalUsers - data.satLearnerCount !== 1 ? "s" : ""} not enrolled in training
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {coverageGap && coverageGap.missingFromHuntress.length > 0 && (
           <div className="space-y-2">
