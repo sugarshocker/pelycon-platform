@@ -80,17 +80,26 @@ export interface TicketSummary {
   monthlyVolume: Array<{ month: string; count: number }>;
 }
 
+export type MfaCoverageMethod = "perUser" | "conditionalAccess" | "securityDefaults";
+
 export interface MfaUser {
   displayName: string;
   email: string;
-  mfaEnabled: boolean;
+  perUserMfa: string;
+  coveredByCA: boolean;
+  coveredBySD: boolean;
+  isCovered: boolean;
+  coverageMethod: MfaCoverageMethod | null;
 }
 
 export interface MfaReport {
   totalUsers: number;
-  mfaEnabledCount: number;
-  mfaDisabledCount: number;
-  usersWithoutMfa: MfaUser[];
+  coveredCount: number;
+  uncoveredCount: number;
+  coveredByPerUser: number;
+  coveredByCA: number;
+  coveredBySD: number;
+  uncoveredUsers: MfaUser[];
 }
 
 export interface LicenseEntry {
