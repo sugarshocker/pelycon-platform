@@ -73,7 +73,7 @@ export function DeviceHealth({ client }: DeviceHealthProps) {
           <div className="space-y-2">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-red-500" />
-              Aging Hardware (Over 4 Years Old)
+              Aging Hardware (5+ Years Old)
             </h4>
             <div className="grid gap-2">
               {data.oldDevices.map((device) => (

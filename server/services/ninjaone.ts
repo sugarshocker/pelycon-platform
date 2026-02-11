@@ -115,13 +115,27 @@ export async function getOrganizations(): Promise<Organization[]> {
 }
 
 export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummary> {
-  let devices: any[];
-
-  devices = await apiGet(`/v2/organization/${orgId}/devices`);
+  const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
 
   const now = new Date();
-  const fourYearsAgo = new Date(now);
-  fourYearsAgo.setFullYear(fourYearsAgo.getFullYear() - 4);
+  const fiveYearsAgo = new Date(now);
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+
+  const detailedDevices: any[] = [];
+  const batchSize = 10;
+  for (let i = 0; i < basicDevices.length; i += batchSize) {
+    const batch = basicDevices.slice(i, i + batchSize);
+    const details = await Promise.all(
+      batch.map(async (bd: any) => {
+        try {
+          return await apiGet(`/v2/device/${bd.id}`);
+        } catch {
+          return bd;
+        }
+      })
+    );
+    detailedDevices.push(...details);
+  }
 
   let workstations = 0;
   let servers = 0;
@@ -140,41 +154,47 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     "windows server 2008",
   ];
 
-  for (const d of devices) {
-    const role = (d.role || d.nodeClass || "").toUpperCase();
+  for (const d of detailedDevices) {
+    const role = (d.nodeClass || d.role || "").toUpperCase();
     const isServer = role.includes("SERVER");
     if (isServer) servers++;
     else workstations++;
 
-    const osName = d.os?.name || d.system?.os?.name || "";
-    const systemName = d.systemName || d.system_name || d.display_name || d.dnsName || d.dns_name || `Device ${d.id}`;
+    const osName = d.os?.name || "";
+    const systemName = d.systemName || d.dnsName || `Device ${d.id}`;
 
     const isEol = EOL_OS_PATTERNS.some((p) =>
       osName.toLowerCase().includes(p)
     );
 
-    let purchaseDate = d.system?.purchaseDate || d.purchaseDate;
+    const warrantyStart = d.system?.warrantyDate || d.system?.purchaseDate || d.purchaseDate || d.created;
     let age: number | undefined;
     let isOld = false;
 
-    if (purchaseDate) {
-      const pd = typeof purchaseDate === "number" ? new Date(purchaseDate * 1000) : new Date(purchaseDate);
-      age = Math.floor(
-        (now.getTime() - pd.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
-      );
-      isOld = pd < fourYearsAgo;
+    if (warrantyStart) {
+      const wd = typeof warrantyStart === "number"
+        ? new Date(warrantyStart * 1000)
+        : new Date(warrantyStart);
+      if (!isNaN(wd.getTime())) {
+        age = Math.floor(
+          (now.getTime() - wd.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        );
+        isOld = wd < fiveYearsAgo;
+      }
     }
+
+    const patchStatus = d.patches?.status || d.patchStatus || "";
 
     const deviceInfo: DeviceInfo = {
       id: d.id,
       systemName,
       deviceType: isServer ? "Server" : "Workstation",
       osName,
-      lastContact: d.lastContact || d.last_online
-        ? new Date(d.lastContact ? d.lastContact * 1000 : d.last_online).toISOString()
+      lastContact: d.lastContact
+        ? new Date(d.lastContact * 1000).toISOString()
         : undefined,
-      purchaseDate: purchaseDate
-        ? (typeof purchaseDate === "number" ? new Date(purchaseDate * 1000) : new Date(purchaseDate)).toISOString()
+      purchaseDate: warrantyStart
+        ? (typeof warrantyStart === "number" ? new Date(warrantyStart * 1000) : new Date(warrantyStart)).toISOString()
         : undefined,
       age,
       isOld,
@@ -184,11 +204,9 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     if (isOld) oldDevices.push(deviceInfo);
     if (isEol) eolOsDevices.push(deviceInfo);
 
-    if (d.patches !== undefined) {
-      totalPatchable++;
-      if (d.patches?.status === "UP_TO_DATE" || d.patchStatus === "UP_TO_DATE") {
-        patchedCount++;
-      }
+    totalPatchable++;
+    if (patchStatus === "UP_TO_DATE" || patchStatus === "upToDate") {
+      patchedCount++;
     }
   }
 
@@ -218,7 +236,7 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       : 100;
 
   return {
-    totalDevices: devices.length,
+    totalDevices: detailedDevices.length,
     workstations,
     servers,
     oldDevices,

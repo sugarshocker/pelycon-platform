@@ -30,12 +30,31 @@ async function apiGet(path: string): Promise<any> {
   return res.json();
 }
 
+let cachedOrgs: Array<{ id: number; name: string }> | null = null;
+let cacheExpiry = 0;
+
 export async function getOrganizations(): Promise<Array<{ id: number; name: string }>> {
-  const data = await apiGet("/organizations?page=1&per_page=100");
-  return (data.organizations || []).map((o: any) => ({
-    id: o.id,
-    name: o.name,
-  }));
+  if (cachedOrgs && Date.now() < cacheExpiry) return cachedOrgs;
+
+  const allOrgs: Array<{ id: number; name: string }> = [];
+  let page = 1;
+  const maxPages = 20;
+
+  while (page <= maxPages) {
+    const data = await apiGet(`/organizations?page=${page}&limit=100`);
+    const orgs = data.organizations || [];
+    for (const o of orgs) {
+      allOrgs.push({ id: o.id, name: o.name });
+    }
+
+    if (!data.pagination?.next_page) break;
+    page++;
+  }
+
+  log(`Huntress: loaded ${allOrgs.length} organizations across ${page} pages`);
+  cachedOrgs = allOrgs;
+  cacheExpiry = Date.now() + 10 * 60 * 1000;
+  return allOrgs;
 }
 
 function normalize(s: string): string {
