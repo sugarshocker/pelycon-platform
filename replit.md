@@ -39,6 +39,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `GET /api/tickets/:orgId` - Ticket data from ConnectWise
 - `POST /api/reports/mfa` - Upload MFA CSV
 - `POST /api/reports/license` - Upload License CSV
+- `GET /api/projects/:orgId` - Project items from ConnectWise (project board + project tickets)
+- `POST /api/projects/summarize` - AI-generated project summary
 - `POST /api/roadmap/generate` - AI roadmap generation
 - `POST /api/export/summary` - HTML summary export (accepts previousSnapshot for trends)
 - `POST /api/tbr/finalize` - Save TBR snapshot to database

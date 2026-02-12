@@ -266,6 +266,50 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId as string);
+      if (isNaN(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+
+      let orgName = `Organization ${orgId}`;
+      try {
+        if (ninjaone.isConfigured()) {
+          const orgs = await ninjaone.getOrganizations();
+          const org = orgs.find((o) => o.id === orgId);
+          if (org) orgName = org.name;
+        }
+      } catch {}
+
+      if (!connectwise.isConfigured()) {
+        return res.json({ completed: [], inProgress: [] });
+      }
+
+      const projects = await connectwise.getProjectItems(orgName);
+      res.json(projects);
+    } catch (err: any) {
+      log(`Projects error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/projects/summarize", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clientName, completed, inProgress } = req.body;
+      if (!clientName) {
+        return res.status(400).json({ message: "Client name is required" });
+      }
+
+      const { generateProjectSummary } = await import("./services/roadmap");
+      const summary = await generateProjectSummary(clientName, completed || [], inProgress || []);
+      res.json({ summary });
+    } catch (err: any) {
+      log(`Project summary error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/reports/mfa", requireAuth, upload.single("file"), (req: Request, res: Response) => {
     try {
       if (!req.file) {

@@ -4,6 +4,7 @@ import { ClientSelector } from "@/components/client-selector";
 import { DeviceHealth } from "@/components/device-health";
 import { SecuritySection } from "@/components/security-section";
 import { TicketTrends } from "@/components/ticket-trends";
+import { ProjectSummary } from "@/components/project-summary";
 import { CippReports } from "@/components/cipp-reports";
 import { InternalNotesSection, type InternalNotes } from "@/components/internal-notes";
 import { AiRoadmap } from "@/components/ai-roadmap";
@@ -217,6 +218,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             <DeviceHealth client={selectedClient} />
             <SecuritySection client={selectedClient} />
             <TicketTrends client={selectedClient} />
+            <ProjectSummary client={selectedClient} />
             <CippReports
               mfaReport={mfaReport}
               licenseReport={licenseReport}

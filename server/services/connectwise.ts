@@ -1,4 +1,4 @@
-import type { TicketSummary } from "@shared/schema";
+import type { TicketSummary, ProjectItem } from "@shared/schema";
 import { log } from "../index";
 
 function cleanEnv(key: string, fallback?: string): string {
@@ -147,4 +147,91 @@ export async function getTicketSummary(
     oldOpenTickets: oldOpenTickets.slice(0, 10),
     monthlyVolume: sortedMonths.map(([month, count]) => ({ month, count })),
   };
+}
+
+export async function getProjectItems(
+  companyName: string
+): Promise<{ completed: ProjectItem[]; inProgress: ProjectItem[] }> {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const dateStr = sixMonthsAgo.toISOString().split("T")[0];
+
+  const cwCompanyId = await findCompanyByName(companyName);
+  const completed: ProjectItem[] = [];
+  const inProgress: ProjectItem[] = [];
+
+  try {
+    let projectConditions = `dateEntered > [${dateStr}]`;
+    if (cwCompanyId) {
+      projectConditions = `company/id = ${cwCompanyId} AND dateEntered > [${dateStr}]`;
+    }
+    const projects = await apiGet("/project/projects", {
+      conditions: projectConditions,
+      pageSize: "100",
+      orderBy: "dateEntered desc",
+    });
+    for (const p of projects) {
+      const item: ProjectItem = {
+        id: p.id,
+        name: p.name || "Unnamed Project",
+        status: p.status?.name || "Unknown",
+        source: "project",
+        dateEntered: p.dateEntered || p._info?.dateEntered || "",
+        closedDate: p.closedDate || undefined,
+        boardName: p.board?.name || undefined,
+      };
+      const statusLower = item.status.toLowerCase();
+      if (statusLower.includes("clos") || statusLower.includes("complet") || statusLower.includes("done") || statusLower.includes("finish")) {
+        completed.push(item);
+      } else {
+        inProgress.push(item);
+      }
+    }
+  } catch (e: any) {
+    log(`ConnectWise projects error: ${e.message}`);
+  }
+
+  try {
+    let ticketConditions = `dateEntered > [${dateStr}] AND (summary contains "project" OR summary contains "Project")`;
+    if (cwCompanyId) {
+      ticketConditions = `company/id = ${cwCompanyId} AND dateEntered > [${dateStr}] AND (summary contains "project" OR summary contains "Project")`;
+    }
+    const projectTickets = await apiGet("/service/tickets", {
+      conditions: ticketConditions,
+      pageSize: "100",
+      orderBy: "dateEntered desc",
+    });
+    const existingKeys = new Set([
+      ...completed.map(p => `${p.source}-${p.id}`),
+      ...inProgress.map(p => `${p.source}-${p.id}`),
+    ]);
+    for (const t of projectTickets) {
+      if (existingKeys.has(`ticket-${t.id}`)) continue;
+
+      const isClosed =
+        t.closedFlag === true ||
+        !!t.closedDate ||
+        t.status?.name?.toLowerCase()?.includes("closed") ||
+        t.status?.name?.toLowerCase()?.includes("completed");
+
+      const item: ProjectItem = {
+        id: t.id,
+        name: t.summary || "Unnamed Ticket",
+        status: t.status?.name || "Unknown",
+        source: "ticket",
+        dateEntered: t.dateEntered || "",
+        closedDate: t.closedDate || undefined,
+        boardName: t.board?.name || undefined,
+      };
+      if (isClosed) {
+        completed.push(item);
+      } else {
+        inProgress.push(item);
+      }
+    }
+  } catch (e: any) {
+    log(`ConnectWise project tickets error: ${e.message}`);
+  }
+
+  return { completed, inProgress };
 }

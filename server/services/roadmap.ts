@@ -7,6 +7,7 @@ import type {
   LicenseReport,
   RoadmapAnalysis,
   RoadmapItem,
+  ProjectItem,
 } from "@shared/schema";
 
 const anthropic = new Anthropic({
@@ -209,4 +210,49 @@ Respond with ONLY valid JSON in this exact format:
     }
     throw err;
   }
+}
+
+export async function generateProjectSummary(
+  clientName: string,
+  completed: ProjectItem[],
+  inProgress: ProjectItem[]
+): Promise<string> {
+  if (!isConfigured()) {
+    throw new Error("AI integration is not configured.");
+  }
+
+  if (completed.length === 0 && inProgress.length === 0) {
+    return "No projects or project-related work found in the last 6 months.";
+  }
+
+  const completedList = completed
+    .map((p) => `- ${p.name} (${p.source === "project" ? "Project" : "Service Ticket"}, completed ${p.closedDate ? new Date(p.closedDate).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "recently"})`)
+    .join("\n");
+
+  const inProgressList = inProgress
+    .map((p) => `- ${p.name} (${p.source === "project" ? "Project" : "Service Ticket"}, status: ${p.status}, started ${new Date(p.dateEntered).toLocaleDateString("en-US", { month: "short", year: "numeric" })})`)
+    .join("\n");
+
+  const prompt = `You are summarizing IT projects for a business owner during a semi-annual Technology Business Review meeting for their company "${clientName}". Write a brief, plain-language summary (3-5 sentences) of what was accomplished and what's currently underway. Do NOT use bullet points. Write in a conversational, professional tone as if you're speaking to the business owner. Focus on the business value delivered, not technical details.
+
+COMPLETED PROJECTS (last 6 months):
+${completedList || "None"}
+
+IN-PROGRESS PROJECTS:
+${inProgressList || "None"}
+
+Write only the summary paragraph — no headers, no intro, no bullet points. Keep it to 3-5 sentences.`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 500,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("No text response from AI");
+  }
+
+  return textBlock.text.trim();
 }

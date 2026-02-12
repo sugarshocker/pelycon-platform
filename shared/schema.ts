@@ -211,6 +211,22 @@ export interface RoadmapAnalysis {
   generatedAt: string;
 }
 
+export interface ProjectItem {
+  id: number;
+  name: string;
+  status: string;
+  source: "project" | "ticket";
+  dateEntered: string;
+  closedDate?: string;
+  boardName?: string;
+}
+
+export interface ProjectSummaryData {
+  completed: ProjectItem[];
+  inProgress: ProjectItem[];
+  aiSummary?: string;
+}
+
 export interface DashboardData {
   deviceHealth: DeviceHealthSummary | null;
   security: SecuritySummary | null;
