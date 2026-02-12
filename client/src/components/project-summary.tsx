@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CollapsibleSection } from "./collapsible-section";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,11 @@ interface ProjectSummaryProps {
 export function ProjectSummary({ client }: ProjectSummaryProps) {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+
+  useEffect(() => {
+    setAiSummary(null);
+    setShowDetails(false);
+  }, [client.id]);
 
   const { data, isLoading, error } = useQuery<{
     completed: ProjectItem[];
