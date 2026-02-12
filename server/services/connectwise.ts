@@ -149,6 +149,22 @@ export async function getTicketSummary(
   };
 }
 
+const ROUTINE_PATTERNS = [
+  /\b(pc|desktop|laptop|workstation|computer)\b.*\b(setup|replacement|install|deploy|swap|refresh)\b/i,
+  /\b(setup|replacement|install|deploy|swap|refresh)\b.*\b(pc|desktop|laptop|workstation|computer)\b/i,
+  /\b(docking station|dock|monitor|keyboard|mouse|peripheral)\b/i,
+  /\bnew (hire|employee|user|staff)\b.*\b(setup|onboard)/i,
+  /\b(onboard|offboard)ing?\b/i,
+  /\bquote\s*\d+\b/i,
+  /\blaptop\b.*\b(order|quote|procure|purchase)\b/i,
+  /\b(order|quote|procure|purchase)\b.*\blaptop\b/i,
+  /\bpc\b.*\b(no assurance|proposal|quote)\b/i,
+];
+
+function isNotableProject(name: string): boolean {
+  return !ROUTINE_PATTERNS.some((pattern) => pattern.test(name));
+}
+
 export async function getProjectItems(
   companyName: string
 ): Promise<{ completed: ProjectItem[]; inProgress: ProjectItem[] }> {
@@ -171,9 +187,11 @@ export async function getProjectItems(
       orderBy: "dateEntered desc",
     });
     for (const p of projects) {
+      const name = p.name || "Unnamed Project";
+      if (!isNotableProject(name)) continue;
       const item: ProjectItem = {
         id: p.id,
-        name: p.name || "Unnamed Project",
+        name,
         status: p.status?.name || "Unknown",
         source: "project",
         dateEntered: p.dateEntered || p._info?.dateEntered || "",
@@ -207,6 +225,8 @@ export async function getProjectItems(
     ]);
     for (const t of projectTickets) {
       if (existingKeys.has(`ticket-${t.id}`)) continue;
+      const ticketName = t.summary || "Unnamed Ticket";
+      if (!isNotableProject(ticketName)) continue;
 
       const isClosed =
         t.closedFlag === true ||
@@ -216,7 +236,7 @@ export async function getProjectItems(
 
       const item: ProjectItem = {
         id: t.id,
-        name: t.summary || "Unnamed Ticket",
+        name: ticketName,
         status: t.status?.name || "Unknown",
         source: "ticket",
         dateEntered: t.dateEntered || "",

@@ -65,7 +65,8 @@ export function ProjectSummary({ client }: ProjectSummaryProps) {
     if (totalProjects === 0) {
       return (
         <div className="text-center py-6 text-muted-foreground">
-          <p className="text-sm">No projects or project-related work found in the last 6 months.</p>
+          <p className="text-sm">No notable projects found in the last 6 months.</p>
+          <p className="text-xs mt-1 opacity-70">Routine items like PC setups and replacements are excluded.</p>
         </div>
       );
     }
