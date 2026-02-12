@@ -43,15 +43,21 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `POST /api/projects/summarize` - AI-generated project summary
 - `POST /api/roadmap/generate` - AI roadmap generation
 - `POST /api/export/summary` - HTML summary export (accepts previousSnapshot for trends)
-- `POST /api/tbr/finalize` - Save TBR snapshot to database
-- `GET /api/tbr/history/:orgId` - List all TBR snapshots for an org
-- `GET /api/tbr/latest/:orgId` - Get latest + previous snapshot for trend comparison
+- `POST /api/tbr/save-draft` - Save TBR as draft (preserves CSV reports, notes, roadmap)
+- `GET /api/tbr/draft/:orgId` - Load existing draft for an org
+- `DELETE /api/tbr/draft/:id` - Discard a draft
+- `POST /api/tbr/finalize` - Finalize TBR snapshot (promotes draft if exists)
+- `GET /api/tbr/history/:orgId` - List finalized TBR snapshots for an org
+- `GET /api/tbr/snapshot/:id` - Get a single snapshot by ID
+- `GET /api/tbr/latest/:orgId` - Get latest + previous finalized snapshot for trend comparison
 
 ## TBR Snapshot System
-- **Finalize TBR**: Records key metrics (devices, patches, incidents, MFA, licenses, roadmap items) as a database snapshot
-- **Trend Tracking**: Next TBR shows deltas vs previous (arrows, change indicators)
+- **Save Draft**: Saves current TBR state including uploaded CSV reports, internal notes, and roadmap as a draft. Only one draft per org at a time. Auto-loads when selecting a client.
+- **Finalize TBR**: Records key metrics as a finalized snapshot. Promotes existing draft if one exists. Used for trend comparison.
+- **Past Reviews**: Modal viewer showing all finalized TBRs with expandable detail cards and trend comparison between consecutive reviews.
+- **Trend Tracking**: Next TBR shows deltas vs previous finalized review (arrows, change indicators)
 - **Export Integration**: HTML export includes "Progress Since Last Review" table when previous snapshot exists
-- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, and ~20 metric columns
+- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb), and ~20 metric columns
 
 ## Export Report Structure ("No Surprises" Framework)
 1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status

@@ -537,52 +537,141 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/tbr/finalize", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const { orgId, orgName, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap: roadmapData } = req.body;
+  function buildSnapshotMetrics(body: any) {
+    const { orgId, orgName, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap: roadmapData } = body;
+    const mfaCoveragePct = mfaReport?.totalUsers > 0
+      ? Math.round((mfaReport.coveredCount / mfaReport.totalUsers) * 100)
+      : null;
+    return {
+      orgId,
+      orgName,
+      totalDevices: deviceHealth?.totalDevices ?? 0,
+      workstations: deviceHealth?.workstations ?? 0,
+      servers: deviceHealth?.servers ?? 0,
+      needsReplacementCount: deviceHealth?.needsReplacementCount ?? 0,
+      patchCompliancePercent: deviceHealth?.patchCompliancePercent ?? 100,
+      pendingPatchCount: deviceHealth?.pendingPatchCount ?? 0,
+      eolOsCount: deviceHealth?.eolOsDevices?.length ?? 0,
+      staleDeviceCount: deviceHealth?.staleDevices?.length ?? 0,
+      totalIncidents: security?.totalIncidents ?? 0,
+      pendingIncidents: security?.pendingIncidents ?? 0,
+      activeAgents: security?.activeAgents ?? 0,
+      satLearnerCount: security?.satLearnerCount ?? null,
+      satTotalUsers: security?.satTotalUsers ?? null,
+      totalTickets: tickets?.totalTickets ?? 0,
+      oldOpenTicketCount: tickets?.oldOpenTickets?.length ?? 0,
+      mfaTotalUsers: mfaReport?.totalUsers ?? null,
+      mfaCoveredCount: mfaReport?.coveredCount ?? null,
+      mfaCoveragePercent: mfaCoveragePct,
+      licenseTotalWasted: licenseReport?.totalWasted ?? null,
+      licenseMonthlyWaste: licenseReport?.totalMonthlyWaste ?? null,
+      licenseAnnualWaste: licenseReport?.totalAnnualWaste ?? null,
+      roadmapItemCount: roadmapData?.items?.length ?? 0,
+      urgentItemCount: roadmapData?.items?.filter((i: any) => i.priority === "urgent").length ?? 0,
+    };
+  }
 
+  app.post("/api/tbr/save-draft", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { orgId, orgName } = req.body;
       if (!orgId || !orgName) {
         return res.status(400).json({ message: "Organization ID and name are required" });
       }
 
-      const mfaCoveragePct = mfaReport?.totalUsers > 0
-        ? Math.round((mfaReport.coveredCount / mfaReport.totalUsers) * 100)
-        : null;
-
-      const snapshotData = {
-        orgId,
-        orgName,
-        totalDevices: deviceHealth?.totalDevices ?? 0,
-        workstations: deviceHealth?.workstations ?? 0,
-        servers: deviceHealth?.servers ?? 0,
-        needsReplacementCount: deviceHealth?.needsReplacementCount ?? 0,
-        patchCompliancePercent: deviceHealth?.patchCompliancePercent ?? 100,
-        pendingPatchCount: deviceHealth?.pendingPatchCount ?? 0,
-        eolOsCount: deviceHealth?.eolOsDevices?.length ?? 0,
-        staleDeviceCount: deviceHealth?.staleDevices?.length ?? 0,
-        totalIncidents: security?.totalIncidents ?? 0,
-        pendingIncidents: security?.pendingIncidents ?? 0,
-        activeAgents: security?.activeAgents ?? 0,
-        satLearnerCount: security?.satLearnerCount ?? null,
-        satTotalUsers: security?.satTotalUsers ?? null,
-        totalTickets: tickets?.totalTickets ?? 0,
-        oldOpenTicketCount: tickets?.oldOpenTickets?.length ?? 0,
-        mfaTotalUsers: mfaReport?.totalUsers ?? null,
-        mfaCoveredCount: mfaReport?.coveredCount ?? null,
-        mfaCoveragePercent: mfaCoveragePct,
-        licenseTotalWasted: licenseReport?.totalWasted ?? null,
-        licenseMonthlyWaste: licenseReport?.totalMonthlyWaste ?? null,
-        licenseAnnualWaste: licenseReport?.totalAnnualWaste ?? null,
-        roadmapItemCount: roadmapData?.items?.length ?? 0,
-        urgentItemCount: roadmapData?.items?.filter((i: any) => i.priority === "urgent").length ?? 0,
+      const metrics = buildSnapshotMetrics(req.body);
+      const fullData = {
+        mfaReport: req.body.mfaReport || null,
+        licenseReport: req.body.licenseReport || null,
+        roadmap: req.body.roadmap || null,
+        internalNotes: req.body.internalNotes || null,
       };
 
-      const parsed = insertTbrSnapshotSchema.safeParse(snapshotData);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid snapshot data", errors: parsed.error.flatten().fieldErrors });
+      const existingDraft = await storage.getDraftByOrg(orgId);
+
+      if (existingDraft) {
+        const result = await storage.updateTbrSnapshot(existingDraft.id, {
+          ...metrics,
+          status: "draft",
+          fullData,
+        });
+        log(`TBR draft updated for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}`);
+        res.json(result);
+      } else {
+        const snapshotData = { ...metrics, status: "draft", fullData };
+        const parsed = insertTbrSnapshotSchema.safeParse(snapshotData);
+        if (!parsed.success) {
+          return res.status(400).json({ message: "Invalid snapshot data", errors: parsed.error.flatten().fieldErrors });
+        }
+        const result = await storage.createTbrSnapshot(parsed.data);
+        log(`TBR draft saved for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}`);
+        res.json(result);
+      }
+    } catch (err: any) {
+      log(`TBR save draft error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/tbr/draft/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId as string);
+      if (isNaN(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+      const draft = await storage.getDraftByOrg(orgId);
+      res.json({ draft: draft || null });
+    } catch (err: any) {
+      log(`TBR draft load error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/tbr/draft/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid draft ID" });
+      }
+      await storage.deleteTbrSnapshot(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`TBR draft delete error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/tbr/finalize", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { orgId, orgName } = req.body;
+      if (!orgId || !orgName) {
+        return res.status(400).json({ message: "Organization ID and name are required" });
       }
 
-      const result = await storage.createTbrSnapshot(parsed.data);
+      const metrics = buildSnapshotMetrics(req.body);
+      const fullData = {
+        mfaReport: req.body.mfaReport || null,
+        licenseReport: req.body.licenseReport || null,
+        roadmap: req.body.roadmap || null,
+        internalNotes: req.body.internalNotes || null,
+      };
+
+      const existingDraft = await storage.getDraftByOrg(orgId);
+
+      let result;
+      if (existingDraft) {
+        result = await storage.updateTbrSnapshot(existingDraft.id, {
+          ...metrics,
+          status: "finalized",
+          fullData,
+        });
+      } else {
+        const snapshotData = { ...metrics, status: "finalized", fullData };
+        const parsed = insertTbrSnapshotSchema.safeParse(snapshotData);
+        if (!parsed.success) {
+          return res.status(400).json({ message: "Invalid snapshot data", errors: parsed.error.flatten().fieldErrors });
+        }
+        result = await storage.createTbrSnapshot(parsed.data);
+      }
       log(`TBR finalized for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}`);
       res.json(result);
     } catch (err: any) {
@@ -597,10 +686,27 @@ export async function registerRoutes(
       if (isNaN(orgId)) {
         return res.status(400).json({ message: "Invalid organization ID" });
       }
-      const snapshots = await storage.getTbrSnapshotsByOrg(orgId);
+      const snapshots = await storage.getFinalizedSnapshotsByOrg(orgId);
       res.json(snapshots);
     } catch (err: any) {
       log(`TBR history error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/tbr/snapshot/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid snapshot ID" });
+      }
+      const snapshot = await storage.getTbrSnapshotById(id);
+      if (!snapshot) {
+        return res.status(404).json({ message: "Snapshot not found" });
+      }
+      res.json(snapshot);
+    } catch (err: any) {
+      log(`TBR snapshot error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

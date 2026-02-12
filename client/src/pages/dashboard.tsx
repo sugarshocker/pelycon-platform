@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ClientSelector } from "@/components/client-selector";
 import { DeviceHealth } from "@/components/device-health";
@@ -9,11 +9,12 @@ import { CippReports } from "@/components/cipp-reports";
 import { InternalNotesSection, type InternalNotes } from "@/components/internal-notes";
 import { AiRoadmap } from "@/components/ai-roadmap";
 import { MeetingExport } from "@/components/meeting-export";
+import { TbrHistoryViewer } from "@/components/tbr-history";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTheme } from "@/components/theme-provider";
-import { Sun, Moon, LogOut, CheckCircle2, XCircle, Save, Loader2, History, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Sun, Moon, LogOut, CheckCircle2, XCircle, Save, Loader2, History, FileText, AlertCircle } from "lucide-react";
 import { apiRequest, clearToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
@@ -39,6 +40,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [licenseReport, setLicenseReport] = useState<LicenseReport | null>(null);
   const [roadmap, setRoadmap] = useState<RoadmapAnalysis | null>(null);
   const [internalNotes, setInternalNotes] = useState<InternalNotes>({ serviceManagerNotes: "", leadEngineerNotes: "" });
+  const [hasDraft, setHasDraft] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
 
@@ -64,26 +67,73 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   });
 
   const { data: tbrHistory } = useQuery<{ latest: TbrSnapshot | null; previous: TbrSnapshot | null }>({
-    queryKey: [`/api/tbr/latest/${selectedClient?.id}`],
+    queryKey: ["/api/tbr/latest", selectedClient?.id],
     enabled: !!selectedClient,
+  });
+
+  const { data: draftData } = useQuery<{ draft: TbrSnapshot | null }>({
+    queryKey: ["/api/tbr/draft", selectedClient?.id],
+    enabled: !!selectedClient,
+  });
+
+  useEffect(() => {
+    if (draftData?.draft?.fullData) {
+      const fd = draftData.draft.fullData as any;
+      if (fd.mfaReport) setMfaReport(fd.mfaReport);
+      if (fd.licenseReport) setLicenseReport(fd.licenseReport);
+      if (fd.roadmap) setRoadmap(fd.roadmap);
+      if (fd.internalNotes) setInternalNotes(fd.internalNotes);
+      setHasDraft(true);
+    } else {
+      setHasDraft(false);
+    }
+  }, [draftData]);
+
+  const buildPayload = useCallback(() => {
+    if (!selectedClient) throw new Error("No client selected");
+    return {
+      orgId: selectedClient.id,
+      orgName: selectedClient.name,
+      deviceHealth: deviceHealth || null,
+      security: security || null,
+      tickets: tickets || null,
+      mfaReport: mfaReport,
+      licenseReport: licenseReport,
+      roadmap: roadmap,
+      internalNotes: internalNotes,
+    };
+  }, [selectedClient, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes]);
+
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/tbr/save-draft", buildPayload());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", selectedClient?.id] });
+      setHasDraft(true);
+      toast({
+        title: "Draft Saved",
+        description: `TBR draft saved for ${selectedClient?.name}. You can resume this review later.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save the draft. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const finalizeMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedClient) throw new Error("No client selected");
-      return apiRequest("POST", "/api/tbr/finalize", {
-        orgId: selectedClient.id,
-        orgName: selectedClient.name,
-        deviceHealth: deviceHealth || null,
-        security: security || null,
-        tickets: tickets || null,
-        mfaReport: mfaReport,
-        licenseReport: licenseReport,
-        roadmap: roadmap,
-      });
+      return apiRequest("POST", "/api/tbr/finalize", buildPayload());
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/tbr/latest/${selectedClient?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", selectedClient?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", selectedClient?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", selectedClient?.id] });
+      setHasDraft(false);
       toast({
         title: "TBR Finalized",
         description: `This review has been recorded for ${selectedClient?.name}. The next review will show trends compared to this snapshot.`,
@@ -105,6 +155,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       setLicenseReport(null);
       setRoadmap(null);
       setInternalNotes({ serviceManagerNotes: "", leadEngineerNotes: "" });
+      setHasDraft(false);
     },
     []
   );
@@ -182,7 +233,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onSelectClient={handleClientSelect}
           />
           {selectedClient && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setShowHistory(true)}
+                data-testid="button-tbr-history"
+              >
+                <History className="h-4 w-4 mr-1.5" />
+                Past Reviews
+              </Button>
               <MeetingExport
                 client={selectedClient}
                 deviceHealth={deviceHealth || null}
@@ -193,6 +252,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 roadmap={roadmap}
                 previousSnapshot={previousSnapshot}
               />
+              <Button
+                variant="outline"
+                onClick={() => saveDraftMutation.mutate()}
+                disabled={saveDraftMutation.isPending}
+                data-testid="button-save-draft"
+              >
+                {saveDraftMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-1.5" />
+                )}
+                Save Draft
+              </Button>
               <Button
                 onClick={() => finalizeMutation.mutate()}
                 disabled={finalizeMutation.isPending}
@@ -208,6 +280,26 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
           )}
         </div>
+
+        {hasDraft && selectedClient && draftData?.draft && (
+          <DraftBanner
+            draft={draftData.draft}
+            onDiscard={async () => {
+              try {
+                await apiRequest("DELETE", `/api/tbr/draft/${draftData.draft!.id}`);
+                queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", selectedClient.id] });
+                setMfaReport(null);
+                setLicenseReport(null);
+                setRoadmap(null);
+                setInternalNotes({ serviceManagerNotes: "", leadEngineerNotes: "" });
+                setHasDraft(false);
+                toast({ title: "Draft discarded" });
+              } catch {
+                toast({ title: "Error", description: "Failed to discard draft.", variant: "destructive" });
+              }
+            }}
+          />
+        )}
 
         {previousSnapshot && selectedClient && (
           <PreviousTbrBanner snapshot={previousSnapshot} />
@@ -265,7 +357,45 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           </div>
         )}
       </main>
+
+      {showHistory && selectedClient && (
+        <TbrHistoryViewer
+          client={selectedClient}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function DraftBanner({ draft, onDiscard }: { draft: TbrSnapshot; onDiscard: () => void }) {
+  const date = new Date(draft.updatedAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const time = new Date(draft.updatedAt).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return (
+    <Card className="border-[hsl(var(--brand-orange,30_80%_53%))] bg-[hsl(var(--brand-orange,30_80%_53%)/0.05)]">
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 text-sm">
+            <AlertCircle className="h-4 w-4 text-[hsl(var(--brand-orange,30_80%_53%))] flex-shrink-0" />
+            <span>
+              Draft saved on <strong>{date}</strong> at {time}
+              {" "}&mdash; uploaded reports and notes have been restored.
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onDiscard} data-testid="button-discard-draft">
+            Discard Draft
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

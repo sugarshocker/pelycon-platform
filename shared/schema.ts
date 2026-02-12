@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pgTable, serial, integer, text, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const tbrSnapshots = pgTable("tbr_snapshots", {
@@ -7,6 +7,9 @@ export const tbrSnapshots = pgTable("tbr_snapshots", {
   orgId: integer("org_id").notNull(),
   orgName: text("org_name").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  status: text("status").default("finalized").notNull(),
+  fullData: jsonb("full_data"),
   totalDevices: integer("total_devices").default(0).notNull(),
   workstations: integer("workstations").default(0).notNull(),
   servers: integer("servers").default(0).notNull(),
@@ -35,6 +38,7 @@ export const tbrSnapshots = pgTable("tbr_snapshots", {
 export const insertTbrSnapshotSchema = createInsertSchema(tbrSnapshots).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
 export type InsertTbrSnapshot = z.infer<typeof insertTbrSnapshotSchema>;
