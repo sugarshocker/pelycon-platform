@@ -132,7 +132,7 @@ export function MeetingExport({
           windowWidth: 800,
         },
         jsPDF: { unit: "mm", format: "letter", orientation: "portrait" as const },
-        pagebreak: { mode: ["css"], avoid: [".section", ".item", ".action-card", ".snap-card", ".snapshot-grid"] },
+        pagebreak: { mode: ["css"], avoid: [".section-top", ".item", ".action-card", ".snap-card", ".snapshot-grid"] },
       };
 
       await html2pdf()

@@ -54,6 +54,18 @@ function goodBad(isGood: boolean, goodText: string, badText: string): string {
   return `<div class="item attention"><span class="icon">&#9888;</span> ${badText}</div>`;
 }
 
+function buildSection(title: string, subtitle: string, items: string[]): string {
+  if (items.length === 0) return "";
+  const header = `<div class="section-header"><h2>${title}</h2><span class="subtitle">${subtitle}</span></div>`;
+  const first = items[0];
+  const rest = items.slice(1).join("\n");
+  return `
+    <div class="section">
+      <div class="section-top">${header}${first}</div>
+      ${rest}
+    </div>`;
+}
+
 export function generateSummaryHtml(data: {
   clientName: string;
   deviceHealth?: DeviceHealthSummary | null;
@@ -184,16 +196,7 @@ export function generateSummaryHtml(data: {
     opItems.push(`<div class="sub">${tk.totalTickets} total requests in 6 months${trendBadge(tk.totalTickets, prev?.totalTickets, false)}</div>`);
   }
 
-  if (opItems.length > 0) {
-    sections += `
-    <div class="section">
-      <div class="section-header">
-        <h2>Operational Readiness</h2>
-        <span class="subtitle">Are day-to-day operations running smoothly?</span>
-      </div>
-      ${opItems.join("\n")}
-    </div>`;
-  }
+  sections += buildSection("Operational Readiness", "Are day-to-day operations running smoothly?", opItems);
 
   // === SECTION 2: CAPACITY & INFRASTRUCTURE ===
   const capItems: string[] = [];
@@ -235,16 +238,7 @@ export function generateSummaryHtml(data: {
     }
   }
 
-  if (capItems.length > 0) {
-    sections += `
-    <div class="section">
-      <div class="section-header">
-        <h2>Infrastructure & Capacity</h2>
-        <span class="subtitle">Is the hardware ready for what's ahead?</span>
-      </div>
-      ${capItems.join("\n")}
-    </div>`;
-  }
+  sections += buildSection("Infrastructure & Capacity", "Is the hardware ready for what's ahead?", capItems);
 
   // === SECTION 3: FINANCIAL EFFICIENCY ===
   const finItems: string[] = [];
@@ -269,16 +263,7 @@ export function generateSummaryHtml(data: {
     }
   }
 
-  if (finItems.length > 0) {
-    sections += `
-    <div class="section">
-      <div class="section-header">
-        <h2>Financial Efficiency</h2>
-        <span class="subtitle">Are technology investments being used wisely?</span>
-      </div>
-      ${finItems.join("\n")}
-    </div>`;
-  }
+  sections += buildSection("Financial Efficiency", "Are technology investments being used wisely?", finItems);
 
   // === SECTION 4: RECOMMENDED ACTIONS ===
   if (data.roadmap && data.roadmap.items.length > 0) {
@@ -286,21 +271,15 @@ export function generateSummaryHtml(data: {
     const priorityColors: Record<string, string> = { urgent: "#dc2626", plan_for: "#2563eb", nice_to_have: "#6b7280" };
     const priorityBg: Record<string, string> = { urgent: "#fef2f2", plan_for: "#eff6ff", nice_to_have: "#f9fafb" };
 
-    sections += `
-    <div class="section">
-      <div class="section-header">
-        <h2>Recommended Next Steps</h2>
-        <span class="subtitle">Prioritized actions to keep your environment healthy</span>
-      </div>
-      ${data.roadmap.items.map(item => `
+    const actionCards = data.roadmap.items.map(item => `
         <div class="action-card" style="border-left:3px solid ${priorityColors[item.priority]};background:${priorityBg[item.priority]}">
           <div class="action-header">
             <strong>${item.title}</strong>
             <span class="priority-tag" style="color:${priorityColors[item.priority]}">${priorityLabels[item.priority]}</span>
           </div>
           <div class="action-why">${item.businessImpact}</div>
-        </div>`).join("")}
-    </div>`;
+        </div>`);
+    sections += buildSection("Recommended Next Steps", "Prioritized actions to keep your environment healthy", actionCards);
   }
 
   // === TREND COMPARISON ===
@@ -331,17 +310,11 @@ export function generateSummaryHtml(data: {
     }
 
     if (trendRows.length > 0) {
-      sections += `
-      <div class="section">
-        <div class="section-header">
-          <h2>Progress Since Last Review</h2>
-          <span class="subtitle">Comparing to ${prevDate}</span>
-        </div>
-        <table class="trend-table">
+      const trendTable = `<table class="trend-table">
           <tr><th>Metric</th><th style="text-align:center">Then</th><th style="text-align:center">Now</th><th style="text-align:center">Trend</th></tr>
           ${trendRows.join("")}
-        </table>
-      </div>`;
+        </table>`;
+      sections += buildSection("Progress Since Last Review", `Comparing to ${prevDate}`, [trendTable]);
     }
   }
 
@@ -370,6 +343,7 @@ export function generateSummaryHtml(data: {
     .snap-value { font-size: 16px; font-weight: 700; }
 
     .section { margin-bottom: 22px; }
+    .section-top { }
     .section-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-top: 4px; }
     .section-header h2 { font-size: 14px; color: #E77125; margin-bottom: 1px; }
     .section-header .subtitle { font-size: 11px; color: #6b7280; }
