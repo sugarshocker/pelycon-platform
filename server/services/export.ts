@@ -186,7 +186,8 @@ export function generateSummaryHtml(data: {
 
   if (opItems.length > 0) {
     sections += `
-    <div class="section page-break">
+    <div class="html2pdf__page-break"></div>
+    <div class="section">
       <div class="section-header">
         <h2>Operational Readiness</h2>
         <span class="subtitle">Are day-to-day operations running smoothly?</span>
@@ -237,7 +238,8 @@ export function generateSummaryHtml(data: {
 
   if (capItems.length > 0) {
     sections += `
-    <div class="section page-break">
+    <div class="html2pdf__page-break"></div>
+    <div class="section">
       <div class="section-header">
         <h2>Infrastructure & Capacity</h2>
         <span class="subtitle">Is the hardware ready for what's ahead?</span>
@@ -271,7 +273,8 @@ export function generateSummaryHtml(data: {
 
   if (finItems.length > 0) {
     sections += `
-    <div class="section page-break">
+    <div class="html2pdf__page-break"></div>
+    <div class="section">
       <div class="section-header">
         <h2>Financial Efficiency</h2>
         <span class="subtitle">Are technology investments being used wisely?</span>
@@ -287,7 +290,8 @@ export function generateSummaryHtml(data: {
     const priorityBg: Record<string, string> = { urgent: "#fef2f2", plan_for: "#eff6ff", nice_to_have: "#f9fafb" };
 
     sections += `
-    <div class="section page-break">
+    <div class="html2pdf__page-break"></div>
+    <div class="section">
       <div class="section-header">
         <h2>Recommended Next Steps</h2>
         <span class="subtitle">Prioritized actions to keep your environment healthy</span>
@@ -332,7 +336,8 @@ export function generateSummaryHtml(data: {
 
     if (trendRows.length > 0) {
       sections += `
-      <div class="section page-break">
+      <div class="html2pdf__page-break"></div>
+      <div class="section">
         <div class="section-header">
           <h2>Progress Since Last Review</h2>
           <span class="subtitle">Comparing to ${prevDate}</span>
@@ -370,7 +375,7 @@ export function generateSummaryHtml(data: {
     .snap-value { font-size: 16px; font-weight: 700; }
 
     .section { margin-bottom: 22px; page-break-inside: avoid; }
-    .section.page-break { page-break-before: always; padding-top: 8px; }
+    .html2pdf__page-break { display: block; page-break-before: always; height: 0; }
     .section-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
     .section-header h2 { font-size: 14px; color: #E77125; margin-bottom: 1px; }
     .section-header .subtitle { font-size: 11px; color: #6b7280; }
@@ -401,7 +406,7 @@ export function generateSummaryHtml(data: {
     .footer .footer-logo { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
     .footer .footer-logo img { width: 22px; height: 22px; object-fit: contain; }
     .footer .footer-logo span { font-size: 12px; font-weight: 600; color: #394442; }
-    @media print { body { padding: 16px; } .section { page-break-inside: avoid; } .section.page-break { page-break-before: always; } }
+    @media print { body { padding: 16px; } .section { page-break-inside: avoid; } .html2pdf__page-break { page-break-before: always; } }
   </style>
 </head>
 <body>
