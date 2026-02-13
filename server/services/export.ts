@@ -186,7 +186,6 @@ export function generateSummaryHtml(data: {
 
   if (opItems.length > 0) {
     sections += `
-    <div class="html2pdf__page-break"></div>
     <div class="section">
       <div class="section-header">
         <h2>Operational Readiness</h2>
@@ -238,7 +237,6 @@ export function generateSummaryHtml(data: {
 
   if (capItems.length > 0) {
     sections += `
-    <div class="html2pdf__page-break"></div>
     <div class="section">
       <div class="section-header">
         <h2>Infrastructure & Capacity</h2>
@@ -273,7 +271,6 @@ export function generateSummaryHtml(data: {
 
   if (finItems.length > 0) {
     sections += `
-    <div class="html2pdf__page-break"></div>
     <div class="section">
       <div class="section-header">
         <h2>Financial Efficiency</h2>
@@ -290,7 +287,6 @@ export function generateSummaryHtml(data: {
     const priorityBg: Record<string, string> = { urgent: "#fef2f2", plan_for: "#eff6ff", nice_to_have: "#f9fafb" };
 
     sections += `
-    <div class="html2pdf__page-break"></div>
     <div class="section">
       <div class="section-header">
         <h2>Recommended Next Steps</h2>
@@ -336,7 +332,6 @@ export function generateSummaryHtml(data: {
 
     if (trendRows.length > 0) {
       sections += `
-      <div class="html2pdf__page-break"></div>
       <div class="section">
         <div class="section-header">
           <h2>Progress Since Last Review</h2>
@@ -374,9 +369,8 @@ export function generateSummaryHtml(data: {
     .snap-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 2px; }
     .snap-value { font-size: 16px; font-weight: 700; }
 
-    .section { margin-bottom: 22px; page-break-inside: avoid; }
-    .html2pdf__page-break { display: block; page-break-before: always; height: 0; }
-    .section-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
+    .section { margin-bottom: 22px; }
+    .section-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-top: 4px; }
     .section-header h2 { font-size: 14px; color: #E77125; margin-bottom: 1px; }
     .section-header .subtitle { font-size: 11px; color: #6b7280; }
 
@@ -402,11 +396,11 @@ export function generateSummaryHtml(data: {
 
     .trend-table th, .trend-table td { padding: 4px 10px; }
 
-    .footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 2px solid #E77125; color: #6b7280; font-size: 11px; page-break-before: always; }
+    .footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 2px solid #E77125; color: #6b7280; font-size: 11px; }
     .footer .footer-logo { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
     .footer .footer-logo img { width: 22px; height: 22px; object-fit: contain; }
     .footer .footer-logo span { font-size: 12px; font-weight: 600; color: #394442; }
-    @media print { body { padding: 16px; } .section { page-break-inside: avoid; } .html2pdf__page-break { page-break-before: always; } }
+    @media print { body { padding: 16px; } .section-header { break-after: avoid; page-break-after: avoid; } }
   </style>
 </head>
 <body>
