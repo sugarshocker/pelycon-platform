@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MessageSquare, ListTodo, Plus, Trash2, ArrowRight } from "lucide-react";
+import { MessageSquare, ListTodo, Plus, Trash2, ArrowRight, Zap } from "lucide-react";
 
 export interface FollowUpTask {
   id: string;
@@ -152,6 +152,12 @@ export function ClientFeedbackSection({ feedback, onFeedbackChange, previousFoll
                     data-testid={`checkbox-task-${task.id}`}
                   />
                   <span className={`flex-1 text-sm ${task.completed ? "line-through text-muted-foreground" : ""}`}>
+                    {task.id.startsWith("auto-") && (
+                      <Badge variant="outline" className="text-xs mr-1.5 align-middle">
+                        <Zap className="h-2.5 w-2.5 mr-0.5" />
+                        Auto
+                      </Badge>
+                    )}
                     {task.text}
                   </span>
                   <Button

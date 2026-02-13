@@ -99,6 +99,51 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [draftData]);
 
+  useEffect(() => {
+    if (!selectedClient || !deviceUserData?.devices) return;
+    const unprotected = deviceUserData.devices.filter(d => !d.huntressProtected);
+
+    setClientFeedback(prev => {
+      const withoutAuto = prev.followUpTasks.filter(t => t.id !== "auto-huntress-gap");
+      if (unprotected.length === 0) {
+        if (withoutAuto.length === prev.followUpTasks.length) return prev;
+        return { ...prev, followUpTasks: withoutAuto };
+      }
+      const names = unprotected.map(d => d.hostname).slice(0, 10).join(", ");
+      const suffix = unprotected.length > 10 ? ` (+${unprotected.length - 10} more)` : "";
+      return {
+        ...prev,
+        followUpTasks: [...withoutAuto, {
+          id: "auto-huntress-gap",
+          text: `Reconcile Huntress/NinjaOne disparity: ${unprotected.length} device(s) not protected by Huntress — ${names}${suffix}. Ensure Huntress is reporting properly on all managed machines.`,
+          completed: false,
+        }],
+      };
+    });
+  }, [deviceUserData, selectedClient]);
+
+  useEffect(() => {
+    if (!selectedClient || !licenseReport) return;
+    const unused = licenseReport.licenses.filter(l => l.wasted > 0);
+
+    setClientFeedback(prev => {
+      const withoutAuto = prev.followUpTasks.filter(t => t.id !== "auto-license-cleanup");
+      if (unused.length === 0) {
+        if (withoutAuto.length === prev.followUpTasks.length) return prev;
+        return { ...prev, followUpTasks: withoutAuto };
+      }
+      const lines = unused.map(l => `${l.licenseName}: ${l.wasted} unused ($${(l.monthlyWastedCost * 12).toFixed(0)}/yr)`).join("; ");
+      return {
+        ...prev,
+        followUpTasks: [...withoutAuto, {
+          id: "auto-license-cleanup",
+          text: `Remove unused MS365 licenses to reduce waste — ${lines}. Total annual savings: $${Math.round(licenseReport.totalAnnualWaste).toLocaleString()}.`,
+          completed: false,
+        }],
+      };
+    });
+  }, [licenseReport, selectedClient]);
+
   const buildPayload = useCallback(() => {
     if (!selectedClient) throw new Error("No client selected");
     return {
