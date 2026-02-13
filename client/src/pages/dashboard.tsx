@@ -475,7 +475,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
   const [internalNotes, setInternalNotes] = useState<InternalNotes>({ serviceManagerNotes: "", leadEngineerNotes: "" });
   const [clientFeedback, setClientFeedback] = useState<ClientFeedback>({ notes: "", followUpTasks: [] });
   const [hasDraft, setHasDraft] = useState(false);
-  const [showFinalizationEmail, setShowFinalizationEmail] = useState(false);
+  const [finalizedEmailText, setFinalizedEmailText] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: deviceHealth } = useQuery<DeviceHealthSummary>({
@@ -604,14 +604,16 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
 
   const finalizeMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/tbr/finalize", buildPayload());
+      const payload = buildPayload();
+      const emailText = generateFollowUpEmail(client.name, clientFeedback.followUpTasks);
+      setFinalizedEmailText(emailText);
+      return apiRequest("POST", "/api/tbr/finalize", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", client.id] });
       setHasDraft(false);
-      setShowFinalizationEmail(true);
       toast({ title: "TBR Finalized", description: `Review recorded for ${client.name}. Copy the follow-up email below, then head back to overview.` });
     },
     onError: () => {
@@ -621,14 +623,11 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
 
   const previousSnapshot = tbrHistory?.previous || null;
 
-  if (showFinalizationEmail) {
-    const emailFollowUps = clientFeedback.followUpTasks;
-    const emailText = generateFollowUpEmail(client.name, emailFollowUps);
-
+  if (finalizedEmailText) {
     return (
       <FinalizationConfirmation
         clientName={client.name}
-        emailText={emailText}
+        emailText={finalizedEmailText}
         onBack={onBack}
       />
     );
