@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import type {
   DeviceHealthSummary,
   SecuritySummary,
@@ -8,7 +10,17 @@ import type {
   TbrSnapshot,
 } from "@shared/schema";
 
-const PELYCON_LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAEgAAAA/CAMAAAB0FH4MAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAIcUExUReZxJQAAAAMBAAsFAuZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJeZxJf///7D6kXUAAACydFJOUwAAAADq/vnr0qt3PhHuxX4wA+meOAGMHc1J7W8F+IMI+4QGcErOHo4C7DqgBDKAxxLx/e9A8JdLMTZbpXlcRbbi5q2CCiAlJiQ839PaH1Dzn894C6Jx/In2vwx09FHLzLSkmmQzFeF94xllybAPuK4sDRhEitTDED3GZllVbIjW9X+TNL7oqSJG91LR5V2Zc15iqDnyIeDkwIEHuvq73GcJlCgTNd6sI9kcxLycphTbK3tCS2V9AAAAAWJLR0Sz2m3/fgAAAAd0SU1FB+oCCxADMikW5xYAAAMkelRYdFJhdyBwcm9maWxlIHR5cGUgeG1wAABIiZVVSRLbIBC844o8AWYDniNruaUqxzw/3eBddlKxLFsMzHTPqvT756/0A5+SiyZd9ait5iihcQmvJjkkPGr02HUT2Y/L5XKIQN7DKPGqbptm22o2xdkWPVmrS4Wia11sdwv8w6AqlET00F2yrrXpUltAMTaCRZHMdayxV+VeIgLYWBzkocvcuB8fTB5mILtQw+4akr3Z5jkJyR11iLTLrlk28Mm8IKmUQako7woohyshK/ZEeYscWrQk/HGxYQEm6thccFfJb5dcnRSYDV1czCweDqbh4dykk60aLhiDU0cdH9krDoEXedeB33nhKQ8+g0iaRmSrWpElxqU2OIdIcf+VBSggYUiHRB/x6ogTTnA/8QCCLcBDeMlqhvc5IwyzbUj4ifMA3JmsdI39jio6YoM7DZwyHRiBh4zSk3Gt5qy2e0DSJ+v/Ms56rHAOZw6ag7tHgkMCBZ/2GZdPjv3NqQmbvuO+m4SKfshsHlTW9EgrD+LXoeisbOYQqNNweRi+Bn4x6vXZk1FSrEZyWu/K1m1kD0g+2hRlCgnruKF+RA2/amKBkhRWNdYlqVnBAcci47hCzOpueGwnDt8gcSYhKuylgWxsE8cdhmEwKxjIxCxGVg1gDmgEy/glAd6YPQm0ywmZNa6s8mAq/Bl5APczcAJy/h/kV2AYY8M4gg1cRN/p/RHr+6wBtzVWhB02oFDm6TFC0MwouiyYRpyuKWarolqjSb+36WuIfbRpABkLPLPu8lObLBi1X6LxlHqgNwRAWcWKOTEKkxOLA9BZDJhmPWE2F4xU0M...";
+let _logoCache: string | null = null;
+function getLogoBase64(): string {
+  if (_logoCache) return _logoCache;
+  try {
+    const logoPath = path.resolve("server/assets/pelycon-logo.png");
+    _logoCache = fs.readFileSync(logoPath).toString("base64");
+  } catch {
+    _logoCache = "";
+  }
+  return _logoCache;
+}
 
 function trendBadge(current: number, previous: number | null | undefined, higherIsBetter: boolean): string {
   if (previous === null || previous === undefined) return "";
@@ -395,7 +407,7 @@ export function generateSummaryHtml(data: {
 <body>
   <div class="header">
     <div class="logo">
-      <img class="logo-mark" src="data:image/png;base64,${PELYCON_LOGO_B64}" alt="Pelycon" />
+      <img class="logo-mark" src="data:image/png;base64,${getLogoBase64()}" alt="Pelycon" />
       <span class="logo-text">Pelycon Technologies</span>
     </div>
     <h1>Technology Business Review</h1>
@@ -406,7 +418,7 @@ export function generateSummaryHtml(data: {
   ${sections}
   <div class="footer">
     <div class="footer-logo">
-      <img src="data:image/png;base64,${PELYCON_LOGO_B64}" alt="Pelycon" />
+      <img src="data:image/png;base64,${getLogoBase64()}" alt="Pelycon" />
       <span>Pelycon Technologies</span>
     </div>
     <p>Next review: <strong>${nextTbrStr}</strong></p>
