@@ -626,6 +626,7 @@ export async function registerRoutes(
         licenseReport: req.body.licenseReport || null,
         roadmap: req.body.roadmap || null,
         internalNotes: req.body.internalNotes || null,
+        clientFeedback: req.body.clientFeedback || null,
       };
 
       const existingDraft = await storage.getDraftByOrg(orgId);
@@ -695,6 +696,7 @@ export async function registerRoutes(
         licenseReport: req.body.licenseReport || null,
         roadmap: req.body.roadmap || null,
         internalNotes: req.body.internalNotes || null,
+        clientFeedback: req.body.clientFeedback || null,
       };
 
       const existingDraft = await storage.getDraftByOrg(orgId);

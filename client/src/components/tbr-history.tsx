@@ -15,6 +15,10 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  MessageSquare,
+  StickyNote,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import type { Organization, TbrSnapshot } from "@shared/schema";
 
@@ -241,6 +245,8 @@ function SnapshotRow({
               </div>
             </div>
           )}
+
+          <NotesAndFeedbackSection fullData={snapshot.fullData} />
         </div>
       )}
     </div>
@@ -266,6 +272,83 @@ function MetricCard({
       </div>
       <p className="text-lg font-semibold leading-tight">{value}</p>
       {detail && <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>}
+    </div>
+  );
+}
+
+function NotesAndFeedbackSection({ fullData }: { fullData: any }) {
+  if (!fullData) return null;
+
+  const internalNotes = fullData.internalNotes;
+  const clientFeedback = fullData.clientFeedback;
+  const hasServiceNotes = internalNotes?.serviceManagerNotes?.trim();
+  const hasEngineerNotes = internalNotes?.leadEngineerNotes?.trim();
+  const hasClientNotes = clientFeedback?.notes?.trim();
+  const hasFollowUps = clientFeedback?.followUpTasks?.length > 0;
+
+  if (!hasServiceNotes && !hasEngineerNotes && !hasClientNotes && !hasFollowUps) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 pt-3 border-t space-y-3">
+      {(hasServiceNotes || hasEngineerNotes) && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <StickyNote className="h-3.5 w-3.5 text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">Internal Notes</p>
+          </div>
+          <div className="space-y-2">
+            {hasServiceNotes && (
+              <div className="rounded-md bg-muted/50 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground mb-0.5">Service Manager</p>
+                <p className="text-sm whitespace-pre-wrap">{internalNotes.serviceManagerNotes}</p>
+              </div>
+            )}
+            {hasEngineerNotes && (
+              <div className="rounded-md bg-muted/50 px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground mb-0.5">Lead Engineer</p>
+                <p className="text-sm whitespace-pre-wrap">{internalNotes.leadEngineerNotes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hasClientNotes && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">Client Feedback</p>
+          </div>
+          <div className="rounded-md bg-muted/50 px-3 py-2">
+            <p className="text-sm whitespace-pre-wrap">{clientFeedback.notes}</p>
+          </div>
+        </div>
+      )}
+
+      {hasFollowUps && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <CheckSquare className="h-3.5 w-3.5 text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">Follow-Up Tasks</p>
+          </div>
+          <div className="space-y-1">
+            {clientFeedback.followUpTasks.map((task: any) => (
+              <div key={task.id} className="flex items-start gap-2 rounded-md bg-muted/50 px-3 py-1.5">
+                {task.completed ? (
+                  <CheckSquare className="h-3.5 w-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <Square className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                )}
+                <p className={`text-sm ${task.completed ? "line-through text-muted-foreground" : ""}`}>
+                  {task.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -208,7 +208,12 @@ function DeviceUserInventory({ client }: { client: Organization }) {
   });
 
   const devices = data?.devices || [];
-  const sortedDevices = [...devices].sort((a, b) => a.hostname.localeCompare(b.hostname));
+  const sortedDevices = [...devices].sort((a, b) => {
+    const ageA = a.age ?? -1;
+    const ageB = b.age ?? -1;
+    if (ageB !== ageA) return ageB - ageA;
+    return a.hostname.localeCompare(b.hostname);
+  });
 
   return (
     <div className="space-y-2">

@@ -322,7 +322,12 @@ export function generateSummaryHtml(data: {
 
   // === APPENDIX: DEVICE-USER INVENTORY ===
   if (data.deviceUserInventory && data.deviceUserInventory.length > 0) {
-    const sorted = [...data.deviceUserInventory].sort((a, b) => a.hostname.localeCompare(b.hostname));
+    const sorted = [...data.deviceUserInventory].sort((a, b) => {
+      const ageA = a.age ?? -1;
+      const ageB = b.age ?? -1;
+      if (ageB !== ageA) return ageB - ageA;
+      return a.hostname.localeCompare(b.hostname);
+    });
     const rows = sorted.map(d => {
       const ageStr = d.age !== undefined && d.age !== null ? `${d.ageSource === "model" ? "~" : ""}${d.age}y` : "\u2014";
       const ageColor = d.age !== undefined && d.age !== null && d.age >= 5 ? "color:#dc2626;font-weight:600" : "";

@@ -7,6 +7,7 @@ import { TicketTrends } from "@/components/ticket-trends";
 import { ProjectSummary } from "@/components/project-summary";
 import { CippReports } from "@/components/cipp-reports";
 import { InternalNotesSection, type InternalNotes } from "@/components/internal-notes";
+import { ClientFeedbackSection, type ClientFeedback } from "@/components/client-feedback";
 import { AiRoadmap } from "@/components/ai-roadmap";
 import { MeetingExport } from "@/components/meeting-export";
 import { TbrHistoryViewer } from "@/components/tbr-history";
@@ -41,6 +42,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [licenseReport, setLicenseReport] = useState<LicenseReport | null>(null);
   const [roadmap, setRoadmap] = useState<RoadmapAnalysis | null>(null);
   const [internalNotes, setInternalNotes] = useState<InternalNotes>({ serviceManagerNotes: "", leadEngineerNotes: "" });
+  const [clientFeedback, setClientFeedback] = useState<ClientFeedback>({ notes: "", followUpTasks: [] });
   const [hasDraft, setHasDraft] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -90,6 +92,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       if (fd.licenseReport) setLicenseReport(fd.licenseReport);
       if (fd.roadmap) setRoadmap(fd.roadmap);
       if (fd.internalNotes) setInternalNotes(fd.internalNotes);
+      if (fd.clientFeedback) setClientFeedback(fd.clientFeedback);
       setHasDraft(true);
     } else {
       setHasDraft(false);
@@ -108,8 +111,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       licenseReport: licenseReport,
       roadmap: roadmap,
       internalNotes: internalNotes,
+      clientFeedback: clientFeedback,
     };
-  }, [selectedClient, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes]);
+  }, [selectedClient, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
@@ -162,6 +166,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       setLicenseReport(null);
       setRoadmap(null);
       setInternalNotes({ serviceManagerNotes: "", leadEngineerNotes: "" });
+      setClientFeedback({ notes: "", followUpTasks: [] });
       setHasDraft(false);
     },
     []
@@ -300,6 +305,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 setLicenseReport(null);
                 setRoadmap(null);
                 setInternalNotes({ serviceManagerNotes: "", leadEngineerNotes: "" });
+                setClientFeedback({ notes: "", followUpTasks: [] });
                 setHasDraft(false);
                 toast({ title: "Draft discarded" });
               } catch {
@@ -328,6 +334,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             <InternalNotesSection
               notes={internalNotes}
               onNotesChange={setInternalNotes}
+            />
+            <ClientFeedbackSection
+              feedback={clientFeedback}
+              onFeedbackChange={setClientFeedback}
+              previousFollowUps={(previousSnapshot?.fullData as any)?.clientFeedback?.followUpTasks}
             />
             <AiRoadmap
               client={selectedClient}
