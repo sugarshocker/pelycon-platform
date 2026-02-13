@@ -44,21 +44,29 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `POST /api/projects/summarize` - AI-generated project summary
 - `POST /api/roadmap/generate` - AI roadmap generation
 - `POST /api/export/summary` - HTML summary export (accepts previousSnapshot for trends)
-- `POST /api/tbr/save-draft` - Save TBR as draft (preserves CSV reports, notes, roadmap)
+- `GET /api/export/snapshot/:id` - Generate PDF-ready HTML from a stored TBR snapshot's fullData
+- `POST /api/tbr/save-draft` - Save TBR as draft (preserves CSV reports, notes, roadmap, live data)
 - `GET /api/tbr/draft/:orgId` - Load existing draft for an org
 - `DELETE /api/tbr/draft/:id` - Discard a draft
 - `POST /api/tbr/finalize` - Finalize TBR snapshot (promotes draft if exists)
+- `POST /api/tbr/unfinalize/:id` - Reopen a finalized TBR as a draft (blocked if draft already exists for that client)
 - `GET /api/tbr/history/:orgId` - List finalized TBR snapshots for an org
 - `GET /api/tbr/snapshot/:id` - Get a single snapshot by ID
 - `GET /api/tbr/latest/:orgId` - Get latest + previous finalized snapshot for trend comparison
 
+## Dashboard Architecture (Two-View Workflow)
+- **Overview View**: Client selector, draft management banner, inline past review list with expand/collapse, per-snapshot actions (Download PDF, Reopen as Draft), Start New Review button. No live API data loaded.
+- **Editor View**: On-demand data loading from NinjaOne/Huntress/ConnectWise. All editing sections (Device Health, Security, Tickets, Projects, CIPP Reports, Internal Notes, Client Feedback, AI Roadmap). Save Draft / Finalize / PDF export. Back button returns to Overview.
+- **Draft auto-load**: Editor loads draft fullData (CSV reports, notes, feedback, roadmap) when resuming a draft.
+- **Un-finalize**: Reopens a finalized TBR as a draft for editing; blocked if another draft exists for that client.
+
 ## TBR Snapshot System
-- **Save Draft**: Saves current TBR state including uploaded CSV reports, internal notes, and roadmap as a draft. Only one draft per org at a time. Auto-loads when selecting a client.
+- **Save Draft**: Saves current TBR state including live data (deviceHealth, security, tickets), CSV reports, notes, roadmap, and client feedback as a draft. Only one draft per org at a time.
 - **Finalize TBR**: Records key metrics as a finalized snapshot. Promotes existing draft if one exists. Used for trend comparison.
-- **Past Reviews**: Modal viewer showing all finalized TBRs with expandable detail cards and trend comparison between consecutive reviews.
-- **Trend Tracking**: Next TBR shows deltas vs previous finalized review (arrows, change indicators)
-- **Export Integration**: HTML export includes "Progress Since Last Review" table when previous snapshot exists
-- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb), and ~20 metric columns
+- **Past Reviews**: Inline list in Overview with expandable detail cards showing metrics, trend comparisons, notes, and feedback.
+- **Trend Tracking**: Editor shows previous TBR banner; snapshot cards show deltas between consecutive reviews.
+- **Export Integration**: HTML export includes "Progress Since Last Review" table when previous snapshot exists. Stored snapshots can generate PDFs from fullData.
+- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb with deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback), and ~20 metric columns
 
 ## Export Report Structure ("No Surprises" Framework)
 1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status

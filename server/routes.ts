@@ -622,6 +622,9 @@ export async function registerRoutes(
 
       const metrics = buildSnapshotMetrics(req.body);
       const fullData = {
+        deviceHealth: req.body.deviceHealth || null,
+        security: req.body.security || null,
+        tickets: req.body.tickets || null,
         mfaReport: req.body.mfaReport || null,
         licenseReport: req.body.licenseReport || null,
         roadmap: req.body.roadmap || null,
@@ -692,6 +695,9 @@ export async function registerRoutes(
 
       const metrics = buildSnapshotMetrics(req.body);
       const fullData = {
+        deviceHealth: req.body.deviceHealth || null,
+        security: req.body.security || null,
+        tickets: req.body.tickets || null,
         mfaReport: req.body.mfaReport || null,
         licenseReport: req.body.licenseReport || null,
         roadmap: req.body.roadmap || null,
@@ -720,6 +726,62 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       log(`TBR finalize error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/tbr/unfinalize/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid snapshot ID" });
+      }
+      const snapshot = await storage.getTbrSnapshotById(id);
+      if (!snapshot) {
+        return res.status(404).json({ message: "Snapshot not found" });
+      }
+      if (snapshot.status !== "finalized") {
+        return res.status(400).json({ message: "Only finalized TBRs can be un-finalized" });
+      }
+      const existingDraft = await storage.getDraftByOrg(snapshot.orgId);
+      if (existingDraft) {
+        return res.status(409).json({ message: "A draft already exists for this client. Discard it first before un-finalizing a past review." });
+      }
+      const result = await storage.updateTbrSnapshot(id, { status: "draft" });
+      log(`TBR un-finalized: snapshot ${id} for orgId ${snapshot.orgId}`);
+      res.json(result);
+    } catch (err: any) {
+      log(`TBR un-finalize error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/export/snapshot/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid snapshot ID" });
+      }
+      const snapshot = await storage.getTbrSnapshotById(id);
+      if (!snapshot) {
+        return res.status(404).json({ message: "Snapshot not found" });
+      }
+      const fd = (snapshot.fullData as any) || {};
+      const html = generateSummaryHtml({
+        clientName: snapshot.orgName,
+        deviceHealth: fd.deviceHealth || null,
+        security: fd.security || null,
+        tickets: fd.tickets || null,
+        mfaReport: fd.mfaReport || null,
+        licenseReport: fd.licenseReport || null,
+        roadmap: fd.roadmap || null,
+        previousSnapshot: null,
+        deviceUserInventory: fd.deviceUserInventory || null,
+      });
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
+    } catch (err: any) {
+      log(`Snapshot export error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });
