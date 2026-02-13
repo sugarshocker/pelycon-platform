@@ -174,7 +174,7 @@ export function generateSummaryHtml(data: {
 
   if (opItems.length > 0) {
     sections += `
-    <div class="section">
+    <div class="section page-break">
       <div class="section-header">
         <h2>Operational Readiness</h2>
         <span class="subtitle">Are day-to-day operations running smoothly?</span>
@@ -225,7 +225,7 @@ export function generateSummaryHtml(data: {
 
   if (capItems.length > 0) {
     sections += `
-    <div class="section">
+    <div class="section page-break">
       <div class="section-header">
         <h2>Infrastructure & Capacity</h2>
         <span class="subtitle">Is the hardware ready for what's ahead?</span>
@@ -259,7 +259,7 @@ export function generateSummaryHtml(data: {
 
   if (finItems.length > 0) {
     sections += `
-    <div class="section">
+    <div class="section page-break">
       <div class="section-header">
         <h2>Financial Efficiency</h2>
         <span class="subtitle">Are technology investments being used wisely?</span>
@@ -275,7 +275,7 @@ export function generateSummaryHtml(data: {
     const priorityBg: Record<string, string> = { urgent: "#fef2f2", plan_for: "#eff6ff", nice_to_have: "#f9fafb" };
 
     sections += `
-    <div class="section">
+    <div class="section page-break">
       <div class="section-header">
         <h2>Recommended Next Steps</h2>
         <span class="subtitle">Prioritized actions to keep your environment healthy</span>
@@ -320,7 +320,7 @@ export function generateSummaryHtml(data: {
 
     if (trendRows.length > 0) {
       sections += `
-      <div class="section">
+      <div class="section page-break">
         <div class="section-header">
           <h2>Progress Since Last Review</h2>
           <span class="subtitle">Comparing to ${prevDate}</span>
@@ -358,6 +358,7 @@ export function generateSummaryHtml(data: {
     .snap-value { font-size: 16px; font-weight: 700; }
 
     .section { margin-bottom: 22px; page-break-inside: avoid; }
+    .section.page-break { page-break-before: always; padding-top: 8px; }
     .section-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
     .section-header h2 { font-size: 14px; color: #E77125; margin-bottom: 1px; }
     .section-header .subtitle { font-size: 11px; color: #6b7280; }
@@ -384,8 +385,11 @@ export function generateSummaryHtml(data: {
 
     .trend-table th, .trend-table td { padding: 4px 10px; }
 
-    .footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 11px; }
-    @media print { body { padding: 16px; } .section { page-break-inside: avoid; } }
+    .footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 2px solid #E77125; color: #6b7280; font-size: 11px; page-break-before: always; }
+    .footer .footer-logo { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .footer .footer-logo img { width: 22px; height: 22px; object-fit: contain; }
+    .footer .footer-logo span { font-size: 12px; font-weight: 600; color: #394442; }
+    @media print { body { padding: 16px; } .section { page-break-inside: avoid; } .section.page-break { page-break-before: always; } }
   </style>
 </head>
 <body>
@@ -401,8 +405,12 @@ export function generateSummaryHtml(data: {
   </div>
   ${sections}
   <div class="footer">
+    <div class="footer-logo">
+      <img src="data:image/png;base64,${PELYCON_LOGO_B64}" alt="Pelycon" />
+      <span>Pelycon Technologies</span>
+    </div>
     <p>Next review: <strong>${nextTbrStr}</strong></p>
-    <p style="margin-top:4px">Prepared by Pelycon Technologies &middot; Confidential</p>
+    <p style="margin-top:4px">Confidential &middot; Prepared for ${data.clientName}</p>
   </div>
 </body>
 </html>`;
