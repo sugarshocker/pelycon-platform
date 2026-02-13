@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { Organization, DeviceHealthSummary, DeviceInfo, DeviceCategory, DeviceTypeCounts } from "@shared/schema";
+import type { Organization, DeviceHealthSummary, DeviceInfo, DeviceCategory, DeviceTypeCounts, DeviceUserEntry } from "@shared/schema";
 import { log } from "../index";
 
 function cleanEnv(key: string, fallback?: string): string {
@@ -564,4 +564,92 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
     installedPatchCount,
     criticalAlerts,
   };
+}
+
+export async function getDeviceUserMapping(orgId: number): Promise<DeviceUserEntry[]> {
+  const basicDevices = await apiGet(`/v2/organization/${orgId}/devices`);
+
+  const VALID_NODE_CLASSES = new Set(["WINDOWS_WORKSTATION", "WINDOWS_SERVER", "MAC"]);
+  const eligibleDevices = basicDevices.filter((d: any) => VALID_NODE_CLASSES.has((d.nodeClass || "").toUpperCase()));
+
+  const now = new Date();
+  const fiveYearsAgo = new Date(now);
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+
+  const detailedDevices: any[] = [];
+  const batchSize = 10;
+  for (let i = 0; i < eligibleDevices.length; i += batchSize) {
+    const batch = eligibleDevices.slice(i, i + batchSize);
+    const details = await Promise.all(
+      batch.map(async (bd: any) => {
+        try {
+          return await apiGet(`/v2/device/${bd.id}`);
+        } catch {
+          return bd;
+        }
+      })
+    );
+    detailedDevices.push(...details);
+  }
+
+  function classifyDeviceType(d: any): DeviceCategory {
+    const nc = (d.nodeClass || "").toUpperCase();
+    const chassis = (d.system?.chassisType || "").toUpperCase();
+    if (nc === "WINDOWS_SERVER") return "Windows Server";
+    if (nc === "MAC") return chassis === "LAPTOP" ? "Mac Laptop" : "Mac Desktop";
+    return chassis === "LAPTOP" ? "Windows Laptop" : "Windows Desktop";
+  }
+
+  const entries: DeviceUserEntry[] = [];
+  for (const d of detailedDevices) {
+    const systemName = d.systemName || d.dnsName || `Device ${d.id}`;
+    const lastUser = d.lastLoggedInUser || "";
+    const osName = d.os?.name || "";
+    const deviceType = classifyDeviceType(d);
+    const manufacturer = d.system?.manufacturer || undefined;
+    const model = d.system?.model || undefined;
+    const cleanModel = model !== "To Be Filled By O.E.M." ? model : undefined;
+    const cleanManufacturer = manufacturer !== "To Be Filled By O.E.M." ? manufacturer : undefined;
+
+    const warrantyDate = d.system?.warrantyDate || d.system?.purchaseDate || d.purchaseDate;
+    let age: number | undefined;
+    let ageSource: "warranty" | "purchase" | "model" | "created" | undefined;
+
+    const modelEstimatedAge = estimateAgeFromModel(cleanModel, cleanManufacturer);
+
+    if (warrantyDate) {
+      const wd = typeof warrantyDate === "number" ? new Date(warrantyDate * 1000) : new Date(warrantyDate);
+      if (!isNaN(wd.getTime())) {
+        age = Math.floor((now.getTime() - wd.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+        ageSource = d.system?.warrantyDate ? "warranty" : "purchase";
+      }
+    }
+
+    if (modelEstimatedAge !== null && (age === undefined || modelEstimatedAge > (age || 0))) {
+      age = modelEstimatedAge;
+      ageSource = "model";
+    }
+
+    if (age === undefined && d.created) {
+      const cd = typeof d.created === "number" ? new Date(d.created * 1000) : new Date(d.created);
+      if (!isNaN(cd.getTime())) {
+        age = Math.floor((now.getTime() - cd.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+        ageSource = "created";
+      }
+    }
+
+    entries.push({
+      hostname: systemName,
+      lastLoggedInUser: lastUser,
+      osName,
+      deviceType,
+      age,
+      ageSource,
+      model: cleanModel,
+      huntressProtected: false,
+    });
+  }
+
+  log(`NinjaOne: device-user mapping for org ${orgId}: ${entries.length} devices, ${entries.filter(e => e.lastLoggedInUser).length} with logged-in users`);
+  return entries;
 }

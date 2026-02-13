@@ -147,6 +147,7 @@ export interface SecuritySummary {
   phishingReportRate: number | null;
   recentPhishingCampaigns: SatCampaignDetail[];
   satUnenrolledUsers: Array<{ name: string; email: string }>;
+  identitiesMonitored: number | null;
   trendDirection: "better" | "worse" | "stable" | null;
   notInHuntress?: boolean;
 }
@@ -229,6 +230,17 @@ export interface ProjectSummaryData {
   completed: ProjectItem[];
   inProgress: ProjectItem[];
   aiSummary?: string;
+}
+
+export interface DeviceUserEntry {
+  hostname: string;
+  lastLoggedInUser: string;
+  osName: string;
+  deviceType: DeviceCategory;
+  age?: number;
+  ageSource?: "warranty" | "purchase" | "model" | "created";
+  model?: string;
+  huntressProtected: boolean;
 }
 
 export interface DashboardData {

@@ -165,6 +165,8 @@ export async function registerRoutes(
           phishingCompromiseRate: null,
           phishingReportRate: null,
           recentPhishingCampaigns: [],
+          satUnenrolledUsers: [],
+          identitiesMonitored: null,
           trendDirection: "stable",
         } satisfies SecuritySummary);
       }
@@ -228,6 +230,46 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       log(`Coverage gap error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/device-users/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId as string);
+      if (isNaN(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID" });
+      }
+
+      if (!ninjaone.isConfigured()) {
+        return res.json({ devices: [] });
+      }
+
+      let orgName = `Organization ${orgId}`;
+      try {
+        const orgs = await ninjaone.getOrganizations();
+        const org = orgs.find((o) => o.id === orgId);
+        if (org) orgName = org.name;
+      } catch {}
+
+      const devices = await ninjaone.getDeviceUserMapping(orgId);
+
+      if (huntress.isConfigured()) {
+        try {
+          const huntressHostnames = await huntress.getAgentHostnames(orgName);
+          const huntressSet = new Set(huntressHostnames.map(h => h.toLowerCase().split(".")[0].replace(/[^a-z0-9-]/g, "")));
+          for (const d of devices) {
+            const normalizedHostname = d.hostname.toLowerCase().split(".")[0].replace(/[^a-z0-9-]/g, "");
+            d.huntressProtected = huntressSet.has(normalizedHostname);
+          }
+        } catch (e: any) {
+          log(`Device-user Huntress cross-ref error: ${e.message}`);
+        }
+      }
+
+      res.json({ devices });
+    } catch (err: any) {
+      log(`Device-user mapping error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

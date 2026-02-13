@@ -12,6 +12,7 @@ import type {
   LicenseReport,
   RoadmapAnalysis,
   TbrSnapshot,
+  DeviceUserEntry,
 } from "@shared/schema";
 
 interface MeetingExportProps {
@@ -23,6 +24,7 @@ interface MeetingExportProps {
   licenseReport: LicenseReport | null;
   roadmap: RoadmapAnalysis | null;
   previousSnapshot?: TbrSnapshot | null;
+  deviceUserInventory?: DeviceUserEntry[] | null;
 }
 
 export function MeetingExport({
@@ -34,6 +36,7 @@ export function MeetingExport({
   licenseReport,
   roadmap,
   previousSnapshot,
+  deviceUserInventory,
 }: MeetingExportProps) {
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
@@ -55,6 +58,7 @@ export function MeetingExport({
         licenseReport,
         roadmap,
         previousSnapshot: previousSnapshot || null,
+        deviceUserInventory: deviceUserInventory || null,
       }),
     });
 

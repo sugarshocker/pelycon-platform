@@ -28,6 +28,7 @@ import type {
   RoadmapAnalysis,
   ApiStatus,
   TbrSnapshot,
+  DeviceUserEntry,
 } from "@shared/schema";
 
 interface DashboardProps {
@@ -74,6 +75,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const { data: draftData } = useQuery<{ draft: TbrSnapshot | null }>({
     queryKey: ["/api/tbr/draft", selectedClient?.id],
     enabled: !!selectedClient,
+  });
+
+  const { data: deviceUserData } = useQuery<{ devices: DeviceUserEntry[] }>({
+    queryKey: ["/api/device-users", selectedClient?.id],
+    enabled: !!selectedClient,
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -251,6 +258,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 licenseReport={licenseReport}
                 roadmap={roadmap}
                 previousSnapshot={previousSnapshot}
+                deviceUserInventory={deviceUserData?.devices || null}
               />
               <Button
                 variant="outline"

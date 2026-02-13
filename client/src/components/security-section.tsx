@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CollapsibleSection } from "./collapsible-section";
 import { StatusDot, TrendIndicator } from "./status-indicator";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap, Crosshair, BookOpen, Users } from "lucide-react";
-import type { SecuritySummary, Organization } from "@shared/schema";
+import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap, Crosshair, BookOpen, Users, Monitor, ChevronDown, ChevronUp, Fingerprint } from "lucide-react";
+import type { SecuritySummary, Organization, DeviceUserEntry } from "@shared/schema";
 
 interface MissingDevice {
   name: string;
@@ -198,6 +200,96 @@ function SatSubsection({ data }: { data: SecuritySummary }) {
   );
 }
 
+function DeviceUserInventory({ client }: { client: Organization }) {
+  const [expanded, setExpanded] = useState(false);
+  const { data, isLoading } = useQuery<{ devices: DeviceUserEntry[] }>({
+    queryKey: ["/api/device-users", client.id],
+    enabled: !!client.id && expanded,
+  });
+
+  const devices = data?.devices || [];
+  const sortedDevices = [...devices].sort((a, b) => a.hostname.localeCompare(b.hostname));
+
+  return (
+    <div className="space-y-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full justify-between"
+        data-testid="button-toggle-device-inventory"
+      >
+        <div className="flex items-center gap-2">
+          <Monitor className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Device-User Inventory</span>
+        </div>
+        {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </Button>
+
+      {expanded && (
+        <div className="rounded-md border">
+          {isLoading ? (
+            <div className="p-4 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 rounded-md" />
+              ))}
+            </div>
+          ) : devices.length === 0 ? (
+            <div className="p-4 text-sm text-muted-foreground text-center">
+              No device data available.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-3 py-2 font-medium">Hostname</th>
+                    <th className="text-left px-3 py-2 font-medium">User</th>
+                    <th className="text-left px-3 py-2 font-medium">Type</th>
+                    <th className="text-left px-3 py-2 font-medium">OS</th>
+                    <th className="text-center px-3 py-2 font-medium">Age</th>
+                    <th className="text-center px-3 py-2 font-medium">Huntress</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedDevices.map((device, i) => (
+                    <tr
+                      key={i}
+                      className={`border-b last:border-b-0 ${i % 2 === 0 ? "" : "bg-muted/20"}`}
+                      data-testid={`device-row-${i}`}
+                    >
+                      <td className="px-3 py-1.5 font-mono text-xs">{device.hostname}</td>
+                      <td className="px-3 py-1.5">{device.lastLoggedInUser || <span className="text-muted-foreground">-</span>}</td>
+                      <td className="px-3 py-1.5">
+                        <Badge variant="secondary">{device.deviceType}</Badge>
+                      </td>
+                      <td className="px-3 py-1.5 text-xs">{device.osName || "-"}</td>
+                      <td className="px-3 py-1.5 text-center">
+                        {device.age !== undefined && device.age !== null ? (
+                          <span className={device.age >= 5 ? "text-red-600 dark:text-red-400 font-medium" : ""}>
+                            {device.ageSource === "model" ? "~" : ""}{device.age}y
+                          </span>
+                        ) : "-"}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        {device.huntressProtected ? (
+                          <ShieldCheck className="h-4 w-4 text-green-600 dark:text-green-400 mx-auto" />
+                        ) : (
+                          <ShieldAlert className="h-4 w-4 text-red-500 mx-auto" />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SecuritySection({ client }: SecuritySectionProps) {
   const { data, isLoading, error } = useQuery<SecuritySummary>({
     queryKey: ["/api/security", client.id],
@@ -309,7 +401,24 @@ export function SecuritySection({ client }: SecuritySectionProps) {
           </div>
         </div>
 
+        {data.identitiesMonitored !== null && data.identitiesMonitored > 0 && (
+          <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
+            <Fingerprint className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-lg font-bold" data-testid="text-identities-monitored">{data.identitiesMonitored}</span>
+                <span className="text-sm text-muted-foreground">M365 Identities Monitored (ITDR)</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Identity Threat Detection & Response via Huntress
+              </span>
+            </div>
+          </div>
+        )}
+
         <SatSubsection data={data} />
+
+        <DeviceUserInventory client={client} />
 
         {coverageGap && coverageGap.missingFromHuntress.length > 0 && (
           <div className="space-y-2">

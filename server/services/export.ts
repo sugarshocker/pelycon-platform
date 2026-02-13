@@ -8,6 +8,7 @@ import type {
   LicenseReport,
   RoadmapAnalysis,
   TbrSnapshot,
+  DeviceUserEntry,
 } from "@shared/schema";
 
 let _logoCache: string | null = null;
@@ -75,6 +76,7 @@ export function generateSummaryHtml(data: {
   licenseReport?: LicenseReport | null;
   roadmap?: RoadmapAnalysis | null;
   previousSnapshot?: TbrSnapshot | null;
+  deviceUserInventory?: DeviceUserEntry[] | null;
 }): string {
   const today = new Date().toLocaleDateString("en-US", {
     month: "long",
@@ -316,6 +318,42 @@ export function generateSummaryHtml(data: {
         </table>`;
       sections += buildSection("Progress Since Last Review", `Comparing to ${prevDate}`, [trendTable]);
     }
+  }
+
+  // === APPENDIX: DEVICE-USER INVENTORY ===
+  if (data.deviceUserInventory && data.deviceUserInventory.length > 0) {
+    const sorted = [...data.deviceUserInventory].sort((a, b) => a.hostname.localeCompare(b.hostname));
+    const rows = sorted.map(d => {
+      const ageStr = d.age !== undefined && d.age !== null ? `${d.ageSource === "model" ? "~" : ""}${d.age}y` : "\u2014";
+      const ageColor = d.age !== undefined && d.age !== null && d.age >= 5 ? "color:#dc2626;font-weight:600" : "";
+      const huntressIcon = d.huntressProtected
+        ? '<span style="color:#16a34a">&#10003;</span>'
+        : '<span style="color:#dc2626">&#10007;</span>';
+      return `<tr>
+        <td style="font-family:monospace;font-size:11px">${d.hostname}</td>
+        <td>${d.lastLoggedInUser || '<span style="color:#9ca3af">\u2014</span>'}</td>
+        <td>${d.deviceType}</td>
+        <td style="font-size:11px">${d.osName || "\u2014"}</td>
+        <td style="text-align:center;${ageColor}">${ageStr}</td>
+        <td style="text-align:center">${huntressIcon}</td>
+      </tr>`;
+    });
+
+    let itdrLine = "";
+    if (data.security?.identitiesMonitored) {
+      itdrLine = `<div class="sub" style="margin-bottom:8px"><strong>${data.security.identitiesMonitored}</strong> M365 identities monitored via Huntress ITDR</div>`;
+    }
+
+    sections += buildSection(
+      "Appendix: Device & User Inventory",
+      `${sorted.length} managed devices`,
+      [
+        itdrLine + `<table>
+          <tr><th>Hostname</th><th>User</th><th>Type</th><th>OS</th><th style="text-align:center">Age</th><th style="text-align:center">Huntress</th></tr>
+          ${rows.join("")}
+        </table>`
+      ]
+    );
   }
 
   return `<!DOCTYPE html>
