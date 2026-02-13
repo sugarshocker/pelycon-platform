@@ -320,44 +320,73 @@ export function generateSummaryHtml(data: {
     }
   }
 
-  // === APPENDIX: DEVICE-USER INVENTORY ===
-  if (data.deviceUserInventory && data.deviceUserInventory.length > 0) {
-    const sorted = [...data.deviceUserInventory].sort((a, b) => {
-      const ageA = a.age ?? -1;
-      const ageB = b.age ?? -1;
-      if (ageB !== ageA) return ageB - ageA;
-      return a.hostname.localeCompare(b.hostname);
-    });
-    const rows = sorted.map(d => {
-      const ageStr = d.age !== undefined && d.age !== null ? `${d.ageSource === "model" ? "~" : ""}${d.age}y` : "\u2014";
-      const ageColor = d.age !== undefined && d.age !== null && d.age >= 5 ? "color:#dc2626;font-weight:600" : "";
-      const huntressIcon = d.huntressProtected
-        ? '<span style="color:#16a34a">&#10003;</span>'
-        : '<span style="color:#dc2626">&#10007;</span>';
-      return `<tr>
-        <td style="font-family:monospace;font-size:11px">${d.hostname}</td>
-        <td>${d.lastLoggedInUser || '<span style="color:#9ca3af">\u2014</span>'}</td>
-        <td>${d.deviceType}</td>
-        <td style="font-size:11px">${d.osName || "\u2014"}</td>
-        <td style="text-align:center;${ageColor}">${ageStr}</td>
-        <td style="text-align:center">${huntressIcon}</td>
-      </tr>`;
-    });
+  // === APPENDIX: COMPUTERS & USERS ===
+  const hasDevices = data.deviceUserInventory && data.deviceUserInventory.length > 0;
+  const hasUsers = data.mfaReport?.allUsers && data.mfaReport.allUsers.length > 0;
 
-    let itdrLine = "";
-    if (data.security?.identitiesMonitored) {
-      itdrLine = `<div class="sub" style="margin-bottom:8px"><strong>${data.security.identitiesMonitored}</strong> M365 identities monitored via Huntress ITDR</div>`;
+  if (hasDevices || hasUsers) {
+    const appendixItems: string[] = [];
+
+    if (hasDevices) {
+      const sorted = [...data.deviceUserInventory!].sort((a, b) => {
+        const ageA = a.age ?? -1;
+        const ageB = b.age ?? -1;
+        if (ageB !== ageA) return ageB - ageA;
+        return a.hostname.localeCompare(b.hostname);
+      });
+      const deviceRows = sorted.map(d => {
+        const ageStr = d.age !== undefined && d.age !== null ? `${d.ageSource === "model" ? "~" : ""}${d.age}y` : "\u2014";
+        const ageColor = d.age !== undefined && d.age !== null && d.age >= 5 ? "color:#dc2626;font-weight:600" : "";
+        return `<tr>
+          <td style="font-family:monospace;font-size:11px">${d.hostname}</td>
+          <td>${d.lastLoggedInUser || '<span style="color:#9ca3af">\u2014</span>'}</td>
+          <td>${d.deviceType}</td>
+          <td style="font-size:11px">${d.osName || "\u2014"}</td>
+          <td style="text-align:center;${ageColor}">${ageStr}</td>
+        </tr>`;
+      });
+
+      appendixItems.push(
+        `<div style="margin-bottom:4px"><strong>${sorted.length} Managed Computers</strong></div>
+        <table>
+          <tr><th>Hostname</th><th>User</th><th>Type</th><th>OS</th><th style="text-align:center">Age</th></tr>
+          ${deviceRows.join("")}
+        </table>`
+      );
+    }
+
+    if (hasUsers) {
+      const allUsers = data.mfaReport!.allUsers;
+      const sortedUsers = [...allUsers].sort((a, b) => a.displayName.localeCompare(b.displayName));
+      const userRows = sortedUsers.map(u => {
+        const mfaIcon = u.isCovered
+          ? '<span style="color:#16a34a">&#10003;</span>'
+          : '<span style="color:#dc2626">&#10007;</span>';
+        const method = u.coverageMethod === "conditionalAccess" ? "Conditional Access"
+          : u.coverageMethod === "securityDefaults" ? "Security Defaults"
+          : u.coverageMethod === "perUser" ? "Per-User"
+          : '<span style="color:#9ca3af">\u2014</span>';
+        return `<tr>
+          <td>${u.displayName}</td>
+          <td style="font-size:11px">${u.email}</td>
+          <td style="text-align:center">${mfaIcon}</td>
+          <td style="font-size:11px">${method}</td>
+        </tr>`;
+      });
+
+      appendixItems.push(
+        `<div style="margin-top:16px;margin-bottom:4px"><strong>${allUsers.length} Licensed &amp; Enabled Microsoft 365 Users</strong></div>
+        <table>
+          <tr><th>Name</th><th>Email</th><th style="text-align:center">MFA</th><th>MFA Method</th></tr>
+          ${userRows.join("")}
+        </table>`
+      );
     }
 
     sections += buildSection(
-      "Appendix: Device & User Inventory",
-      `${sorted.length} managed devices`,
-      [
-        itdrLine + `<table>
-          <tr><th>Hostname</th><th>User</th><th>Type</th><th>OS</th><th style="text-align:center">Age</th><th style="text-align:center">Huntress</th></tr>
-          ${rows.join("")}
-        </table>`
-      ]
+      "Appendix",
+      "Computers & Users",
+      appendixItems
     );
   }
 

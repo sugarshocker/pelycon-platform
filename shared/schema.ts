@@ -185,6 +185,7 @@ export interface MfaReport {
   coveredByCA: number;
   coveredBySD: number;
   uncoveredUsers: MfaUser[];
+  allUsers: MfaUser[];
 }
 
 export interface LicenseEntry {

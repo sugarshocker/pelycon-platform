@@ -435,6 +435,7 @@ export async function registerRoutes(
         coveredByCA: users.filter((u: any) => u.coveredByCA).length,
         coveredBySD: users.filter((u: any) => u.coveredBySD).length,
         uncoveredUsers,
+        allUsers: users,
       };
 
       res.json(report);
