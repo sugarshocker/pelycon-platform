@@ -902,7 +902,7 @@ function generateFollowUpEmail(clientName: string, followUpTasks: Array<{ id: st
   if (tasks.length > 0) {
     email += `\n\nBased on our discussion, here are the items Nick and the team will be working through:\n`;
     tasks.forEach((task, i) => {
-      const cleanText = task.text.replace(/^Reconcile Huntress\/NinjaOne disparity: /, "Reconcile endpoint protection coverage: ").replace(/^Remove unused MS365 licenses to reduce waste — /, "Clean up unused Microsoft 365 licenses: ");
+      const cleanText = task.text.replace(/^Reconcile Huntress\/NinjaOne disparity: \d+ device\(s\) not protected by Huntress — .*$/, "Follow up on endpoint protection coverage — the team will review any disparities between our management tools and confirm all managed computers have the protection they need.").replace(/^Remove unused MS365 licenses to reduce waste — /, "Clean up unused Microsoft 365 licenses: ");
       email += `\n  ${i + 1}. ${cleanText}`;
     });
     email += `\n\nWe'll keep you posted on progress and reach out if we need anything from your side.`;
