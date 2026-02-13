@@ -20,7 +20,7 @@ import {
   History, FileText, AlertCircle, Plus, ArrowLeft, ChevronDown,
   ChevronUp, Monitor, Shield, Ticket, KeyRound, AlertTriangle,
   MessageSquare, StickyNote, CheckSquare, Square, FileDown,
-  Unlock, Zap,
+  Unlock, Zap, Copy, Mail, Check,
 } from "lucide-react";
 import { apiRequest, clearToken, getToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -412,6 +412,7 @@ function SnapshotCard({
               {isDownloading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-1.5" />}
               Download PDF
             </Button>
+            <FollowUpEmailDraft clientName={snapshot.orgName} fullData={snapshot.fullData} />
             <Button
               variant="ghost"
               size="sm"
@@ -474,6 +475,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
   const [internalNotes, setInternalNotes] = useState<InternalNotes>({ serviceManagerNotes: "", leadEngineerNotes: "" });
   const [clientFeedback, setClientFeedback] = useState<ClientFeedback>({ notes: "", followUpTasks: [] });
   const [hasDraft, setHasDraft] = useState(false);
+  const [showFinalizationEmail, setShowFinalizationEmail] = useState(false);
   const { toast } = useToast();
 
   const { data: deviceHealth } = useQuery<DeviceHealthSummary>({
@@ -609,8 +611,8 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", client.id] });
       setHasDraft(false);
-      toast({ title: "TBR Finalized", description: `This review has been recorded for ${client.name}. It is now sealed and visible in the client's review history.` });
-      onBack();
+      setShowFinalizationEmail(true);
+      toast({ title: "TBR Finalized", description: `Review recorded for ${client.name}. Copy the follow-up email below, then head back to overview.` });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to finalize the TBR. Please try again.", variant: "destructive" });
@@ -618,6 +620,19 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
   });
 
   const previousSnapshot = tbrHistory?.previous || null;
+
+  if (showFinalizationEmail) {
+    const emailFollowUps = clientFeedback.followUpTasks;
+    const emailText = generateFollowUpEmail(client.name, emailFollowUps);
+
+    return (
+      <FinalizationConfirmation
+        clientName={client.name}
+        emailText={emailText}
+        onBack={onBack}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -821,6 +836,134 @@ function TrendBadge({ label, current, previous, invertColor = false, suffix = ""
       </span>
       {label}
     </Badge>
+  );
+}
+
+function FinalizationConfirmation({ clientName, emailText, onBack }: { clientName: string; emailText: string; onBack: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(emailText);
+      setCopied(true);
+      toast({ title: "Copied to clipboard", description: "Paste the email into your mail client and attach the PDF." });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: "Copy failed", description: "Please select and copy the text manually.", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+          <div>
+            <h2 className="text-lg font-semibold" data-testid="text-finalized-title">Review Finalized</h2>
+            <p className="text-sm text-muted-foreground">{clientName}</p>
+          </div>
+        </div>
+        <Button onClick={onBack} data-testid="button-done-overview">
+          <ArrowLeft className="h-4 w-4 mr-1.5" />
+          Back to Overview
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Follow-Up Email Draft</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleCopy} data-testid="button-copy-finalization-email">
+              {copied ? <Check className="h-3.5 w-3.5 mr-1.5" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
+              {copied ? "Copied" : "Copy to Clipboard"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Copy this email, paste it into your mail client, and attach the PDF summary.
+          </p>
+          <div className="rounded-md bg-muted/50 px-4 py-3">
+            <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed" data-testid="text-finalization-email">{emailText}</pre>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function generateFollowUpEmail(clientName: string, followUpTasks: Array<{ id: string; text: string; completed: boolean }> | undefined): string {
+  const tasks = (followUpTasks || []).filter(t => !t.completed);
+
+  let email = `Hi there,\n\nThank you for taking the time to meet with us today for your Technology Business Review. We really appreciate the partnership and the chance to make sure everything is running smoothly for your team.\n\nAttached you'll find the PDF summary of what we covered during our conversation.`;
+
+  if (tasks.length > 0) {
+    email += `\n\nBased on our discussion, here are the items Nick and the team will be working through:\n`;
+    tasks.forEach((task, i) => {
+      const cleanText = task.text.replace(/^Reconcile Huntress\/NinjaOne disparity: /, "Reconcile endpoint protection coverage: ").replace(/^Remove unused MS365 licenses to reduce waste — /, "Clean up unused Microsoft 365 licenses: ");
+      email += `\n  ${i + 1}. ${cleanText}`;
+    });
+    email += `\n\nWe'll keep you posted on progress and reach out if we need anything from your side.`;
+  } else {
+    email += `\n\nEverything is looking solid on our end — no outstanding action items from this review.`;
+  }
+
+  email += `\n\nAs always, don't hesitate to reach out if anything comes up before our next review. We're here to help.\n\nBest,\nNick\nPelycon Technologies`;
+
+  return email;
+}
+
+function FollowUpEmailDraft({ clientName, fullData, className }: { clientName: string; fullData: any; className?: string }) {
+  const [showEmail, setShowEmail] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
+
+  const followUpTasks = fullData?.clientFeedback?.followUpTasks;
+  const emailText = generateFollowUpEmail(clientName, followUpTasks);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(emailText);
+      setCopied(true);
+      toast({ title: "Copied to clipboard", description: "The follow-up email has been copied. Paste it into your email client." });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: "Copy failed", description: "Please select and copy the text manually.", variant: "destructive" });
+    }
+  };
+
+  if (!showEmail) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setShowEmail(true)} className={className} data-testid="button-show-followup-email">
+        <Mail className="h-3.5 w-3.5 mr-1.5" />
+        Follow-Up Email
+      </Button>
+    );
+  }
+
+  return (
+    <div className={`mt-3 ${className || ""}`}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5">
+          <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+          <p className="text-xs font-medium text-muted-foreground">Follow-Up Email Draft</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleCopy} data-testid="button-copy-email">
+            {copied ? <Check className="h-3.5 w-3.5 mr-1.5" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowEmail(false)} data-testid="button-hide-email">
+            Hide
+          </Button>
+        </div>
+      </div>
+      <div className="rounded-md bg-muted/50 px-4 py-3">
+        <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed" data-testid="text-followup-email">{emailText}</pre>
+      </div>
+    </div>
   );
 }
 
