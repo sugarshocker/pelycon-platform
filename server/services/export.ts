@@ -322,7 +322,8 @@ export function generateSummaryHtml(data: {
 
   // === APPENDIX: COMPUTERS & USERS ===
   const hasDevices = data.deviceUserInventory && data.deviceUserInventory.length > 0;
-  const hasUsers = data.mfaReport?.allUsers && data.mfaReport.allUsers.length > 0;
+  const mfaUserList = data.mfaReport?.allUsers || data.mfaReport?.uncoveredUsers;
+  const hasUsers = mfaUserList && mfaUserList.length > 0;
 
   if (hasDevices || hasUsers) {
     const appendixItems: string[] = [];
@@ -356,7 +357,7 @@ export function generateSummaryHtml(data: {
     }
 
     if (hasUsers) {
-      const allUsers = data.mfaReport!.allUsers;
+      const allUsers = data.mfaReport!.allUsers || data.mfaReport!.uncoveredUsers || [];
       const sortedUsers = [...allUsers].sort((a, b) => a.displayName.localeCompare(b.displayName));
       const userRows = sortedUsers.map(u => {
         const mfaIcon = u.isCovered
