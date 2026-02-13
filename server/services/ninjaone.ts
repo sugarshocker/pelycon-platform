@@ -489,6 +489,7 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
   let installedPatchCount = 0;
   let totalApprovedManual = 0;
   let noTimestampCount = 0;
+  let totalPatchesConsidered = 0;
   try {
     const patchData = await apiGet(`/v2/queries/os-patches?df=org = ${orgId}&pageSize=500`);
     const results = patchData.results || [];
@@ -497,9 +498,11 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
       const status = (p.status || "").toUpperCase();
       if (status === "APPROVED" || status === "MANUAL") {
         totalApprovedManual++;
+        totalPatchesConsidered++;
         const patchTimestamp = p.timestamp || p.kbInstalledTimestamp || p.approvedTimestamp || p.created || null;
         if (!patchTimestamp) {
           noTimestampCount++;
+          pendingPatchCount++;
           continue;
         }
         const patchDate = typeof patchTimestamp === "number"
@@ -507,22 +510,25 @@ export async function getDeviceHealth(orgId: number): Promise<DeviceHealthSummar
           : new Date(patchTimestamp).getTime();
         if (isNaN(patchDate)) {
           noTimestampCount++;
+          pendingPatchCount++;
           continue;
         }
         if (patchDate <= thirtyDaysAgo) {
           pendingPatchCount++;
         }
-      } else if (status === "REJECTED") {
+      } else if (status === "INSTALLED" || status === "REJECTED") {
         installedPatchCount++;
+        totalPatchesConsidered++;
       }
     }
-    log(`NinjaOne patches for org ${orgId}: approved/manual=${totalApprovedManual}, pending(30d+)=${pendingPatchCount}, skipped(no timestamp)=${noTimestampCount}, rejected=${installedPatchCount}, total=${results.length}`);
+    log(`NinjaOne patches for org ${orgId}: approved/manual=${totalApprovedManual}, pending(30d+)=${pendingPatchCount}, installed=${installedPatchCount}, skipped(no timestamp)=${noTimestampCount}, total=${results.length}`);
   } catch (e) {
     log(`Could not fetch os-patches for org ${orgId}: ${e}`);
   }
 
-  const patchCompliancePercent =
-    pendingPatchCount > 0 ? 0 : 100;
+  const patchCompliancePercent = totalPatchesConsidered > 0
+    ? Math.round(((totalPatchesConsidered - pendingPatchCount) / totalPatchesConsidered) * 100)
+    : 100;
 
   let criticalAlerts: DeviceHealthSummary["criticalAlerts"] = [];
   try {
