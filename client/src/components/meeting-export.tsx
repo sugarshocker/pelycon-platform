@@ -95,37 +95,41 @@ export function MeetingExport({
 
       const html2pdf = (await import("html2pdf.js")).default;
 
-      const container = document.createElement("div");
-      container.innerHTML = html;
-      const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-      const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
 
       const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:absolute;left:-9999px;top:0;width:800px;font-family:'Poppins',sans-serif;";
+      wrapper.style.cssText = "position:fixed;left:0;top:0;width:800px;z-index:99999;pointer-events:none;background:white;";
 
-      if (styleMatch) {
-        const style = document.createElement("style");
-        style.textContent = styleMatch[1];
-        wrapper.appendChild(style);
+      const styleEl = doc.querySelector("style");
+      if (styleEl) {
+        const s = document.createElement("style");
+        s.textContent = styleEl.textContent || "";
+        wrapper.appendChild(s);
       }
 
       const content = document.createElement("div");
-      content.innerHTML = bodyMatch ? bodyMatch[1] : html;
-      content.style.cssText = "padding:40px 24px;color:#394442;line-height:1.6;max-width:800px;margin:0 auto;";
+      content.innerHTML = doc.body.innerHTML;
+      content.style.cssText = "font-family:'Poppins',sans-serif;padding:36px 24px;color:#394442;line-height:1.5;font-size:13px;max-width:780px;margin:0 auto;background:white;";
       wrapper.appendChild(content);
       document.body.appendChild(wrapper);
+
+      await new Promise(r => setTimeout(r, 100));
 
       const filename = `TBR_${client.name.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
 
       const pdfOptions = {
-        margin: [10, 10, 10, 10],
+        margin: [8, 8, 8, 8],
         filename,
-        image: { type: "jpeg" as const, quality: 0.95 },
+        image: { type: "jpeg" as const, quality: 0.98 },
         html2canvas: {
           scale: 2,
           useCORS: true,
           letterRendering: true,
           width: 800,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 800,
         },
         jsPDF: { unit: "mm", format: "letter", orientation: "portrait" as const },
         pagebreak: { mode: ["avoid-all", "css", "legacy"] },
@@ -133,7 +137,7 @@ export function MeetingExport({
 
       await html2pdf()
         .set(pdfOptions as any)
-        .from(wrapper)
+        .from(content)
         .save();
 
       document.body.removeChild(wrapper);
