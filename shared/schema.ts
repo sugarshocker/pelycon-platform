@@ -213,6 +213,7 @@ export interface RoadmapItem {
 }
 
 export interface RoadmapAnalysis {
+  executiveSummary: string;
   items: RoadmapItem[];
   generatedAt: string;
 }

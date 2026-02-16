@@ -103,17 +103,19 @@ ${lic.licenses
 
   if (data.internalNotes) {
     const notes = data.internalNotes;
-    const hasSm = notes.serviceManagerNotes?.trim();
     const hasEng = notes.leadEngineerNotes?.trim();
-    if (hasSm || hasEng) {
-      let notesSection = `\nINTERNAL TEAM OBSERVATIONS (CONFIDENTIAL — must be diplomatically rephrased):`;
-      if (hasSm) {
-        notesSection += `\nService Manager notes: ${notes.serviceManagerNotes}`;
-      }
-      if (hasEng) {
-        notesSection += `\nLead Engineer notes: ${notes.leadEngineerNotes}`;
-      }
-      sections.push(notesSection);
+    const hasSm = notes.serviceManagerNotes?.trim();
+    if (hasEng) {
+      sections.push(`
+LEAD ENGINEER ASSESSMENT (HIGH PRIORITY — this is direct input from the engineer who works hands-on in this environment daily):
+${notes.leadEngineerNotes}
+
+^^^ The above engineer observations carry significant weight. These come from the person who knows this environment best. Each concern raised by the engineer should be reflected as a roadmap item or incorporated into an existing item. Corroborate with the data above where possible, but do NOT dismiss engineer observations even if data is limited.`);
+    }
+    if (hasSm) {
+      sections.push(`
+SERVICE MANAGER OBSERVATIONS (incorporate only if they raise something significant — operational patterns, client relationship context, or strategic concerns):
+${notes.serviceManagerNotes}`);
     }
   }
 
@@ -151,25 +153,28 @@ export async function generateRoadmap(
       messages: [
         {
           role: "user",
-          content: `You are an IT advisor creating a Technology Business Review priority roadmap for a business owner (NOT an IT person). Based on the following data, create a prioritized list of 3-5 recommended actions for the next 6 months.
+          content: `You are an IT advisor creating a Technology Business Review priority roadmap for a business owner (NOT an IT person). Based on the following data, create an executive summary and a prioritized list of 3-7 recommended actions for the next 6 months.
 
 ${dataPrompt}
 
 RULES:
 - Write in plain language. No jargon. The client is a business owner reading this on screen.
-- Each item should explain: what the issue is, why it matters to the BUSINESS (not IT), and how urgent it is.
+- Start with an EXECUTIVE SUMMARY (2-4 sentences): A high-level snapshot of where this client stands. Mention the biggest wins, the most pressing concern, and anything the lead engineer or service manager flagged that the client should be aware of (rephrased diplomatically). This summary should feel like a quick verbal update from a trusted advisor.
+- Each roadmap item should explain: what the issue is, why it matters to the BUSINESS (not IT), and how urgent it is.
 - Frame everything around "avoiding surprises" — preventing unexpected costs, downtime, or security incidents.
 - Priorities must be one of: "urgent" (address within 30 days), "plan_for" (address within 3-6 months), or "nice_to_have" (consider when budget allows).
 - IMPORTANT: If internal team observations are provided, incorporate their insights into your recommendations but NEVER quote them directly or reveal they came from internal notes. Diplomatically rephrase any observations about user behavior, training needs, or infrastructure concerns into professional, forward-looking recommendations. Never blame users or mention specific employee complaints. Frame issues as opportunities for improvement.
 
 MSP PRIORITY BIASES (apply these when ranking and shaping recommendations):
 1. MFA COVERAGE IS THE #1 PRIORITY. If any users lack MFA, this MUST be the first "urgent" item. The goal is 100% MFA coverage — no exceptions. Frame this as the single most impactful security measure they can take.
-2. BACKUP FAILURES: Only flag backup issues if they are CHRONIC or RECURRING patterns. Occasional one-off backup failures are normal and within acceptable standards — do NOT elevate these. Only mention backups if the data shows a persistent, repeated problem.
-3. REPEAT PROBLEM DEVICES/USERS: If the ticket data shows the same computer or user appearing repeatedly across multiple support requests, this deserves a dedicated mention. Recurring issues signal something that needs a permanent fix rather than repeated break-fix.
-4. LEAD ENGINEER NOTES GET PRIORITY: When internal engineer observations are provided, give them significant weight in shaping recommendations — they reflect hands-on knowledge of the environment. Where possible, corroborate engineer observations with supporting data from the other sections (device health, tickets, security). Engineer recommendations backed by data should be elevated in priority.
+2. LEAD ENGINEER NOTES ARE THE #2 PRIORITY. The lead engineer's observations come from hands-on daily experience in this environment. Every concern the engineer raises MUST appear in the roadmap — either as its own item or clearly incorporated into a related item. Corroborate with data where possible, but engineer observations should be included even without supporting data. If the engineer flags a concern, it is real.
+3. SERVICE MANAGER NOTES: If the service manager has flagged something significant (a pattern, a client concern, a strategic issue), incorporate it. Routine operational notes can be skipped.
+4. BACKUP FAILURES: Only flag backup issues if they are CHRONIC or RECURRING patterns. Occasional one-off backup failures are normal and within acceptable standards — do NOT elevate these. Only mention backups if the data shows a persistent, repeated problem.
+5. REPEAT PROBLEM DEVICES/USERS: If the ticket data shows the same computer or user appearing repeatedly across multiple support requests, this deserves a dedicated mention. Recurring issues signal something that needs a permanent fix rather than repeated break-fix.
 
 Respond with ONLY valid JSON in this exact format:
 {
+  "executiveSummary": "2-4 sentence high-level overview of where this client stands — biggest wins, top concern, and any key observations from the team.",
   "items": [
     {
       "title": "Short action title",
@@ -201,6 +206,7 @@ Respond with ONLY valid JSON in this exact format:
     }
 
     return {
+      executiveSummary: parsed.executiveSummary || "",
       items: parsed.items as RoadmapItem[],
       generatedAt: new Date().toISOString(),
     };

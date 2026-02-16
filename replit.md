@@ -19,7 +19,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `server/services/ninjaone.ts` - NinjaOne API integration (Legacy API Keys, HMAC-SHA1)
 - `server/services/huntress.ts` - Huntress API integration (Basic auth)
 - `server/services/connectwise.ts` - ConnectWise Manage API integration (Basic auth)
-- `server/services/roadmap.ts` - Claude AI roadmap generation
+- `server/services/roadmap.ts` - Claude AI roadmap generation (executive summary + priority items)
 - `server/services/export.ts` - HTML summary export ("No Surprises" framework)
 - `client/src/App.tsx` - Main app with auth state management
 - `client/src/pages/login.tsx` - Password login page (Pelycon branded)
@@ -72,7 +72,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status
 2. **Capacity Planning** - Device inventory, aging hardware, EOL OS, patch compliance, stale devices
 3. **Financial Efficiency** - License utilization, waste calculations, cost trends
-4. **Recommended Actions** - AI-generated priority roadmap items
+4. **Recommended Actions** - Executive summary + AI-generated priority roadmap items (3-7)
 5. **Progress Since Last Review** - Trend comparison table (when previous TBR exists)
 
 ## API Implementation Notes

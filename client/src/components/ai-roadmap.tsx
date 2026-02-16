@@ -151,6 +151,12 @@ export function AiRoadmap({
     >
       {roadmap ? (
         <div className="space-y-3">
+          {roadmap.executiveSummary && (
+            <div className="rounded-md border border-border bg-card p-4 space-y-1" data-testid="roadmap-executive-summary">
+              <h4 className="text-sm font-semibold text-foreground">Executive Summary</h4>
+              <p className="text-sm text-muted-foreground leading-relaxed">{roadmap.executiveSummary}</p>
+            </div>
+          )}
           {roadmap.items.map((item, i) => (
             <RoadmapCard key={i} item={item} />
           ))}

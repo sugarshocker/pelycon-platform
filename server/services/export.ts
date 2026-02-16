@@ -273,15 +273,25 @@ export function generateSummaryHtml(data: {
     const priorityColors: Record<string, string> = { urgent: "#dc2626", plan_for: "#2563eb", nice_to_have: "#6b7280" };
     const priorityBg: Record<string, string> = { urgent: "#fef2f2", plan_for: "#eff6ff", nice_to_have: "#f9fafb" };
 
-    const actionCards = data.roadmap.items.map(item => `
+    const actionItems: string[] = [];
+
+    if (data.roadmap.executiveSummary) {
+      actionItems.push(`
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px;color:#334155">Executive Summary</div>
+          <div style="font-size:12px;color:#475569;line-height:1.6">${data.roadmap.executiveSummary}</div>
+        </div>`);
+    }
+
+    actionItems.push(...data.roadmap.items.map(item => `
         <div class="action-card" style="border-left:3px solid ${priorityColors[item.priority]};background:${priorityBg[item.priority]}">
           <div class="action-header">
             <strong>${item.title}</strong>
             <span class="priority-tag" style="color:${priorityColors[item.priority]}">${priorityLabels[item.priority]}</span>
           </div>
           <div class="action-why">${item.businessImpact}</div>
-        </div>`);
-    sections += buildSection("Recommended Next Steps", "Prioritized actions to keep your environment healthy", actionCards);
+        </div>`));
+    sections += buildSection("Recommended Next Steps", "Prioritized actions to keep your environment healthy", actionItems);
   }
 
   // === TREND COMPARISON ===
