@@ -309,32 +309,44 @@ function AntivirusCard({ data }: { data: SecuritySummary }) {
             <span className="text-sm text-muted-foreground">Managed Antivirus</span>
           </div>
           {hasUnprotected && (
-            <button
-              onClick={() => setShowUnprotected(!showUnprotected)}
-              className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 cursor-pointer"
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowUnprotected(!showUnprotected);
+              }}
+              className="h-auto px-1 py-0.5 text-xs text-amber-600 dark:text-amber-400"
               data-testid="button-toggle-unprotected-agents"
             >
-              <span>{data.antivirusNotProtectedCount} not protected</span>
-              {showUnprotected ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </button>
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              {data.antivirusNotProtectedCount} not protected
+              {showUnprotected ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+            </Button>
           )}
         </div>
       </div>
-      {hasUnprotected && showUnprotected && data.unprotectedAgents && data.unprotectedAgents.length > 0 && (
+      {hasUnprotected && showUnprotected && (
         <div className="space-y-1 ml-8" data-testid="unprotected-agents-list">
-          {data.unprotectedAgents.map((agent, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-3 py-1.5"
-              data-testid={`unprotected-agent-${i}`}
-            >
-              <ShieldAlert className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-              <span className="text-sm font-mono">{agent.hostname}</span>
-              <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
-                {agent.defenderStatus}
-              </Badge>
+          {data.unprotectedAgents && data.unprotectedAgents.length > 0 ? (
+            data.unprotectedAgents.map((agent, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-3 py-1.5"
+                data-testid={`unprotected-agent-${i}`}
+              >
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                <span className="text-sm font-mono">{agent.hostname}</span>
+                <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
+                  {agent.defenderStatus}
+                </Badge>
+              </div>
+            ))
+          ) : (
+            <div className="text-xs text-muted-foreground px-3 py-1.5">
+              Reload security data to see agent details.
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
