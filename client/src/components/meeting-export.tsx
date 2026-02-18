@@ -114,7 +114,7 @@ export function MeetingExport({
 
       const content = document.createElement("div");
       content.innerHTML = doc.body.innerHTML;
-      content.style.cssText = "font-family:'Poppins',sans-serif;padding:36px 24px;color:#394442;line-height:1.5;font-size:13px;max-width:780px;margin:0 auto;background:white;";
+      content.style.cssText = "font-family:'Poppins',sans-serif;padding:24px 20px;color:#394442;line-height:1.45;font-size:12px;max-width:780px;margin:0 auto;background:white;";
       wrapper.appendChild(content);
       document.body.appendChild(wrapper);
 
@@ -136,7 +136,7 @@ export function MeetingExport({
           windowWidth: 800,
         },
         jsPDF: { unit: "mm", format: "letter", orientation: "portrait" as const },
-        pagebreak: { mode: ["css"], avoid: [".item", ".action-card", ".snap-card"] },
+        pagebreak: { mode: ["css"], avoid: [".section-top", ".item", ".action-card", ".snap-card"] },
       };
 
       await html2pdf()

@@ -421,55 +421,55 @@ export function generateSummaryHtml(data: {
   <title>Technology Business Review \u2014 ${data.clientName}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif; color: #394442; max-width: 780px; margin: 0 auto; padding: 36px 24px; line-height: 1.5; font-size: 13px; }
+    body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif; color: #394442; max-width: 780px; margin: 0 auto; padding: 24px 20px; line-height: 1.45; font-size: 12px; }
 
-    .header { text-align: center; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 2px solid #E77125; }
-    .header .logo { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-    .header .logo-mark { width: 32px; height: 32px; object-fit: contain; }
-    .header .logo-text { font-size: 14px; font-weight: 600; color: #394442; }
-    .header h1 { font-size: 20px; color: #E77125; margin-bottom: 2px; letter-spacing: -0.3px; }
-    .header .client { font-size: 18px; font-weight: 600; }
-    .header .date { color: #6b7280; font-size: 12px; margin-top: 2px; }
-    .header .tagline { color: #6b7280; font-size: 11px; margin-top: 6px; font-style: italic; }
+    .header { text-align: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid #E77125; }
+    .header .logo { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .header .logo-mark { width: 28px; height: 28px; object-fit: contain; }
+    .header .logo-text { font-size: 13px; font-weight: 600; color: #394442; }
+    .header h1 { font-size: 18px; color: #E77125; margin-bottom: 2px; letter-spacing: -0.3px; }
+    .header .client { font-size: 16px; font-weight: 600; }
+    .header .date { color: #6b7280; font-size: 11px; margin-top: 2px; }
+    .header .tagline { color: #6b7280; font-size: 10px; margin-top: 4px; font-style: italic; }
 
-    .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
-    .snap-card { padding: 10px 12px; border-radius: 6px; }
-    .snap-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 2px; }
-    .snap-value { font-size: 16px; font-weight: 700; }
+    .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; margin-bottom: 12px; }
+    .snap-card { padding: 8px 10px; border-radius: 6px; }
+    .snap-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 1px; }
+    .snap-value { font-size: 15px; font-weight: 700; }
 
-    .section { margin-bottom: 14px; }
+    .section { margin-bottom: 10px; }
     .section-top { }
-    .section-header { margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; padding-top: 2px; }
-    .section-header h2 { font-size: 14px; color: #E77125; margin-bottom: 1px; }
-    .section-header .subtitle { font-size: 11px; color: #6b7280; }
+    .section-header { margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; padding-top: 2px; }
+    .section-header h2 { font-size: 13px; color: #E77125; margin-bottom: 1px; }
+    .section-header .subtitle { font-size: 10px; color: #6b7280; }
 
-    .item { padding: 5px 0; font-size: 13px; display: flex; align-items: flex-start; gap: 6px; }
-    .item .icon { flex-shrink: 0; font-size: 13px; line-height: 1.5; }
+    .item { padding: 3px 0; font-size: 12px; display: flex; align-items: flex-start; gap: 6px; }
+    .item .icon { flex-shrink: 0; font-size: 12px; line-height: 1.45; }
     .item.good .icon { color: #16a34a; }
     .item.attention .icon { color: #dc2626; }
 
-    .sub { font-size: 12px; margin: 2px 0 2px 22px; color: #6b7280; }
+    .sub { font-size: 11px; margin: 2px 0 2px 20px; color: #6b7280; }
     .callout-red { color: #dc2626; }
     .callout-amber { color: #d97706; }
 
-    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
-    th, td { padding: 5px 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-    th { background: #f9fafb; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+    th, td { padding: 3px 8px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
     .attention-text { color: #dc2626; font-weight: 600; }
 
-    .action-card { padding: 10px 14px; border-radius: 6px; margin-bottom: 6px; }
-    .action-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
-    .action-header strong { font-size: 13px; }
-    .priority-tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-    .action-why { font-size: 12px; color: #6b7280; }
+    .action-card { padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; }
+    .action-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+    .action-header strong { font-size: 12px; }
+    .priority-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .action-why { font-size: 11px; color: #6b7280; }
 
-    .trend-table th, .trend-table td { padding: 4px 10px; }
+    .trend-table th, .trend-table td { padding: 3px 8px; }
 
-    .footer { text-align: center; margin-top: 20px; padding-top: 12px; border-top: 2px solid #E77125; color: #6b7280; font-size: 11px; }
-    .footer .footer-logo { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-    .footer .footer-logo img { width: 22px; height: 22px; object-fit: contain; }
-    .footer .footer-logo span { font-size: 12px; font-weight: 600; color: #394442; }
-    @media print { body { padding: 16px; } .section-header { break-after: avoid; page-break-after: avoid; } .section { page-break-inside: auto; } table { page-break-inside: auto; } tr { page-break-inside: avoid; } }
+    .footer { text-align: center; margin-top: 16px; padding-top: 10px; border-top: 2px solid #E77125; color: #6b7280; font-size: 10px; }
+    .footer .footer-logo { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .footer .footer-logo img { width: 20px; height: 20px; object-fit: contain; }
+    .footer .footer-logo span { font-size: 11px; font-weight: 600; color: #394442; }
+    @media print { body { padding: 12px; } .section-header { break-after: avoid; page-break-after: avoid; } }
   </style>
 </head>
 <body>
