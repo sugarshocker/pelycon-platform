@@ -248,20 +248,32 @@ export function generateSummaryHtml(data: {
   if (data.licenseReport) {
     const lic = data.licenseReport;
     if (lic.totalWasted === 0) {
-      finItems.push(goodBad(true, `All licenses fully utilized`, ""));
-    } else if (lic.totalMonthlyWaste > 0) {
-      finItems.push(goodBad(false, "", `${lic.totalWasted} unused license(s) \u2014 $${lic.totalMonthlyWaste.toFixed(0)}/mo in potential savings`));
+      finItems.push(goodBad(true, `All Microsoft 365 licenses fully utilized \u2014 no waste detected`, ""));
     } else {
-      finItems.push(goodBad(false, "", `${lic.totalWasted} unused license(s) detected`));
-    }
+      const monthlySavings = lic.totalMonthlyWaste;
+      const annualSavings = lic.totalAnnualWaste;
 
-    const wastefulLicenses = lic.licenses.filter(l => l.wasted > 0);
-    if (wastefulLicenses.length > 0) {
-      finItems.push(`
-      <table>
-        <tr><th>License</th><th>In Use</th><th>Total</th><th>Unused</th><th>Savings/mo</th></tr>
-        ${wastefulLicenses.map(l => `<tr><td>${l.licenseName}</td><td>${l.quantityUsed}</td><td>${l.totalLicenses}</td><td class="attention-text">${l.wasted}</td><td class="attention-text">${l.monthlyWastedCost > 0 ? "$" + l.monthlyWastedCost.toFixed(0) : "\u2014"}</td></tr>`).join("")}
-      </table>`);
+      if (monthlySavings > 0) {
+        finItems.push(`
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;margin-bottom:8px">
+          <div style="font-weight:600;font-size:14px;color:#15803d;margin-bottom:4px">Microsoft 365 License Cleanup Opportunity</div>
+          <div style="font-size:13px;color:#166534;line-height:1.6">
+            We identified <strong>${lic.totalWasted} unused license${lic.totalWasted !== 1 ? "s" : ""}</strong> that can be removed or reallocated.
+            By cleaning these up, you would save approximately <strong>$${monthlySavings.toFixed(0)}/month</strong> ($${annualSavings.toFixed(0)}/year).
+          </div>
+        </div>`);
+      } else {
+        finItems.push(goodBad(false, "", `${lic.totalWasted} unused license(s) detected \u2014 review recommended`));
+      }
+
+      const wastefulLicenses = lic.licenses.filter(l => l.wasted > 0);
+      if (wastefulLicenses.length > 0) {
+        finItems.push(`
+        <table>
+          <tr><th>License</th><th>In Use</th><th>Total</th><th>Unused</th><th>Savings/mo</th></tr>
+          ${wastefulLicenses.map(l => `<tr><td>${l.licenseName}</td><td>${l.quantityUsed}</td><td>${l.totalLicenses}</td><td class="attention-text">${l.wasted}</td><td class="attention-text">${l.monthlyWastedCost > 0 ? "$" + l.monthlyWastedCost.toFixed(0) : "\u2014"}</td></tr>`).join("")}
+        </table>`);
+      }
     }
   }
 
