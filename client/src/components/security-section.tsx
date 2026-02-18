@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ShieldCheck, ShieldAlert, Shield, AlertTriangle, GraduationCap, Crosshair, BookOpen, Users, Monitor, ChevronDown, ChevronUp, Fingerprint } from "lucide-react";
-import type { SecuritySummary, Organization, DeviceUserEntry } from "@shared/schema";
+import type { SecuritySummary, Organization, DeviceUserEntry, UnprotectedAgent } from "@shared/schema";
 
 interface MissingDevice {
   name: string;
@@ -295,6 +295,52 @@ function DeviceUserInventory({ client }: { client: Organization }) {
   );
 }
 
+function AntivirusCard({ data }: { data: SecuritySummary }) {
+  const [showUnprotected, setShowUnprotected] = useState(false);
+  const hasUnprotected = data.antivirusNotProtectedCount > 0;
+
+  return (
+    <div className="rounded-md bg-muted/50 px-4 py-3 space-y-2">
+      <div className="flex items-center gap-3">
+        <Shield className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-lg font-bold" data-testid="text-antivirus-count">{data.managedAntivirusCount}</span>
+            <span className="text-sm text-muted-foreground">Managed Antivirus</span>
+          </div>
+          {hasUnprotected && (
+            <button
+              onClick={() => setShowUnprotected(!showUnprotected)}
+              className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 cursor-pointer"
+              data-testid="button-toggle-unprotected-agents"
+            >
+              <span>{data.antivirusNotProtectedCount} not protected</span>
+              {showUnprotected ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+          )}
+        </div>
+      </div>
+      {hasUnprotected && showUnprotected && data.unprotectedAgents && data.unprotectedAgents.length > 0 && (
+        <div className="space-y-1 ml-8" data-testid="unprotected-agents-list">
+          {data.unprotectedAgents.map((agent, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-3 py-1.5"
+              data-testid={`unprotected-agent-${i}`}
+            >
+              <ShieldAlert className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+              <span className="text-sm font-mono">{agent.hostname}</span>
+              <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
+                {agent.defenderStatus}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SecuritySection({ client }: SecuritySectionProps) {
   const { data, isLoading, error } = useQuery<SecuritySummary>({
     queryKey: ["/api/security", client.id],
@@ -378,20 +424,7 @@ export function SecuritySection({ client }: SecuritySectionProps) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
-            <Shield className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg font-bold" data-testid="text-antivirus-count">{data.managedAntivirusCount}</span>
-                <span className="text-sm text-muted-foreground">Managed Antivirus</span>
-              </div>
-              {data.antivirusNotProtectedCount > 0 && (
-                <span className="text-xs text-amber-600 dark:text-amber-400">
-                  {data.antivirusNotProtectedCount} not protected
-                </span>
-              )}
-            </div>
-          </div>
+          <AntivirusCard data={data} />
           <div className="flex items-center gap-3 rounded-md bg-muted/50 px-4 py-3">
             <ShieldCheck className="h-5 w-5 text-muted-foreground flex-shrink-0" />
             <div className="flex-1">

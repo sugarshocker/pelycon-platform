@@ -418,6 +418,7 @@ export async function getSecuritySummary(
       activeAgents: 0,
       managedAntivirusCount: 0,
       antivirusNotProtectedCount: 0,
+      unprotectedAgents: [],
       ...emptySatFields,
       identitiesMonitored: null,
       trendDirection: "stable" as const,
@@ -477,6 +478,7 @@ export async function getSecuritySummary(
   let activeAgents = 0;
   let managedAntivirusCount = 0;
   let antivirusNotProtectedCount = 0;
+  const unprotectedAgents: Array<{ hostname: string; defenderStatus: string }> = [];
   let satLearnerCount: number | null = null;
   let satTotalUsers: number | null = null;
   let satCoveragePercent: number | null = null;
@@ -519,6 +521,10 @@ export async function getSecuritySummary(
           managedAntivirusCount++;
         } else {
           antivirusNotProtectedCount++;
+          unprotectedAgents.push({
+            hostname: a.hostname || a.name || `Agent ${a.id}`,
+            defenderStatus: a.defender_status || "Unknown",
+          });
         }
       }
       if (!data.pagination?.next_page) break;
@@ -548,6 +554,7 @@ export async function getSecuritySummary(
     activeAgents,
     managedAntivirusCount,
     antivirusNotProtectedCount,
+    unprotectedAgents,
     ...satReportData,
     identitiesMonitored,
     trendDirection: totalIncidents === 0 ? "stable" : pendingIncidents > 0 ? "worse" : "better",

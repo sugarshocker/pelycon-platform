@@ -127,6 +127,11 @@ export interface SatCampaignDetail {
   launchedAt: string;
 }
 
+export interface UnprotectedAgent {
+  hostname: string;
+  defenderStatus: string;
+}
+
 export interface SecuritySummary {
   totalIncidents: number;
   resolvedIncidents: number;
@@ -135,6 +140,7 @@ export interface SecuritySummary {
   activeAgents: number;
   managedAntivirusCount: number;
   antivirusNotProtectedCount: number;
+  unprotectedAgents: UnprotectedAgent[];
   satCompletionPercent: number | null;
   phishingClickRate: number | null;
   satLearnerCount: number | null;
