@@ -585,8 +585,9 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       roadmap: roadmap,
       internalNotes: internalNotes,
       clientFeedback: clientFeedback,
+      deviceUserInventory: deviceUserData?.devices || null,
     };
-  }, [client, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback]);
+  }, [client, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback, deviceUserData]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {

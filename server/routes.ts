@@ -166,6 +166,7 @@ export async function registerRoutes(
           phishingReportRate: null,
           recentPhishingCampaigns: [],
           satUnenrolledUsers: [],
+          unprotectedAgents: [],
           identitiesMonitored: null,
           trendDirection: "stable",
         } satisfies SecuritySummary);
@@ -631,6 +632,7 @@ export async function registerRoutes(
         roadmap: req.body.roadmap || null,
         internalNotes: req.body.internalNotes || null,
         clientFeedback: req.body.clientFeedback || null,
+        deviceUserInventory: req.body.deviceUserInventory || null,
       };
 
       const existingDraft = await storage.getDraftByOrg(orgId);
@@ -704,6 +706,7 @@ export async function registerRoutes(
         roadmap: req.body.roadmap || null,
         internalNotes: req.body.internalNotes || null,
         clientFeedback: req.body.clientFeedback || null,
+        deviceUserInventory: req.body.deviceUserInventory || null,
       };
 
       const existingDraft = await storage.getDraftByOrg(orgId);
