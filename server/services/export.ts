@@ -423,7 +423,7 @@ export function generateSummaryHtml(data: {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif; color: #394442; max-width: 780px; margin: 0 auto; padding: 36px 24px; line-height: 1.5; font-size: 13px; }
 
-    .header { text-align: center; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 2px solid #E77125; }
+    .header { text-align: center; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 2px solid #E77125; }
     .header .logo { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .header .logo-mark { width: 32px; height: 32px; object-fit: contain; }
     .header .logo-text { font-size: 14px; font-weight: 600; color: #394442; }
@@ -432,14 +432,14 @@ export function generateSummaryHtml(data: {
     .header .date { color: #6b7280; font-size: 12px; margin-top: 2px; }
     .header .tagline { color: #6b7280; font-size: 11px; margin-top: 6px; font-style: italic; }
 
-    .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 24px; }
+    .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 14px; }
     .snap-card { padding: 10px 12px; border-radius: 6px; }
     .snap-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 2px; }
     .snap-value { font-size: 16px; font-weight: 700; }
 
-    .section { margin-bottom: 22px; }
+    .section { margin-bottom: 14px; }
     .section-top { }
-    .section-header { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-top: 4px; }
+    .section-header { margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; padding-top: 2px; }
     .section-header h2 { font-size: 14px; color: #E77125; margin-bottom: 1px; }
     .section-header .subtitle { font-size: 11px; color: #6b7280; }
 
@@ -465,11 +465,11 @@ export function generateSummaryHtml(data: {
 
     .trend-table th, .trend-table td { padding: 4px 10px; }
 
-    .footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 2px solid #E77125; color: #6b7280; font-size: 11px; }
+    .footer { text-align: center; margin-top: 20px; padding-top: 12px; border-top: 2px solid #E77125; color: #6b7280; font-size: 11px; }
     .footer .footer-logo { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
     .footer .footer-logo img { width: 22px; height: 22px; object-fit: contain; }
     .footer .footer-logo span { font-size: 12px; font-weight: 600; color: #394442; }
-    @media print { body { padding: 16px; } .section-header { break-after: avoid; page-break-after: avoid; } }
+    @media print { body { padding: 16px; } .section-header { break-after: avoid; page-break-after: avoid; } .section { page-break-inside: auto; } table { page-break-inside: auto; } tr { page-break-inside: avoid; } }
   </style>
 </head>
 <body>

@@ -364,7 +364,7 @@ function SnapshotCard({
           image: { type: "jpeg" as const, quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, letterRendering: true, width: 800, scrollX: 0, scrollY: 0, windowWidth: 800 },
           jsPDF: { unit: "mm", format: "letter", orientation: "portrait" as const },
-          pagebreak: { mode: ["css"], avoid: [".section-top", ".item", ".action-card", ".snap-card", ".snapshot-grid"] },
+          pagebreak: { mode: ["css"], avoid: [".item", ".action-card", ".snap-card"] },
         } as any)
         .from(content)
         .save();
