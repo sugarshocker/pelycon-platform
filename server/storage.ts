@@ -1,17 +1,20 @@
 import {
-  type User, type InsertUser,
+  type User, type InsertUser, users,
   type TbrSnapshot, type InsertTbrSnapshot, tbrSnapshots,
   type TbrSchedule, type InsertTbrSchedule, tbrSchedules,
   type TbrStaging, type InsertTbrStaging, tbrStaging,
 } from "@shared/schema";
-import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, and, lte, gte, isNull, isNotNull, sql } from "drizzle-orm";
+import { eq, desc, and, lte, gte, isNull, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, data: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: number): Promise<void>;
+  getUserCount(): Promise<number>;
   createTbrSnapshot(snapshot: InsertTbrSnapshot): Promise<TbrSnapshot>;
   updateTbrSnapshot(id: number, snapshot: Partial<InsertTbrSnapshot>): Promise<TbrSnapshot>;
   getTbrSnapshotsByOrg(orgId: number): Promise<TbrSnapshot[]>;
@@ -36,27 +39,43 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private users: Map<string, User>;
 
-  constructor() {
-    this.users = new Map();
+  async getUserById(id: number): Promise<User | undefined> {
+    const results = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return results[0];
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const results = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+    return results[0];
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(users.displayName);
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async createUser(user: InsertUser): Promise<User> {
+    const [result] = await db.insert(users).values({
+      ...user,
+      email: user.email.toLowerCase(),
+    }).returning();
+    return result;
+  }
+
+  async updateUser(id: number, data: Partial<InsertUser>): Promise<User> {
+    const updateData: Partial<InsertUser> = { ...data };
+    if (updateData.email) updateData.email = updateData.email.toLowerCase();
+    const [result] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    return result;
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getUserCount(): Promise<number> {
+    const results = await db.select().from(users);
+    return results.length;
   }
 
   async createTbrSnapshot(snapshot: InsertTbrSnapshot): Promise<TbrSnapshot> {
