@@ -7,7 +7,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui components
 - **Backend**: Express.js API routes
 - **Database**: PostgreSQL (Neon-backed) for TBR snapshot history
-- **Auth**: Simple password-protected login (bearer token, no user accounts)
+- **Auth**: Individual user accounts with email/password login (bcrypt hashed), role-based access (admin/editor/viewer), bearer token sessions
 - **AI**: Anthropic Claude via Replit AI Integrations for roadmap generation
 - **Brand**: Pelycon Technologies (Orange #E77125, Storm Gray #394442, Poppins font)
 
@@ -24,7 +24,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `server/services/email.ts` - SMTP2GO REST API email service for TBR reminders (uses SMTP2GO_API_KEY + SMTP_FROM)
 - `server/services/reminderJob.ts` - Background job checking every hour for TBRs due in 2 days, sends email reminders
 - `client/src/App.tsx` - Main app with auth, wouter routing, shadcn sidebar navigation
-- `client/src/pages/login.tsx` - Password login page (Pelycon branded)
+- `client/src/pages/login.tsx` - Email/password login page with first-time setup flow (Pelycon branded)
+- `client/src/pages/user-management.tsx` - Admin user management: create, edit, delete user accounts with role assignment
 - `client/src/pages/dashboard.tsx` - Main TBR dashboard with all sections + Finalize TBR
 - `client/src/pages/tracker.tsx` - TBR Tracker: review schedules, overdue/upcoming alerts, recent completions
 - `client/src/pages/staging.tsx` - TBR Staging Area: pre-enter engineer/SM notes, upload MFA/License CSVs
@@ -32,9 +33,15 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `client/src/components/meeting-export.tsx` - Export buttons: PDF download (html2pdf.js) and Print (passes previousSnapshot to export)
 
 ## API Routes
-- `POST /api/auth/login` - Password authentication (bearer token)
-- `GET /api/auth/check` - Session check
+- `POST /api/auth/login` - Email/password authentication (bearer token + user info)
+- `GET /api/auth/check` - Session check (returns user info)
 - `POST /api/auth/logout` - Logout
+- `GET /api/auth/needs-setup` - Check if initial admin account needs to be created
+- `POST /api/auth/setup` - Create first admin account (one-time setup)
+- `GET /api/users` - List all users (admin only)
+- `POST /api/users` - Create new user (admin only)
+- `PATCH /api/users/:id` - Update user (admin only)
+- `DELETE /api/users/:id` - Delete user (admin only, cannot self-delete)
 - `GET /api/status` - API connection status
 - `GET /api/organizations` - List clients from NinjaOne
 - `GET /api/devices/:orgId` - Device health from NinjaOne

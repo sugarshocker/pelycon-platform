@@ -47,6 +47,14 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function requireEditor(req: Request, res: Response, next: NextFunction) {
+  const user = (req as any).user as TokenSession | undefined;
+  if (!user || (user.role !== "admin" && user.role !== "editor")) {
+    return res.status(403).json({ message: "Editor access required" });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -516,7 +524,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects/summarize", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/projects/summarize", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const { clientName, completed, inProgress } = req.body;
       if (!clientName) {
@@ -532,7 +540,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reports/mfa", requireAuth, upload.single("file"), (req: Request, res: Response) => {
+  app.post("/api/reports/mfa", requireAuth, requireEditor, upload.single("file"), (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -625,7 +633,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reports/license", requireAuth, upload.single("file"), (req: Request, res: Response) => {
+  app.post("/api/reports/license", requireAuth, requireEditor, upload.single("file"), (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
@@ -738,7 +746,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reports/process-staging", requireAuth, (req: Request, res: Response) => {
+  app.post("/api/reports/process-staging", requireAuth, requireEditor, (req: Request, res: Response) => {
     try {
       const { mfaReportData, licenseReportData } = req.body;
       const result: any = {};
@@ -870,7 +878,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/roadmap/generate", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/roadmap/generate", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const { clientName, ...data } = req.body;
       const analysis = await roadmap.generateRoadmap(clientName || "Client", data);
@@ -926,7 +934,7 @@ export async function registerRoutes(
     };
   }
 
-  app.post("/api/tbr/save-draft", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/tbr/save-draft", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const { orgId, orgName } = req.body;
       if (!orgId || !orgName) {
@@ -986,7 +994,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/tbr/draft/:id", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/tbr/draft/:id", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) {
@@ -1000,7 +1008,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/tbr/finalize", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/tbr/finalize", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const { orgId, orgName } = req.body;
       if (!orgId || !orgName) {
@@ -1045,7 +1053,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/tbr/unfinalize/:id", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/tbr/unfinalize/:id", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) {
@@ -1169,7 +1177,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/schedules", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/schedules", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const { orgId, orgName, frequencyMonths, nextReviewDate, notes, reminderEmail } = req.body;
       if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
@@ -1190,7 +1198,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/schedules/:id", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/schedules/:id", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid schedule ID" });
@@ -1216,7 +1224,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reminders/send-now", requireAuth, async (_req: Request, res: Response) => {
+  app.post("/api/reminders/send-now", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
     try {
       const dueSchedules = await storage.getSchedulesDueForReminder(2);
       if (dueSchedules.length === 0) {
@@ -1275,7 +1283,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/staging/save", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/staging/save", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const { orgId, orgName, engineerNotes, serviceManagerNotes } = req.body;
       if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
@@ -1298,7 +1306,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/staging/upload-mfa", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/staging/upload-mfa", requireAuth, requireEditor, upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const orgId = parseInt(req.body.orgId);
@@ -1327,7 +1335,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/staging/upload-license", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/staging/upload-license", requireAuth, requireEditor, upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const orgId = parseInt(req.body.orgId);
@@ -1356,7 +1364,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/staging/:id", requireAuth, async (req: Request, res: Response) => {
+  app.delete("/api/staging/:id", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid staging ID" });
