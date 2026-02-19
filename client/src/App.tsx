@@ -22,7 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
-  CalendarClock,
+  FilePen,
   ClipboardList,
   Sun,
   Moon,
@@ -35,9 +35,9 @@ import Staging from "@/pages/staging";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 
 const NAV_ITEMS = [
-  { title: "TBR Dashboard", path: "/", icon: LayoutDashboard },
-  { title: "TBR Tracker", path: "/tracker", icon: CalendarClock },
-  { title: "TBR Staging", path: "/staging", icon: ClipboardList },
+  { title: "Dashboard", path: "/", icon: LayoutDashboard },
+  { title: "TBR Reviews", path: "/reviews", icon: FilePen },
+  { title: "Staging", path: "/staging", icon: ClipboardList },
 ];
 
 function AppSidebar({ onLogout }: { onLogout: () => void }) {
@@ -136,8 +136,8 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
           </header>
           <main className="flex-1 overflow-auto">
             <Switch>
-              <Route path="/" component={Dashboard} />
-              <Route path="/tracker" component={Tracker} />
+              <Route path="/" component={Tracker} />
+              <Route path="/reviews" component={Dashboard} />
               <Route path="/staging" component={Staging} />
               <Route>
                 <div className="flex items-center justify-center h-full">

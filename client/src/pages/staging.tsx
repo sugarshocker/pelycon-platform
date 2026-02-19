@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  ClipboardList,
   Upload,
   Save,
   Loader2,
@@ -23,6 +22,7 @@ import {
   FileSpreadsheet,
   StickyNote,
   User,
+  X,
 } from "lucide-react";
 import { apiRequest, getToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -165,77 +165,24 @@ export default function Staging() {
   const stagedClients = (allStaging || []).filter(hasStagedData);
 
   return (
-    <div className="h-full bg-background">
-      <div className="max-w-6xl mx-auto px-4 py-4">
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold" data-testid="text-staging-title">TBR Staging Area</h1>
-          <p className="text-sm text-muted-foreground">Pre-load notes and reports before starting a TBR review</p>
-        </div>
-
+    <div className="h-full bg-background overflow-auto">
+      <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-4">
         {orgsLoading || stagingListLoading ? (
           <div className="space-y-4">
-            <Skeleton className="h-20" />
+            <Skeleton className="h-12" />
             <Skeleton className="h-64" />
           </div>
         ) : (
-          <div className="space-y-6">
-            {stagedClients.length > 0 && (
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <ClipboardList className="h-4 w-4" />
-                    Clients with Staged Data
-                  </CardTitle>
-                  <Badge variant="secondary">{stagedClients.length}</Badge>
-                </CardHeader>
-                <CardContent className="space-y-1">
-                  {stagedClients.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between gap-2 py-2 border-b last:border-0"
-                      data-testid={`staged-client-${s.orgId}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{s.orgName}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {s.engineerNotes && <Badge variant="secondary" className="text-xs">Engineer Notes</Badge>}
-                          {s.serviceManagerNotes && <Badge variant="secondary" className="text-xs">SM Notes</Badge>}
-                          {s.mfaFileName && <Badge variant="secondary" className="text-xs">MFA</Badge>}
-                          {s.licenseFileName && <Badge variant="secondary" className="text-xs">License</Badge>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleLoadStaging(s)}
-                          data-testid={`button-load-staging-${s.orgId}`}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => deleteStagingMutation.mutate(s.id)}
-                          data-testid={`button-delete-staging-${s.orgId}`}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Select Client</CardTitle>
-              </CardHeader>
-              <CardContent>
+          <>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h1 className="text-lg font-semibold" data-testid="text-staging-title">TBR Staging</h1>
+                <p className="text-xs text-muted-foreground">Pre-load notes and CSV reports before starting reviews</p>
+              </div>
+              <div className="flex items-center gap-2">
                 <Select value={selectedOrgId} onValueChange={handleClientSelect}>
-                  <SelectTrigger data-testid="select-staging-client">
-                    <SelectValue placeholder="Choose a client to stage data for..." />
+                  <SelectTrigger className="w-[240px]" data-testid="select-staging-client">
+                    <SelectValue placeholder="Select client..." />
                   </SelectTrigger>
                   <SelectContent>
                     {organizations?.map((org) => (
@@ -245,79 +192,147 @@ export default function Staging() {
                     ))}
                   </SelectContent>
                 </Select>
-              </CardContent>
-            </Card>
+                {selectedOrgId && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => { setSelectedOrgId(""); setEngineerNotes(""); setServiceManagerNotes(""); }}
+                    data-testid="button-clear-selection"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {stagedClients.length > 0 && !selectedOrgId && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                  <CardTitle className="text-sm font-medium">Staged Clients</CardTitle>
+                  <Badge variant="secondary" className="text-xs">{stagedClients.length}</Badge>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-staged-clients">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2 font-medium text-muted-foreground">Client</th>
+                          <th className="text-center py-2 font-medium text-muted-foreground">Engineer</th>
+                          <th className="text-center py-2 font-medium text-muted-foreground">SM</th>
+                          <th className="text-center py-2 font-medium text-muted-foreground">MFA</th>
+                          <th className="text-center py-2 font-medium text-muted-foreground">License</th>
+                          <th className="text-right py-2 font-medium text-muted-foreground">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stagedClients.map((s) => (
+                          <tr key={s.id} className="border-b last:border-0" data-testid={`staged-row-${s.orgId}`}>
+                            <td className="py-2 font-medium">{s.orgName}</td>
+                            <td className="py-2 text-center">
+                              {s.engineerNotes ? <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" /> : <span className="text-muted-foreground">--</span>}
+                            </td>
+                            <td className="py-2 text-center">
+                              {s.serviceManagerNotes ? <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" /> : <span className="text-muted-foreground">--</span>}
+                            </td>
+                            <td className="py-2 text-center">
+                              {s.mfaFileName ? (
+                                <Badge variant="secondary" className="text-xs">{s.mfaFileName}</Badge>
+                              ) : <span className="text-muted-foreground">--</span>}
+                            </td>
+                            <td className="py-2 text-center">
+                              {s.licenseFileName ? (
+                                <Badge variant="secondary" className="text-xs">{s.licenseFileName}</Badge>
+                              ) : <span className="text-muted-foreground">--</span>}
+                            </td>
+                            <td className="py-2 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleLoadStaging(s)}
+                                  data-testid={`button-edit-staging-${s.orgId}`}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => deleteStagingMutation.mutate(s.id)}
+                                  data-testid={`button-delete-staging-${s.orgId}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {selectedOrg && (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        Lead Engineer Notes
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                  <CardTitle className="text-sm font-medium">{selectedOrg.name}</CardTitle>
+                  {currentStaging && hasStagedData(currentStaging) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => deleteStagingMutation.mutate(currentStaging.id)}
+                      data-testid="button-clear-staging"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Clear All
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <label className="text-sm font-medium">Lead Engineer Notes</label>
+                      </div>
                       <Textarea
                         value={engineerNotes}
                         onChange={(e) => setEngineerNotes(e.target.value)}
-                        placeholder="Enter observations, concerns, and recommendations from the lead engineer..."
-                        className="min-h-[160px] text-sm"
+                        placeholder="Observations, concerns, recommendations..."
+                        className="min-h-[120px] text-sm"
                         data-testid="textarea-engineer-notes"
                       />
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <StickyNote className="h-4 w-4" />
-                        Service Manager Notes
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <StickyNote className="h-4 w-4 text-muted-foreground" />
+                        <label className="text-sm font-medium">Service Manager Notes</label>
+                      </div>
                       <Textarea
                         value={serviceManagerNotes}
                         onChange={(e) => setServiceManagerNotes(e.target.value)}
-                        placeholder="Enter service manager observations and relationship notes..."
-                        className="min-h-[160px] text-sm"
+                        placeholder="Relationship notes, client feedback..."
+                        className="min-h-[120px] text-sm"
                         data-testid="textarea-sm-notes"
                       />
-                    </CardContent>
-                  </Card>
-                </div>
+                    </div>
+                  </div>
 
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => saveNotesMutation.mutate()}
-                    disabled={saveNotesMutation.isPending}
-                    data-testid="button-save-notes"
-                  >
-                    {saveNotesMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                    Save Notes
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <FileSpreadsheet className="h-4 w-4" />
-                        MFA Coverage Report
-                      </CardTitle>
-                      {currentStaging?.mfaFileName && (
-                        <Badge variant="secondary" className="text-xs">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          {currentStaging.mfaFileName}
-                        </Badge>
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Upload the CIPP MFA report CSV. This will be stored and automatically used when you start a TBR review for this client.
-                      </p>
+                  <div className="flex items-center justify-between gap-4 flex-wrap border-t pt-4">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">MFA:</span>
+                        {currentStaging?.mfaFileName ? (
+                          <Badge variant="secondary" className="text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            {currentStaging.mfaFileName}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Not uploaded</span>
+                        )}
                         <input
                           ref={mfaFileRef}
                           type="file"
@@ -330,36 +345,26 @@ export default function Staging() {
                           data-testid="input-mfa-file"
                         />
                         <Button
+                          size="sm"
                           variant="outline"
                           onClick={() => mfaFileRef.current?.click()}
                           disabled={uploadMfaMutation.isPending}
                           data-testid="button-upload-mfa"
                         >
-                          {uploadMfaMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                          Upload MFA CSV
+                          {uploadMfaMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                         </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        License Utilization Report
-                      </CardTitle>
-                      {currentStaging?.licenseFileName && (
-                        <Badge variant="secondary" className="text-xs">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          {currentStaging.licenseFileName}
-                        </Badge>
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Upload the CIPP License report CSV. This will be stored and automatically used when you start a TBR review for this client.
-                      </p>
                       <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">License:</span>
+                        {currentStaging?.licenseFileName ? (
+                          <Badge variant="secondary" className="text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            {currentStaging.licenseFileName}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Not uploaded</span>
+                        )}
                         <input
                           ref={licenseFileRef}
                           type="file"
@@ -372,35 +377,40 @@ export default function Staging() {
                           data-testid="input-license-file"
                         />
                         <Button
+                          size="sm"
                           variant="outline"
                           onClick={() => licenseFileRef.current?.click()}
                           disabled={uploadLicenseMutation.isPending}
                           data-testid="button-upload-license"
                         >
-                          {uploadLicenseMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-                          Upload License CSV
+                          {uploadLicenseMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                         </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {currentStaging && hasStagedData(currentStaging) && (
-                  <div className="flex justify-end">
+                    </div>
                     <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteStagingMutation.mutate(currentStaging.id)}
-                      data-testid="button-clear-staging"
+                      onClick={() => saveNotesMutation.mutate()}
+                      disabled={saveNotesMutation.isPending}
+                      data-testid="button-save-notes"
                     >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Clear All Staged Data
+                      {saveNotesMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                      Save
                     </Button>
                   </div>
-                )}
-              </>
+                </CardContent>
+              </Card>
             )}
-          </div>
+
+            {!selectedOrgId && stagedClients.length === 0 && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <StickyNote className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    Select a client above to begin staging notes and reports for their next TBR.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
       </div>
     </div>

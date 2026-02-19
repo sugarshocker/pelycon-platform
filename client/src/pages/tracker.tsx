@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,26 +19,48 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  CalendarClock,
   CheckCircle2,
-  Clock,
   AlertTriangle,
-  Plus,
   Calendar,
   Loader2,
-  Trash2,
+  FileDown,
+  ClipboardCheck,
+  Users,
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { apiRequest, getToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Organization, TbrSnapshot, TbrSchedule } from "@shared/schema";
+
+function getMonthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getMonthLabel(key: string) {
+  const [y, m] = key.split("-");
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
+}
 
 export default function Tracker() {
   const { toast } = useToast();
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [scheduleOrgId, setScheduleOrgId] = useState("");
   const [nextDate, setNextDate] = useState("");
   const [frequency, setFrequency] = useState("6");
   const [scheduleNotes, setScheduleNotes] = useState("");
+  const [calendarDate, setCalendarDate] = useState(new Date());
 
   const { data: organizations, isLoading: orgsLoading } = useQuery<Organization[]>({
     queryKey: ["/api/organizations"],
@@ -60,7 +82,7 @@ export default function Tracker() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/schedules"] });
       setScheduleDialogOpen(false);
-      setEditingOrg(null);
+      setScheduleOrgId("");
       toast({ title: "Schedule saved" });
     },
     onError: (err: any) => {
@@ -68,243 +90,372 @@ export default function Tracker() {
     },
   });
 
-  const deleteScheduleMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/schedules/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/schedules"] });
-      toast({ title: "Schedule removed" });
-    },
-  });
-
   const now = new Date();
-  const recentTbrs = (allFinalized || []).slice(0, 10);
+  const finalized = allFinalized || [];
 
-  const upcomingSchedules = (schedules || [])
-    .filter((s) => s.nextReviewDate)
-    .sort((a, b) => new Date(a.nextReviewDate!).getTime() - new Date(b.nextReviewDate!).getTime());
+  const overdueCount = (schedules || []).filter(
+    (s) => s.nextReviewDate && new Date(s.nextReviewDate) < now
+  ).length;
 
-  const overdue = upcomingSchedules.filter((s) => new Date(s.nextReviewDate!) < now);
-  const upcoming = upcomingSchedules.filter((s) => {
-    const d = new Date(s.nextReviewDate!);
+  const upcomingCount = (schedules || []).filter((s) => {
+    if (!s.nextReviewDate) return false;
+    const d = new Date(s.nextReviewDate);
     return d >= now && d <= new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-  });
+  }).length;
 
-  const openScheduleDialog = (org: Organization) => {
-    setEditingOrg(org);
-    const existing = schedules?.find((s) => s.orgId === org.id);
-    if (existing) {
-      setFrequency(String(existing.frequencyMonths));
-      setNextDate(existing.nextReviewDate ? new Date(existing.nextReviewDate).toISOString().split("T")[0] : "");
-      setScheduleNotes(existing.notes || "");
-    } else {
-      setFrequency("6");
-      setNextDate("");
-      setScheduleNotes("");
+  const chartData = useMemo(() => {
+    const monthMap: Record<string, number> = {};
+    const endMonth = new Date();
+    const startMonth = new Date();
+    startMonth.setMonth(startMonth.getMonth() - 11);
+
+    for (let d = new Date(startMonth); d <= endMonth; d.setMonth(d.getMonth() + 1)) {
+      monthMap[getMonthKey(d)] = 0;
     }
+
+    finalized.forEach((snap) => {
+      const key = getMonthKey(new Date(snap.createdAt));
+      if (key in monthMap) monthMap[key]++;
+    });
+
+    return Object.entries(monthMap).map(([key, count]) => ({
+      month: getMonthLabel(key),
+      reviews: count,
+    }));
+  }, [finalized]);
+
+  const calendarYear = calendarDate.getFullYear();
+  const calendarMonth = calendarDate.getMonth();
+  const firstDay = new Date(calendarYear, calendarMonth, 1);
+  const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+  const startOffset = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+
+  const calendarEvents = useMemo(() => {
+    const events: Record<number, { type: "completed" | "scheduled"; items: Array<{ label: string; id?: number }> }> = {};
+
+    finalized.forEach((snap) => {
+      const d = new Date(snap.createdAt);
+      if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
+        const day = d.getDate();
+        if (!events[day]) events[day] = { type: "completed", items: [] };
+        events[day].items.push({ label: snap.orgName, id: snap.id });
+      }
+    });
+
+    (schedules || []).forEach((s) => {
+      if (!s.nextReviewDate) return;
+      const d = new Date(s.nextReviewDate);
+      if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
+        const day = d.getDate();
+        if (!events[day]) events[day] = { type: "scheduled", items: [] };
+        if (events[day].type !== "completed") events[day].type = "scheduled";
+        events[day].items.push({ label: s.orgName });
+      }
+    });
+
+    return events;
+  }, [finalized, schedules, calendarYear, calendarMonth]);
+
+  const prevMonth = () => setCalendarDate(new Date(calendarYear, calendarMonth - 1, 1));
+  const nextMonth = () => setCalendarDate(new Date(calendarYear, calendarMonth + 1, 1));
+
+  const openScheduleDialog = () => {
+    setScheduleOrgId("");
+    setNextDate("");
+    setFrequency("6");
+    setScheduleNotes("");
     setScheduleDialogOpen(true);
   };
 
   const handleSaveSchedule = () => {
-    if (!editingOrg) return;
+    const org = organizations?.find((o) => o.id === parseInt(scheduleOrgId));
+    if (!org) return;
     upsertScheduleMutation.mutate({
-      orgId: editingOrg.id,
-      orgName: editingOrg.name,
+      orgId: org.id,
+      orgName: org.name,
       frequencyMonths: parseInt(frequency),
       nextReviewDate: nextDate || null,
       notes: scheduleNotes || null,
     });
   };
 
-  const getDaysDiff = (date: Date) => Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-  const getStatusBadge = (schedule: TbrSchedule) => {
-    if (!schedule.nextReviewDate) return <Badge variant="secondary" data-testid={`badge-status-${schedule.orgId}`}>Not scheduled</Badge>;
-    const days = getDaysDiff(new Date(schedule.nextReviewDate));
-    if (days < 0) return <Badge variant="destructive" data-testid={`badge-status-${schedule.orgId}`}>Overdue ({Math.abs(days)}d)</Badge>;
-    if (days <= 14) return <Badge className="bg-amber-500 text-white" data-testid={`badge-status-${schedule.orgId}`}>Due soon ({days}d)</Badge>;
-    return <Badge variant="secondary" data-testid={`badge-status-${schedule.orgId}`}>In {days} days</Badge>;
-  };
-
-  const getLastReview = (orgId: number) => {
-    const reviews = allFinalized?.filter((s) => s.orgId === orgId);
-    return reviews?.[0] || null;
+  const handleDownloadPdf = async (snapshotId: number) => {
+    const token = getToken();
+    try {
+      const res = await fetch(`/api/export/snapshot/${snapshotId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load");
+      const html = await res.text();
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+      }
+    } catch {
+      toast({ title: "Could not load report", variant: "destructive" });
+    }
   };
 
   const isLoading = orgsLoading || finalizedLoading || schedulesLoading;
 
-  return (
-    <div className="h-full bg-background">
-      <div className="max-w-6xl mx-auto px-4 py-4">
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold" data-testid="text-tracker-title">TBR Tracker</h1>
-          <p className="text-sm text-muted-foreground">Track review schedules and completion across all clients</p>
-        </div>
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+  const recentTbrs = finalized.slice(0, 8);
+
+  return (
+    <div className="h-full bg-background overflow-auto">
+      <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-4">
         {isLoading ? (
           <div className="space-y-4">
-            <Skeleton className="h-32" />
-            <Skeleton className="h-48" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
+            </div>
             <Skeleton className="h-64" />
+            <Skeleton className="h-80" />
           </div>
         ) : (
-          <div className="space-y-6">
-            {(overdue.length > 0 || upcoming.length > 0) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {overdue.length > 0 && (
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-destructive" />
-                        Overdue Reviews
-                      </CardTitle>
-                      <Badge variant="destructive">{overdue.length}</Badge>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {overdue.map((s) => (
-                        <div key={s.id} className="flex items-center justify-between gap-2 text-sm" data-testid={`overdue-${s.orgId}`}>
-                          <span className="font-medium truncate">{s.orgName}</span>
-                          <span className="text-xs text-destructive whitespace-nowrap">
-                            {Math.abs(getDaysDiff(new Date(s.nextReviewDate!)))} days overdue
-                          </span>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )}
-                {upcoming.length > 0 && (
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-amber-500" />
-                        Upcoming Reviews (60 days)
-                      </CardTitle>
-                      <Badge variant="secondary">{upcoming.length}</Badge>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {upcoming.map((s) => (
-                        <div key={s.id} className="flex items-center justify-between gap-2 text-sm" data-testid={`upcoming-${s.orgId}`}>
-                          <span className="font-medium truncate">{s.orgName}</span>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {new Date(s.nextReviewDate!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            {" "}({getDaysDiff(new Date(s.nextReviewDate!))} days)
-                          </span>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )}
+          <>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h1 className="text-lg font-semibold" data-testid="text-tracker-title">Dashboard</h1>
+                <p className="text-xs text-muted-foreground">
+                  {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                </p>
               </div>
-            )}
+              <Button onClick={openScheduleDialog} data-testid="button-schedule-new">
+                <Calendar className="h-4 w-4 mr-1" />
+                Schedule TBR
+              </Button>
+            </div>
 
-            {recentTbrs.length > 0 && (
-              <Card>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card data-testid="card-total-reviews">
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">Total Reviews</p>
+                    <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-2xl font-bold">{finalized.length}</p>
+                  <p className="text-xs text-muted-foreground mt-1">All time</p>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-clients">
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">Clients</p>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-2xl font-bold">{organizations?.length || 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Active organizations</p>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-overdue">
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">Overdue</p>
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                  </div>
+                  <p className={`text-2xl font-bold ${overdueCount > 0 ? "text-destructive" : ""}`}>{overdueCount}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Past due date</p>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-upcoming">
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">Upcoming</p>
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </div>
+                  <p className="text-2xl font-bold">{upcomingCount}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Next 60 days</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <Card className="lg:col-span-3" data-testid="card-tbr-chart">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    Recent Completed Reviews
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium">TBR Activity</CardTitle>
+                  <Badge variant="secondary" className="text-xs">Last 12 months</Badge>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    {recentTbrs.map((snap) => (
-                      <div key={snap.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b last:border-0" data-testid={`recent-tbr-${snap.id}`}>
-                        <span className="font-medium truncate">{snap.orgName}</span>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground whitespace-nowrap">
-                          <span>{snap.totalDevices} devices</span>
-                          <span>{snap.totalTickets} tickets</span>
-                          <span>
-                            {new Date(snap.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis
+                          dataKey="month"
+                          tick={{ fontSize: 11 }}
+                          className="fill-muted-foreground"
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          className="fill-muted-foreground"
+                          tickLine={false}
+                          axisLine={false}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                          }}
+                          labelStyle={{ color: "hsl(var(--foreground))" }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="reviews"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "hsl(var(--primary))" }}
+                          activeDot={{ r: 5 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 </CardContent>
               </Card>
-            )}
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4" />
-                  All Client Schedules
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {organizations && organizations.length > 0 ? (
-                  <div className="space-y-1">
-                    {organizations.map((org) => {
-                      const schedule = schedules?.find((s) => s.orgId === org.id);
-                      const lastReview = getLastReview(org.id);
-                      return (
+              <Card className="lg:col-span-2" data-testid="card-recent-reviews">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                  <CardTitle className="text-sm font-medium">Recent Reviews</CardTitle>
+                  <Badge variant="secondary" className="text-xs">{finalized.length} total</Badge>
+                </CardHeader>
+                <CardContent>
+                  {recentTbrs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">No finalized reviews yet</p>
+                  ) : (
+                    <div className="space-y-1 max-h-52 overflow-y-auto">
+                      {recentTbrs.map((snap) => (
                         <div
-                          key={org.id}
-                          className="flex items-center justify-between gap-3 py-2 border-b last:border-0"
-                          data-testid={`client-schedule-${org.id}`}
+                          key={snap.id}
+                          className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0"
+                          data-testid={`recent-tbr-${snap.id}`}
                         >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{org.name}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{snap.orgName}</p>
                             <p className="text-xs text-muted-foreground">
-                              {lastReview
-                                ? `Last review: ${new Date(lastReview.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-                                : "No reviews yet"}
-                              {schedule && ` · Every ${schedule.frequencyMonths} months`}
+                              {new Date(snap.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {schedule && getStatusBadge(schedule)}
-                            <Button
-                              size="sm"
-                              variant={schedule ? "outline" : "default"}
-                              onClick={() => openScheduleDialog(org)}
-                              data-testid={`button-schedule-${org.id}`}
-                            >
-                              {schedule ? (
-                                <>
-                                  <Calendar className="h-3 w-3 mr-1" />
-                                  Edit
-                                </>
-                              ) : (
-                                <>
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Schedule
-                                </>
-                              )}
-                            </Button>
-                            {schedule && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => deleteScheduleMutation.mutate(schedule.id)}
-                                data-testid={`button-delete-schedule-${org.id}`}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleDownloadPdf(snap.id)}
+                            data-testid={`button-pdf-${snap.id}`}
+                          >
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card data-testid="card-calendar">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <CardTitle className="text-sm font-medium">Review Calendar</CardTitle>
+                <div className="flex items-center gap-1">
+                  <Button size="icon" variant="ghost" onClick={prevMonth} data-testid="button-prev-month">
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-medium min-w-[140px] text-center" data-testid="text-calendar-month">
+                    {monthNames[calendarMonth]} {calendarYear}
+                  </span>
+                  <Button size="icon" variant="ghost" onClick={nextMonth} data-testid="button-next-month">
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-7 gap-px">
+                  {weekDays.map((d) => (
+                    <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>
+                  ))}
+                  {Array.from({ length: startOffset }).map((_, i) => (
+                    <div key={`empty-${i}`} className="min-h-[72px]" />
+                  ))}
+                  {Array.from({ length: daysInMonth }).map((_, i) => {
+                    const day = i + 1;
+                    const isToday = day === now.getDate() && calendarMonth === now.getMonth() && calendarYear === now.getFullYear();
+                    const event = calendarEvents[day];
+                    return (
+                      <div
+                        key={day}
+                        className={`min-h-[72px] border rounded-md p-1 ${isToday ? "border-primary bg-primary/5" : "border-border/50"}`}
+                        data-testid={`calendar-day-${day}`}
+                      >
+                        <span className={`text-xs font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}>{day}</span>
+                        {event && (
+                          <div className="mt-0.5 space-y-0.5">
+                            {event.items.slice(0, 2).map((item, idx) => (
+                              <div
+                                key={idx}
+                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 cursor-default ${
+                                  item.id
+                                    ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                                    : "bg-primary/15 text-primary"
+                                }`}
+                                title={item.label}
+                                data-testid={`calendar-event-${day}-${idx}`}
                               >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                                {item.label}
+                              </div>
+                            ))}
+                            {event.items.length > 2 && (
+                              <p className="text-[10px] text-muted-foreground">+{event.items.length - 2} more</p>
                             )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-green-500/15 border border-green-500/30" />
+                    Completed
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No clients found. Connect NinjaOne to see your client list.</p>
-                )}
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-primary/15 border border-primary/30" />
+                    Scheduled
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </div>
+          </>
         )}
       </div>
 
       <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle data-testid="text-schedule-dialog-title">
-              {editingOrg ? `Schedule TBR — ${editingOrg.name}` : "Schedule TBR"}
-            </DialogTitle>
+            <DialogTitle data-testid="text-schedule-dialog-title">Schedule TBR</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Client</label>
+              <Select value={scheduleOrgId} onValueChange={setScheduleOrgId}>
+                <SelectTrigger data-testid="select-schedule-client">
+                  <SelectValue placeholder="Select a client..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {organizations?.map((org) => (
+                    <SelectItem key={org.id} value={String(org.id)}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Next Review Date</label>
               <Input
@@ -315,7 +466,7 @@ export default function Tracker() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Review Frequency</label>
+              <label className="text-sm font-medium mb-1 block">Frequency</label>
               <Select value={frequency} onValueChange={setFrequency}>
                 <SelectTrigger data-testid="select-frequency">
                   <SelectValue />
@@ -330,7 +481,7 @@ export default function Tracker() {
             <div>
               <label className="text-sm font-medium mb-1 block">Notes</label>
               <Input
-                placeholder="Optional scheduling notes..."
+                placeholder="Optional notes..."
                 value={scheduleNotes}
                 onChange={(e) => setScheduleNotes(e.target.value)}
                 data-testid="input-schedule-notes"
@@ -342,7 +493,7 @@ export default function Tracker() {
               </Button>
               <Button
                 onClick={handleSaveSchedule}
-                disabled={upsertScheduleMutation.isPending}
+                disabled={!scheduleOrgId || upsertScheduleMutation.isPending}
                 data-testid="button-save-schedule"
               >
                 {upsertScheduleMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
