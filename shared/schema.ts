@@ -312,5 +312,31 @@ export const insertTbrStagingSchema = createInsertSchema(tbrStaging).omit({
 export type InsertTbrStaging = z.infer<typeof insertTbrStagingSchema>;
 export type TbrStaging = typeof tbrStaging.$inferSelect;
 
-export type User = { id: string; username: string; password: string };
-export type InsertUser = { username: string; password: string };
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").default("viewer").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
+export const loginUserSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export const createUserSchema = z.object({
+  email: z.string().email("Valid email is required"),
+  displayName: z.string().min(1, "Display name is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.enum(["admin", "editor", "viewer"]).default("viewer"),
+});
