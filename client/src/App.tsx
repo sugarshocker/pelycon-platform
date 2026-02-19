@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
 import { Switch, Route, useLocation } from "wouter";
-import { queryClient, getToken, clearToken, apiRequest } from "./lib/queryClient";
+import { queryClient, getToken, clearToken, apiRequest, getStoredUser, setStoredUser } from "./lib/queryClient";
+import type { AuthUser } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -24,6 +25,7 @@ import {
   LayoutDashboard,
   FilePen,
   ClipboardList,
+  Users,
   Sun,
   Moon,
   LogOut,
@@ -32,7 +34,15 @@ import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Tracker from "@/pages/tracker";
 import Staging from "@/pages/staging";
+import UserManagement from "@/pages/user-management";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
+
+interface UserContextType {
+  user: AuthUser | null;
+}
+
+const UserContext = createContext<UserContextType>({ user: null });
+export function useCurrentUser() { return useContext(UserContext); }
 
 const NAV_ITEMS = [
   { title: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -40,9 +50,14 @@ const NAV_ITEMS = [
   { title: "Staging", path: "/staging", icon: ClipboardList },
 ];
 
-function AppSidebar({ onLogout }: { onLogout: () => void }) {
+function AppSidebar({ onLogout, user }: { onLogout: () => void; user: AuthUser }) {
   const [location, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
+
+  const navItems = [...NAV_ITEMS];
+  if (user.role === "admin") {
+    navItems.push({ title: "Users", path: "/users", icon: Users });
+  }
 
   return (
     <Sidebar data-testid="app-sidebar">
@@ -68,7 +83,7 @@ function AppSidebar({ onLogout }: { onLogout: () => void }) {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => {
+              {navItems.map((item) => {
                 const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -88,30 +103,35 @@ function AppSidebar({ onLogout }: { onLogout: () => void }) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="p-3">
-        <div className="flex items-center gap-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={toggleTheme}
-            data-testid="button-theme-toggle"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={onLogout}
-            data-testid="button-logout"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="px-2 text-xs text-sidebar-foreground/60 truncate" data-testid="text-current-user">
+            {user.displayName}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={toggleTheme}
+              data-testid="button-theme-toggle"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onLogout}
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
+function AuthenticatedApp({ onLogout, user }: { onLogout: () => void; user: AuthUser }) {
   const handleLogout = async () => {
     try {
       await apiRequest("POST", "/api/auth/logout");
@@ -127,33 +147,37 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
   };
 
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full">
-        <AppSidebar onLogout={handleLogout} />
-        <div className="flex flex-col flex-1 min-w-0">
-          <header className="sticky top-0 z-50 flex items-center gap-2 p-2 border-b bg-background/95 backdrop-blur-sm">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-          </header>
-          <main className="flex-1 overflow-auto">
-            <Switch>
-              <Route path="/" component={Tracker} />
-              <Route path="/reviews" component={Dashboard} />
-              <Route path="/staging" component={Staging} />
-              <Route>
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-muted-foreground">Page not found</p>
-                </div>
-              </Route>
-            </Switch>
-          </main>
+    <UserContext.Provider value={{ user }}>
+      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+        <div className="flex h-screen w-full">
+          <AppSidebar onLogout={handleLogout} user={user} />
+          <div className="flex flex-col flex-1 min-w-0">
+            <header className="sticky top-0 z-50 flex items-center gap-2 p-2 border-b bg-background/95 backdrop-blur-sm">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+            </header>
+            <main className="flex-1 overflow-auto">
+              <Switch>
+                <Route path="/" component={Tracker} />
+                <Route path="/reviews" component={Dashboard} />
+                <Route path="/staging" component={Staging} />
+                {user.role === "admin" && <Route path="/users" component={UserManagement} />}
+                <Route>
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground">Page not found</p>
+                  </div>
+                </Route>
+              </Switch>
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </UserContext.Provider>
   );
 }
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     const token = getToken();
@@ -165,18 +189,30 @@ function App() {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => {
-        setIsAuthenticated(res.ok);
-        if (!res.ok) clearToken();
+        if (res.ok) return res.json();
+        throw new Error("Unauthorized");
+      })
+      .then((data) => {
+        setIsAuthenticated(true);
+        setCurrentUser(data.user);
+        setStoredUser(data.user);
       })
       .catch(() => {
         setIsAuthenticated(false);
+        setCurrentUser(null);
         clearToken();
       });
   }, []);
 
+  const handleLogin = (user: AuthUser) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+  };
+
   const handleLogout = () => {
     clearToken();
     queryClient.clear();
+    setCurrentUser(null);
     setIsAuthenticated(false);
   };
 
@@ -192,10 +228,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          {isAuthenticated ? (
-            <AuthenticatedApp onLogout={handleLogout} />
+          {isAuthenticated && currentUser ? (
+            <AuthenticatedApp onLogout={handleLogout} user={currentUser} />
           ) : (
-            <Login onLogin={() => setIsAuthenticated(true)} />
+            <Login onLogin={handleLogin} />
           )}
           <Toaster />
         </TooltipProvider>

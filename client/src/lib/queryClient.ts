@@ -1,6 +1,14 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const TOKEN_KEY = "tbr_auth_token";
+const USER_KEY = "tbr_user";
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  displayName: string;
+  role: string;
+}
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
@@ -12,6 +20,17 @@ export function setToken(token: string) {
 
 export function clearToken() {
   sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
+}
+
+export function getStoredUser(): AuthUser | null {
+  const raw = sessionStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export function setStoredUser(user: AuthUser) {
+  sessionStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
