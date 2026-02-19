@@ -185,7 +185,7 @@ export default function Staging() {
                     <SelectValue placeholder="Select client..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {organizations?.map((org) => (
+                    {organizations?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((org) => (
                       <SelectItem key={org.id} value={String(org.id)}>
                         {org.name}
                       </SelectItem>

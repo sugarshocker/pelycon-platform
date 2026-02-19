@@ -29,6 +29,7 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  Mail,
 } from "lucide-react";
 import {
   LineChart,
@@ -60,6 +61,7 @@ export default function Tracker() {
   const [nextDate, setNextDate] = useState("");
   const [frequency, setFrequency] = useState("6");
   const [scheduleNotes, setScheduleNotes] = useState("");
+  const [reminderEmail, setReminderEmail] = useState("");
   const [calendarDate, setCalendarDate] = useState(new Date());
 
   const { data: organizations, isLoading: orgsLoading } = useQuery<Organization[]>({
@@ -75,7 +77,7 @@ export default function Tracker() {
   });
 
   const upsertScheduleMutation = useMutation({
-    mutationFn: async (data: { orgId: number; orgName: string; frequencyMonths: number; nextReviewDate: string | null; notes: string | null }) => {
+    mutationFn: async (data: { orgId: number; orgName: string; frequencyMonths: number; nextReviewDate: string | null; notes: string | null; reminderEmail: string | null }) => {
       const res = await apiRequest("POST", "/api/schedules", data);
       return res.json();
     },
@@ -160,12 +162,18 @@ export default function Tracker() {
   const prevMonth = () => setCalendarDate(new Date(calendarYear, calendarMonth - 1, 1));
   const nextMonth = () => setCalendarDate(new Date(calendarYear, calendarMonth + 1, 1));
 
-  const openScheduleDialog = () => {
+  const openScheduleDialog = (prefilledDate?: string) => {
     setScheduleOrgId("");
-    setNextDate("");
+    setNextDate(prefilledDate || "");
     setFrequency("6");
     setScheduleNotes("");
+    setReminderEmail("");
     setScheduleDialogOpen(true);
+  };
+
+  const handleDayClick = (day: number) => {
+    const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    openScheduleDialog(dateStr);
   };
 
   const handleSaveSchedule = () => {
@@ -177,6 +185,7 @@ export default function Tracker() {
       frequencyMonths: parseInt(frequency),
       nextReviewDate: nextDate || null,
       notes: scheduleNotes || null,
+      reminderEmail: reminderEmail || null,
     });
   };
 
@@ -225,7 +234,7 @@ export default function Tracker() {
                   {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                 </p>
               </div>
-              <Button onClick={openScheduleDialog} data-testid="button-schedule-new">
+              <Button onClick={() => openScheduleDialog()} data-testid="button-schedule-new">
                 <Calendar className="h-4 w-4 mr-1" />
                 Schedule TBR
               </Button>
@@ -390,8 +399,9 @@ export default function Tracker() {
                     return (
                       <div
                         key={day}
-                        className={`min-h-[72px] border rounded-md p-1 ${isToday ? "border-primary bg-primary/5" : "border-border/50"}`}
+                        className={`min-h-[72px] border rounded-md p-1 cursor-pointer hover-elevate transition-colors ${isToday ? "border-primary bg-primary/5" : "border-border/50"}`}
                         data-testid={`calendar-day-${day}`}
+                        onClick={() => handleDayClick(day)}
                       >
                         <span className={`text-xs font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}>{day}</span>
                         {event && (
@@ -448,7 +458,7 @@ export default function Tracker() {
                   <SelectValue placeholder="Select a client..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {organizations?.map((org) => (
+                  {organizations?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((org) => (
                     <SelectItem key={org.id} value={String(org.id)}>
                       {org.name}
                     </SelectItem>
@@ -477,6 +487,20 @@ export default function Tracker() {
                   <SelectItem value="12">Every 12 months</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Account Manager Email</label>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Input
+                  type="email"
+                  placeholder="manager@example.com"
+                  value={reminderEmail}
+                  onChange={(e) => setReminderEmail(e.target.value)}
+                  data-testid="input-reminder-email"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Receives a reminder email 2 days before the review</p>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Notes</label>

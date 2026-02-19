@@ -860,7 +860,7 @@ export async function registerRoutes(
 
   app.post("/api/schedules", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { orgId, orgName, frequencyMonths, nextReviewDate, notes } = req.body;
+      const { orgId, orgName, frequencyMonths, nextReviewDate, notes, reminderEmail } = req.body;
       if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
       const schedule = await storage.upsertSchedule({
         orgId,
@@ -869,6 +869,7 @@ export async function registerRoutes(
         nextReviewDate: nextReviewDate ? new Date(nextReviewDate) : null,
         lastReviewDate: null,
         notes: notes || null,
+        reminderEmail: reminderEmail || null,
       });
       log(`Schedule upserted for ${orgName} (orgId: ${orgId})`);
       res.json(schedule);

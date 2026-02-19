@@ -274,6 +274,8 @@ export const tbrSchedules = pgTable("tbr_schedules", {
   nextReviewDate: timestamp("next_review_date"),
   lastReviewDate: timestamp("last_review_date"),
   notes: text("notes"),
+  reminderEmail: text("reminder_email"),
+  reminderSentAt: timestamp("reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

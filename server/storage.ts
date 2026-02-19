@@ -6,7 +6,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc, and, lte } from "drizzle-orm";
+import { eq, desc, and, lte, gte, isNull, isNotNull, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -26,6 +26,8 @@ export interface IStorage {
   getScheduleByOrg(orgId: number): Promise<TbrSchedule | undefined>;
   upsertSchedule(schedule: InsertTbrSchedule): Promise<TbrSchedule>;
   deleteSchedule(id: number): Promise<void>;
+  getSchedulesDueForReminder(daysAhead: number): Promise<TbrSchedule[]>;
+  markReminderSent(id: number): Promise<void>;
   getStagingByOrg(orgId: number): Promise<TbrStaging | undefined>;
   getAllStaging(): Promise<TbrStaging[]>;
   upsertStaging(staging: InsertTbrStaging): Promise<TbrStaging>;
@@ -142,6 +144,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSchedule(id: number): Promise<void> {
     await db.delete(tbrSchedules).where(eq(tbrSchedules.id, id));
+  }
+
+  async getSchedulesDueForReminder(daysAhead: number): Promise<TbrSchedule[]> {
+    const now = new Date();
+    const targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + daysAhead);
+    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    return db.select().from(tbrSchedules).where(
+      and(
+        isNotNull(tbrSchedules.nextReviewDate),
+        isNotNull(tbrSchedules.reminderEmail),
+        gte(tbrSchedules.nextReviewDate, startOfDay),
+        lte(tbrSchedules.nextReviewDate, endOfDay),
+        isNull(tbrSchedules.reminderSentAt)
+      )
+    );
+  }
+
+  async markReminderSent(id: number): Promise<void> {
+    await db.update(tbrSchedules)
+      .set({ reminderSentAt: new Date() })
+      .where(eq(tbrSchedules.id, id));
   }
 
   async getStagingByOrg(orgId: number): Promise<TbrStaging | undefined> {
