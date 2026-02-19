@@ -48,6 +48,12 @@ function getMonthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function parseLocalDate(dateStr: string | Date): Date {
+  const s = typeof dateStr === "string" ? dateStr : dateStr.toISOString();
+  const parts = s.split("T")[0].split("-");
+  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+}
+
 function getMonthLabel(key: string) {
   const [y, m] = key.split("-");
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -113,12 +119,12 @@ export default function Tracker() {
   const finalized = allFinalized || [];
 
   const overdueCount = (schedules || []).filter(
-    (s) => s.nextReviewDate && new Date(s.nextReviewDate) < now
+    (s) => s.nextReviewDate && parseLocalDate(s.nextReviewDate) < now
   ).length;
 
   const upcomingCount = (schedules || []).filter((s) => {
     if (!s.nextReviewDate) return false;
-    const d = new Date(s.nextReviewDate);
+    const d = parseLocalDate(s.nextReviewDate);
     return d >= now && d <= new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
   }).length;
 
@@ -164,7 +170,7 @@ export default function Tracker() {
 
     (schedules || []).forEach((s) => {
       if (!s.nextReviewDate) return;
-      const d = new Date(s.nextReviewDate);
+      const d = parseLocalDate(s.nextReviewDate);
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
         if (!events[day]) events[day] = { items: [] };
@@ -193,7 +199,15 @@ export default function Tracker() {
     if (!schedule) return;
     setEditingScheduleId(schedule.id);
     setScheduleOrgId(String(schedule.orgId));
-    setNextDate(schedule.nextReviewDate ? new Date(schedule.nextReviewDate).toISOString().split("T")[0] : "");
+    if (schedule.nextReviewDate) {
+      const rd = schedule.nextReviewDate instanceof Date ? schedule.nextReviewDate : new Date(schedule.nextReviewDate as string);
+      const y = rd.getUTCFullYear();
+      const m = String(rd.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(rd.getUTCDate()).padStart(2, "0");
+      setNextDate(`${y}-${m}-${dd}`);
+    } else {
+      setNextDate("");
+    }
     setFrequency(String(schedule.frequencyMonths));
     setScheduleNotes(schedule.notes || "");
     setReminderEmail(schedule.reminderEmail || "");
