@@ -409,7 +409,7 @@ export default function Tracker() {
                             {event.items.slice(0, 2).map((item, idx) => (
                               <div
                                 key={idx}
-                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 cursor-default ${
+                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 pointer-events-none ${
                                   item.id
                                     ? "bg-green-500/15 text-green-700 dark:text-green-400"
                                     : "bg-primary/15 text-primary"
@@ -421,7 +421,7 @@ export default function Tracker() {
                               </div>
                             ))}
                             {event.items.length > 2 && (
-                              <p className="text-[10px] text-muted-foreground">+{event.items.length - 2} more</p>
+                              <p className="text-[10px] text-muted-foreground pointer-events-none">+{event.items.length - 2} more</p>
                             )}
                           </div>
                         )}
