@@ -57,6 +57,7 @@ function getMonthLabel(key: string) {
 export default function Tracker() {
   const { toast } = useToast();
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
   const [scheduleOrgId, setScheduleOrgId] = useState("");
   const [nextDate, setNextDate] = useState("");
   const [frequency, setFrequency] = useState("6");
@@ -84,8 +85,24 @@ export default function Tracker() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/schedules"] });
       setScheduleDialogOpen(false);
+      setEditingScheduleId(null);
       setScheduleOrgId("");
       toast({ title: "Schedule saved" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/schedules/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/schedules"] });
+      setScheduleDialogOpen(false);
+      setEditingScheduleId(null);
+      toast({ title: "Schedule cancelled" });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -134,14 +151,14 @@ export default function Tracker() {
   const daysInMonth = lastDay.getDate();
 
   const calendarEvents = useMemo(() => {
-    const events: Record<number, { type: "completed" | "scheduled"; items: Array<{ label: string; id?: number }> }> = {};
+    const events: Record<number, { items: Array<{ label: string; type: "completed" | "scheduled"; snapshotId?: number; scheduleId?: number }> }> = {};
 
     finalized.forEach((snap) => {
       const d = new Date(snap.createdAt);
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
-        if (!events[day]) events[day] = { type: "completed", items: [] };
-        events[day].items.push({ label: snap.orgName, id: snap.id });
+        if (!events[day]) events[day] = { items: [] };
+        events[day].items.push({ label: snap.orgName, type: "completed", snapshotId: snap.id });
       }
     });
 
@@ -150,9 +167,8 @@ export default function Tracker() {
       const d = new Date(s.nextReviewDate);
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
-        if (!events[day]) events[day] = { type: "scheduled", items: [] };
-        if (events[day].type !== "completed") events[day].type = "scheduled";
-        events[day].items.push({ label: s.orgName });
+        if (!events[day]) events[day] = { items: [] };
+        events[day].items.push({ label: s.orgName, type: "scheduled", scheduleId: s.id });
       }
     });
 
@@ -162,7 +178,8 @@ export default function Tracker() {
   const prevMonth = () => setCalendarDate(new Date(calendarYear, calendarMonth - 1, 1));
   const nextMonth = () => setCalendarDate(new Date(calendarYear, calendarMonth + 1, 1));
 
-  const openScheduleDialog = (prefilledDate?: string) => {
+  const openNewScheduleDialog = (prefilledDate?: string) => {
+    setEditingScheduleId(null);
     setScheduleOrgId("");
     setNextDate(prefilledDate || "");
     setFrequency("6");
@@ -171,9 +188,28 @@ export default function Tracker() {
     setScheduleDialogOpen(true);
   };
 
+  const openEditScheduleDialog = (scheduleId: number) => {
+    const schedule = (schedules || []).find((s) => s.id === scheduleId);
+    if (!schedule) return;
+    setEditingScheduleId(schedule.id);
+    setScheduleOrgId(String(schedule.orgId));
+    setNextDate(schedule.nextReviewDate ? new Date(schedule.nextReviewDate).toISOString().split("T")[0] : "");
+    setFrequency(String(schedule.frequencyMonths));
+    setScheduleNotes(schedule.notes || "");
+    setReminderEmail(schedule.reminderEmail || "");
+    setScheduleDialogOpen(true);
+  };
+
   const handleDayClick = (day: number) => {
     const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    openScheduleDialog(dateStr);
+    openNewScheduleDialog(dateStr);
+  };
+
+  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number }) => {
+    e.stopPropagation();
+    if (item.type === "scheduled" && item.scheduleId) {
+      openEditScheduleDialog(item.scheduleId);
+    }
   };
 
   const handleSaveSchedule = () => {
@@ -187,6 +223,12 @@ export default function Tracker() {
       notes: scheduleNotes || null,
       reminderEmail: reminderEmail || null,
     });
+  };
+
+  const handleDeleteSchedule = () => {
+    if (editingScheduleId) {
+      deleteScheduleMutation.mutate(editingScheduleId);
+    }
   };
 
   const handleDownloadPdf = async (snapshotId: number) => {
@@ -234,7 +276,7 @@ export default function Tracker() {
                   {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                 </p>
               </div>
-              <Button onClick={() => openScheduleDialog()} data-testid="button-schedule-new">
+              <Button onClick={() => openNewScheduleDialog()} data-testid="button-schedule-new">
                 <Calendar className="h-4 w-4 mr-1" />
                 Schedule TBR
               </Button>
@@ -409,12 +451,13 @@ export default function Tracker() {
                             {event.items.slice(0, 2).map((item, idx) => (
                               <div
                                 key={idx}
-                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 pointer-events-none ${
-                                  item.id
-                                    ? "bg-green-500/15 text-green-700 dark:text-green-400"
-                                    : "bg-primary/15 text-primary"
+                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 ${
+                                  item.type === "completed"
+                                    ? "bg-green-500/15 text-green-700 dark:text-green-400 pointer-events-none"
+                                    : "bg-primary/15 text-primary cursor-pointer hover-elevate"
                                 }`}
-                                title={item.label}
+                                title={item.type === "scheduled" ? `${item.label} — click to edit` : item.label}
+                                onClick={(e) => handleEventClick(e, item)}
                                 data-testid={`calendar-event-${day}-${idx}`}
                               >
                                 {item.label}
@@ -445,15 +488,17 @@ export default function Tracker() {
         )}
       </div>
 
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+      <Dialog open={scheduleDialogOpen} onOpenChange={(open) => { setScheduleDialogOpen(open); if (!open) setEditingScheduleId(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle data-testid="text-schedule-dialog-title">Schedule TBR</DialogTitle>
+            <DialogTitle data-testid="text-schedule-dialog-title">
+              {editingScheduleId ? "Edit Schedule" : "Schedule TBR"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div>
               <label className="text-sm font-medium mb-1 block">Client</label>
-              <Select value={scheduleOrgId} onValueChange={setScheduleOrgId}>
+              <Select value={scheduleOrgId} onValueChange={setScheduleOrgId} disabled={!!editingScheduleId}>
                 <SelectTrigger data-testid="select-schedule-client">
                   <SelectValue placeholder="Select a client..." />
                 </SelectTrigger>
@@ -467,7 +512,7 @@ export default function Tracker() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Next Review Date</label>
+              <label className="text-sm font-medium mb-1 block">Review Date</label>
               <Input
                 type="date"
                 value={nextDate}
@@ -511,18 +556,33 @@ export default function Tracker() {
                 data-testid="input-schedule-notes"
               />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setScheduleDialogOpen(false)} data-testid="button-cancel-schedule">
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveSchedule}
-                disabled={!scheduleOrgId || upsertScheduleMutation.isPending}
-                data-testid="button-save-schedule"
-              >
-                {upsertScheduleMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-                Save Schedule
-              </Button>
+            <div className="flex items-center justify-between gap-2">
+              {editingScheduleId ? (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteSchedule}
+                  disabled={deleteScheduleMutation.isPending}
+                  data-testid="button-delete-schedule"
+                >
+                  {deleteScheduleMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                  Cancel This Review
+                </Button>
+              ) : (
+                <div />
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setScheduleDialogOpen(false)} data-testid="button-cancel-schedule">
+                  Close
+                </Button>
+                <Button
+                  onClick={handleSaveSchedule}
+                  disabled={!scheduleOrgId || upsertScheduleMutation.isPending}
+                  data-testid="button-save-schedule"
+                >
+                  {upsertScheduleMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                  {editingScheduleId ? "Save Changes" : "Save Schedule"}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
