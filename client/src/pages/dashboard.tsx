@@ -494,7 +494,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
     stagingData.staging.licenseReportData
   ));
 
-  const importStagingData = useCallback(() => {
+  const importStagingData = useCallback(async () => {
     const staging = stagingData?.staging;
     if (!staging) return;
 
@@ -504,11 +504,20 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
     if (staging.serviceManagerNotes) {
       setInternalNotes(prev => ({ ...prev, serviceManagerNotes: staging.serviceManagerNotes || "" }));
     }
-    if (staging.mfaReportData) {
-      setMfaReport(staging.mfaReportData as unknown as MfaReport);
-    }
-    if (staging.licenseReportData) {
-      setLicenseReport(staging.licenseReportData as unknown as LicenseReport);
+
+    if (staging.mfaReportData || staging.licenseReportData) {
+      try {
+        const res = await apiRequest("POST", "/api/reports/process-staging", {
+          mfaReportData: staging.mfaReportData || null,
+          licenseReportData: staging.licenseReportData || null,
+        });
+        const processed = await res.json();
+        if (processed.mfaReport) setMfaReport(processed.mfaReport);
+        if (processed.licenseReport) setLicenseReport(processed.licenseReport);
+      } catch (err: any) {
+        console.error("Failed to process staging reports:", err);
+        toast({ title: "Report import failed", description: "Notes were imported but CSV reports could not be processed.", variant: "destructive" });
+      }
     }
 
     setStagingImported(true);
