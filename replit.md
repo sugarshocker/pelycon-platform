@@ -21,6 +21,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `server/services/connectwise.ts` - ConnectWise Manage API integration (Basic auth)
 - `server/services/roadmap.ts` - Claude AI roadmap generation (executive summary + priority items)
 - `server/services/export.ts` - HTML summary export ("No Surprises" framework)
+- `server/services/email.ts` - Nodemailer email service for TBR reminders (SMTP configurable via env vars)
+- `server/services/reminderJob.ts` - Background job checking every hour for TBRs due in 2 days, sends email reminders
 - `client/src/App.tsx` - Main app with auth, wouter routing, shadcn sidebar navigation
 - `client/src/pages/login.tsx` - Password login page (Pelycon branded)
 - `client/src/pages/dashboard.tsx` - Main TBR dashboard with all sections + Finalize TBR
@@ -55,6 +57,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `GET /api/tbr/history/:orgId` - List finalized TBR snapshots for an org
 - `GET /api/tbr/snapshot/:id` - Get a single snapshot by ID
 - `GET /api/tbr/latest/:orgId` - Get latest + previous finalized snapshot for trend comparison
+- `GET /api/reminders/status` - Check email configuration and pending reminders
+- `POST /api/reminders/send-now` - Manually trigger sending due reminders
 
 ## Dashboard Architecture (Two-View Workflow)
 - **Overview View**: Client selector, draft management banner, inline past review list with expand/collapse, per-snapshot actions (Download PDF, Reopen as Draft), Start New Review button. No live API data loaded.
@@ -92,5 +96,6 @@ All API keys stored as Replit Secrets:
 - CW_COMPANY_ID, CW_PUBLIC_KEY, CW_PRIVATE_KEY, CW_CLIENT_ID, CW_SITE_URL
 - DASHBOARD_PASSWORD
 - SESSION_SECRET
+- SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM (optional, for email reminders)
 - DATABASE_URL (auto-configured)
 - AI_INTEGRATIONS_ANTHROPIC_API_KEY, AI_INTEGRATIONS_ANTHROPIC_BASE_URL (auto-configured)

@@ -8,6 +8,7 @@ import * as huntress from "./services/huntress";
 import * as connectwise from "./services/connectwise";
 import * as roadmap from "./services/roadmap";
 import { generateSummaryHtml } from "./services/export";
+import { isEmailConfigured, sendReminderEmail } from "./services/email";
 import { log } from "./index";
 import { insertTbrSnapshotSchema, insertTbrScheduleSchema, insertTbrStagingSchema } from "@shared/schema";
 import type { MfaReport, LicenseReport, SecuritySummary, TicketSummary, DeviceHealthSummary, InsertTbrSnapshot } from "@shared/schema";
@@ -887,6 +888,47 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err: any) {
       log(`Schedule delete error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/reminders/status", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const configured = isEmailConfigured();
+      const dueSchedules = await storage.getSchedulesDueForReminder(2);
+      res.json({
+        emailConfigured: configured,
+        pendingReminders: dueSchedules.length,
+        smtpHost: process.env.SMTP_HOST || null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/reminders/send-now", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const dueSchedules = await storage.getSchedulesDueForReminder(2);
+      if (dueSchedules.length === 0) {
+        return res.json({ sent: 0, message: "No reminders due" });
+      }
+      let sent = 0;
+      for (const schedule of dueSchedules) {
+        if (!schedule.reminderEmail || !schedule.nextReviewDate) continue;
+        const success = await sendReminderEmail({
+          to: schedule.reminderEmail,
+          orgName: schedule.orgName,
+          reviewDate: new Date(schedule.nextReviewDate),
+          notes: schedule.notes,
+        });
+        if (success) {
+          await storage.markReminderSent(schedule.id);
+          sent++;
+        }
+      }
+      res.json({ sent, total: dueSchedules.length });
+    } catch (err: any) {
+      log(`Manual reminder send error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

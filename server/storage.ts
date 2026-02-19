@@ -133,7 +133,7 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getScheduleByOrg(schedule.orgId);
     if (existing) {
       const [result] = await db.update(tbrSchedules)
-        .set({ ...schedule, updatedAt: new Date() })
+        .set({ ...schedule, updatedAt: new Date(), reminderSentAt: null })
         .where(eq(tbrSchedules.id, existing.id))
         .returning();
       return result;
