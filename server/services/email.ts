@@ -1,27 +1,7 @@
-import nodemailer from "nodemailer";
-
 const log = (msg: string) => console.log(`[email] ${msg}`);
 
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || "587");
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) {
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-}
-
 export function isEmailConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return !!(process.env.SMTP2GO_API_KEY && process.env.SMTP_FROM);
 }
 
 export async function sendReminderEmail(options: {
@@ -30,10 +10,10 @@ export async function sendReminderEmail(options: {
   reviewDate: Date;
   notes?: string | null;
 }): Promise<boolean> {
-  const transporter = getTransporter();
-  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const apiKey = process.env.SMTP2GO_API_KEY;
+  const sender = process.env.SMTP_FROM;
 
-  if (!transporter || !fromAddress) {
+  if (!apiKey || !sender) {
     log(`Email not configured — skipping reminder for ${options.orgName} to ${options.to}`);
     return false;
   }
@@ -88,13 +68,29 @@ export async function sendReminderEmail(options: {
   `;
 
   try {
-    await transporter.sendMail({
-      from: fromAddress,
-      to: options.to,
-      subject,
-      html,
+    const res = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Smtp2go-Api-Key": apiKey,
+      },
+      body: JSON.stringify({
+        sender,
+        to: [options.to],
+        subject,
+        html_body: html,
+      }),
     });
-    log(`Reminder sent to ${options.to} for ${options.orgName}`);
+
+    const body = await res.json();
+
+    if (!res.ok || body?.data?.failed > 0) {
+      const errMsg = body?.data?.error || body?.data?.failures?.join(", ") || res.statusText;
+      log(`SMTP2GO error for ${options.to}: ${errMsg}`);
+      return false;
+    }
+
+    log(`Reminder sent to ${options.to} for ${options.orgName} (email_id: ${body?.data?.email_id})`);
     return true;
   } catch (err: any) {
     log(`Failed to send reminder to ${options.to}: ${err.message}`);

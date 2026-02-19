@@ -899,7 +899,7 @@ export async function registerRoutes(
       res.json({
         emailConfigured: configured,
         pendingReminders: dueSchedules.length,
-        smtpHost: process.env.SMTP_HOST || null,
+        provider: "smtp2go",
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

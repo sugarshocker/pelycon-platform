@@ -35,6 +35,7 @@ import type {
   ApiStatus,
   TbrSnapshot,
   DeviceUserEntry,
+  TbrStaging,
 } from "@shared/schema";
 
 type DashboardView = "overview" | "editor";
@@ -446,6 +447,8 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
   const [clientFeedback, setClientFeedback] = useState<ClientFeedback>({ notes: "", followUpTasks: [] });
   const [hasDraft, setHasDraft] = useState(false);
   const [finalizedEmailText, setFinalizedEmailText] = useState<string | null>(null);
+  const [stagingImported, setStagingImported] = useState(false);
+  const [stagingBannerDismissed, setStagingBannerDismissed] = useState(false);
   const { toast } = useToast();
 
   const { data: deviceHealth } = useQuery<DeviceHealthSummary>({
@@ -477,6 +480,50 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
     queryKey: ["/api/device-users", client.id],
     enabled: !!client.id,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: stagingData } = useQuery<{ staging: TbrStaging | null }>({
+    queryKey: ["/api/staging", String(client.id)],
+    enabled: !!client.id,
+  });
+
+  const hasStagingData = !!(stagingData?.staging && (
+    stagingData.staging.engineerNotes ||
+    stagingData.staging.serviceManagerNotes ||
+    stagingData.staging.mfaReportData ||
+    stagingData.staging.licenseReportData
+  ));
+
+  const importStagingData = useCallback(() => {
+    const staging = stagingData?.staging;
+    if (!staging) return;
+
+    if (staging.engineerNotes) {
+      setInternalNotes(prev => ({ ...prev, leadEngineerNotes: staging.engineerNotes || "" }));
+    }
+    if (staging.serviceManagerNotes) {
+      setInternalNotes(prev => ({ ...prev, serviceManagerNotes: staging.serviceManagerNotes || "" }));
+    }
+    if (staging.mfaReportData) {
+      setMfaReport(staging.mfaReportData as unknown as MfaReport);
+    }
+    if (staging.licenseReportData) {
+      setLicenseReport(staging.licenseReportData as unknown as LicenseReport);
+    }
+
+    setStagingImported(true);
+    toast({ title: "Staged data imported", description: "Engineer notes, SM notes, and uploaded reports have been loaded into this review." });
+  }, [stagingData, toast]);
+
+  const clearStagingMutation = useMutation({
+    mutationFn: async () => {
+      if (!stagingData?.staging?.id) return;
+      await apiRequest("DELETE", `/api/staging/${stagingData.staging.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/staging"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staging", String(client.id)] });
+    },
   });
 
   useEffect(() => {
@@ -585,6 +632,9 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", client.id] });
       setHasDraft(false);
+      if (stagingData?.staging?.id) {
+        clearStagingMutation.mutate();
+      }
       toast({ title: "TBR Finalized", description: `Review recorded for ${client.name}. Copy the follow-up email below, then head back to overview.` });
     },
     onError: () => {
@@ -651,6 +701,65 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       </div>
 
       {previousSnapshot && <PreviousTbrBanner snapshot={previousSnapshot} />}
+
+      {hasStagingData && !stagingImported && !stagingBannerDismissed && !hasDraft && (
+        <Card className="border-[hsl(var(--brand-orange,30_80%_53%))] bg-[hsl(var(--brand-orange,30_80%_53%)/0.05)]" data-testid="staging-import-banner">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 text-sm">
+                <StickyNote className="h-4 w-4 text-[hsl(var(--brand-orange,30_80%_53%))] flex-shrink-0" />
+                <span>
+                  Staged data found —{" "}
+                  {[
+                    stagingData?.staging?.engineerNotes && "engineer notes",
+                    stagingData?.staging?.serviceManagerNotes && "SM notes",
+                    stagingData?.staging?.mfaReportData && "MFA report",
+                    stagingData?.staging?.licenseReportData && "license report",
+                  ].filter(Boolean).join(", ")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setStagingBannerDismissed(true)} data-testid="button-dismiss-staging">
+                  Dismiss
+                </Button>
+                <Button size="sm" onClick={importStagingData} data-testid="button-import-staging">
+                  <Zap className="h-4 w-4 mr-1.5" />
+                  Import Staged Data
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {stagingImported && !stagingBannerDismissed && (
+        <Card className="border-green-500/30 bg-green-500/5" data-testid="staging-imported-banner">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 text-sm">
+                <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <span>Staged data imported into this review</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    clearStagingMutation.mutate();
+                    setStagingBannerDismissed(true);
+                  }}
+                  data-testid="button-clear-staging-after-import"
+                >
+                  Clear Staging Data
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setStagingBannerDismissed(true)} data-testid="button-dismiss-imported">
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <DeviceHealth client={client} />
       <SecuritySection client={client} />

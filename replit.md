@@ -21,7 +21,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `server/services/connectwise.ts` - ConnectWise Manage API integration (Basic auth)
 - `server/services/roadmap.ts` - Claude AI roadmap generation (executive summary + priority items)
 - `server/services/export.ts` - HTML summary export ("No Surprises" framework)
-- `server/services/email.ts` - Nodemailer email service for TBR reminders (SMTP configurable via env vars)
+- `server/services/email.ts` - SMTP2GO REST API email service for TBR reminders (uses SMTP2GO_API_KEY + SMTP_FROM)
 - `server/services/reminderJob.ts` - Background job checking every hour for TBRs due in 2 days, sends email reminders
 - `client/src/App.tsx` - Main app with auth, wouter routing, shadcn sidebar navigation
 - `client/src/pages/login.tsx` - Password login page (Pelycon branded)
@@ -64,6 +64,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Overview View**: Client selector, draft management banner, inline past review list with expand/collapse, per-snapshot actions (Download PDF, Reopen as Draft), Start New Review button. No live API data loaded.
 - **Editor View**: On-demand data loading from NinjaOne/Huntress/ConnectWise. All editing sections (Device Health, Security, Tickets, Projects, CIPP Reports, Internal Notes, Client Feedback, AI Roadmap). Save Draft / Finalize / PDF export. Back button returns to Overview.
 - **Draft auto-load**: Editor loads draft fullData (CSV reports, notes, feedback, roadmap) when resuming a draft.
+- **Staging auto-import**: When starting a new review (no draft), if staging data exists for that client, a banner appears offering to import engineer notes, SM notes, MFA/license reports. After finalizing, staging data is automatically cleared.
 - **Un-finalize**: Reopens a finalized TBR as a draft for editing; blocked if another draft exists for that client.
 
 ## TBR Snapshot System
@@ -96,6 +97,6 @@ All API keys stored as Replit Secrets:
 - CW_COMPANY_ID, CW_PUBLIC_KEY, CW_PRIVATE_KEY, CW_CLIENT_ID, CW_SITE_URL
 - DASHBOARD_PASSWORD
 - SESSION_SECRET
-- SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM (optional, for email reminders)
+- SMTP2GO_API_KEY, SMTP_FROM (for email reminders via SMTP2GO REST API)
 - DATABASE_URL (auto-configured)
 - AI_INTEGRATIONS_ANTHROPIC_API_KEY, AI_INTEGRATIONS_ANTHROPIC_BASE_URL (auto-configured)

@@ -42,7 +42,7 @@ async function checkAndSendReminders() {
 export function startReminderJob() {
   log(`Starting reminder job (checking every ${CHECK_INTERVAL_MS / 60000} minutes, ${REMINDER_DAYS_AHEAD} days ahead)`);
   if (!isEmailConfigured()) {
-    log("SMTP not configured — reminders will be logged but not sent. Set SMTP_HOST, SMTP_USER, SMTP_PASS to enable.");
+    log("Email not configured — reminders will be logged but not sent. Set SMTP2GO_API_KEY and SMTP_FROM to enable.");
   }
 
   checkAndSendReminders();
