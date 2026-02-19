@@ -9,7 +9,7 @@ import * as connectwise from "./services/connectwise";
 import * as roadmap from "./services/roadmap";
 import { generateSummaryHtml } from "./services/export";
 import { log } from "./index";
-import { insertTbrSnapshotSchema } from "@shared/schema";
+import { insertTbrSnapshotSchema, insertTbrScheduleSchema, insertTbrStagingSchema } from "@shared/schema";
 import type { MfaReport, LicenseReport, SecuritySummary, TicketSummary, DeviceHealthSummary, InsertTbrSnapshot } from "@shared/schema";
 import { storage } from "./storage";
 
@@ -832,6 +832,185 @@ export async function registerRoutes(
       res.json({ latest: latest || null, previous: previous || null });
     } catch (err: any) {
       log(`TBR latest error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/schedules", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const schedules = await storage.getAllSchedules();
+      res.json(schedules);
+    } catch (err: any) {
+      log(`Schedules list error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/schedules/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId as string);
+      if (isNaN(orgId)) return res.status(400).json({ message: "Invalid org ID" });
+      const schedule = await storage.getScheduleByOrg(orgId);
+      res.json({ schedule: schedule || null });
+    } catch (err: any) {
+      log(`Schedule get error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/schedules", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { orgId, orgName, frequencyMonths, nextReviewDate, notes } = req.body;
+      if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
+      const schedule = await storage.upsertSchedule({
+        orgId,
+        orgName,
+        frequencyMonths: frequencyMonths || 6,
+        nextReviewDate: nextReviewDate ? new Date(nextReviewDate) : null,
+        lastReviewDate: null,
+        notes: notes || null,
+      });
+      log(`Schedule upserted for ${orgName} (orgId: ${orgId})`);
+      res.json(schedule);
+    } catch (err: any) {
+      log(`Schedule upsert error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/schedules/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid schedule ID" });
+      await storage.deleteSchedule(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Schedule delete error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/tbr/all-finalized", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const snapshots = await storage.getAllFinalizedSnapshots();
+      res.json(snapshots);
+    } catch (err: any) {
+      log(`All finalized snapshots error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/staging", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const all = await storage.getAllStaging();
+      res.json(all);
+    } catch (err: any) {
+      log(`Staging list error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/staging/:orgId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const orgId = parseInt(req.params.orgId as string);
+      if (isNaN(orgId)) return res.status(400).json({ message: "Invalid org ID" });
+      const staging = await storage.getStagingByOrg(orgId);
+      res.json({ staging: staging || null });
+    } catch (err: any) {
+      log(`Staging get error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/staging/save", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { orgId, orgName, engineerNotes, serviceManagerNotes } = req.body;
+      if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
+      const existing = await storage.getStagingByOrg(orgId);
+      const staging = await storage.upsertStaging({
+        orgId,
+        orgName,
+        engineerNotes: engineerNotes ?? (existing as any)?.engineerNotes ?? null,
+        serviceManagerNotes: serviceManagerNotes ?? (existing as any)?.serviceManagerNotes ?? null,
+        mfaReportData: (existing as any)?.mfaReportData ?? null,
+        licenseReportData: (existing as any)?.licenseReportData ?? null,
+        mfaFileName: (existing as any)?.mfaFileName ?? null,
+        licenseFileName: (existing as any)?.licenseFileName ?? null,
+      });
+      log(`Staging notes saved for ${orgName} (orgId: ${orgId})`);
+      res.json(staging);
+    } catch (err: any) {
+      log(`Staging save error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/staging/upload-mfa", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const orgId = parseInt(req.body.orgId);
+      const orgName = req.body.orgName;
+      if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
+
+      const csvText = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: (h: string) => h.trim() });
+
+      const existing = await storage.getStagingByOrg(orgId);
+      const staging = await storage.upsertStaging({
+        orgId,
+        orgName,
+        engineerNotes: (existing as any)?.engineerNotes ?? null,
+        serviceManagerNotes: (existing as any)?.serviceManagerNotes ?? null,
+        mfaReportData: { rawRows: parsed.data, headers: parsed.meta.fields },
+        licenseReportData: (existing as any)?.licenseReportData ?? null,
+        mfaFileName: req.file.originalname,
+        licenseFileName: (existing as any)?.licenseFileName ?? null,
+      });
+      log(`Staging MFA CSV uploaded for ${orgName} (${parsed.data.length} rows)`);
+      res.json(staging);
+    } catch (err: any) {
+      log(`Staging MFA upload error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/staging/upload-license", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const orgId = parseInt(req.body.orgId);
+      const orgName = req.body.orgName;
+      if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
+
+      const csvText = req.file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true, transformHeader: (h: string) => h.trim() });
+
+      const existing = await storage.getStagingByOrg(orgId);
+      const staging = await storage.upsertStaging({
+        orgId,
+        orgName,
+        engineerNotes: (existing as any)?.engineerNotes ?? null,
+        serviceManagerNotes: (existing as any)?.serviceManagerNotes ?? null,
+        mfaReportData: (existing as any)?.mfaReportData ?? null,
+        licenseReportData: { rawRows: parsed.data, headers: parsed.meta.fields },
+        mfaFileName: (existing as any)?.mfaFileName ?? null,
+        licenseFileName: req.file.originalname,
+      });
+      log(`Staging License CSV uploaded for ${orgName} (${parsed.data.length} rows)`);
+      res.json(staging);
+    } catch (err: any) {
+      log(`Staging License upload error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/staging/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid staging ID" });
+      await storage.deleteStaging(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Staging delete error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

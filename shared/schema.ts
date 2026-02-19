@@ -266,5 +266,49 @@ export interface ApiStatus {
   connectwise: boolean;
 }
 
+export const tbrSchedules = pgTable("tbr_schedules", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().unique(),
+  orgName: text("org_name").notNull(),
+  frequencyMonths: integer("frequency_months").default(6).notNull(),
+  nextReviewDate: timestamp("next_review_date"),
+  lastReviewDate: timestamp("last_review_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertTbrScheduleSchema = createInsertSchema(tbrSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTbrSchedule = z.infer<typeof insertTbrScheduleSchema>;
+export type TbrSchedule = typeof tbrSchedules.$inferSelect;
+
+export const tbrStaging = pgTable("tbr_staging", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().unique(),
+  orgName: text("org_name").notNull(),
+  engineerNotes: text("engineer_notes"),
+  serviceManagerNotes: text("service_manager_notes"),
+  mfaReportData: jsonb("mfa_report_data"),
+  licenseReportData: jsonb("license_report_data"),
+  mfaFileName: text("mfa_file_name"),
+  licenseFileName: text("license_file_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertTbrStagingSchema = createInsertSchema(tbrStaging).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTbrStaging = z.infer<typeof insertTbrStagingSchema>;
+export type TbrStaging = typeof tbrStaging.$inferSelect;
+
 export type User = { id: string; username: string; password: string };
 export type InsertUser = { username: string; password: string };

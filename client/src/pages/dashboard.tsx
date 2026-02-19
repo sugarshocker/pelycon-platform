@@ -14,15 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTheme } from "@/components/theme-provider";
 import {
-  Sun, Moon, LogOut, CheckCircle2, XCircle, Save, Loader2,
+  CheckCircle2, XCircle, Save, Loader2,
   History, FileText, AlertCircle, Plus, ArrowLeft, ChevronDown,
   ChevronUp, Monitor, Shield, Ticket, KeyRound, AlertTriangle,
   MessageSquare, StickyNote, CheckSquare, Square, FileDown,
   Unlock, Zap, Copy, Mail, Check,
 } from "lucide-react";
-import { apiRequest, clearToken, getToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, getToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 import type {
@@ -40,14 +39,9 @@ import type {
 
 type DashboardView = "overview" | "editor";
 
-interface DashboardProps {
-  onLogout: () => void;
-}
-
-export default function Dashboard({ onLogout }: DashboardProps) {
+export default function Dashboard() {
   const [selectedClient, setSelectedClient] = useState<Organization | null>(null);
   const [view, setView] = useState<DashboardView>("overview");
-  const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
 
   const { data: apiStatus } = useQuery<ApiStatus>({
@@ -61,55 +55,31 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setView("overview");
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await apiRequest("POST", "/api/auth/logout");
-      onLogout();
-    } catch {
-      onLogout();
-    }
-  };
-
   const today = new Date();
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <img src={pelyconLogo} alt="Pelycon Technologies" className="h-8 w-8 object-contain flex-shrink-0" />
-            <div>
-              <h1 className="text-base font-semibold leading-none" data-testid="text-dashboard-title">
-                Technology Business Review
-              </h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Pelycon Technologies &middot; {today.toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
+    <div className="h-full bg-background">
+      <div className="max-w-6xl mx-auto px-4 py-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <div>
+            <h1 className="text-lg font-semibold" data-testid="text-dashboard-title">
+              Technology Business Review
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          </div>
+          {apiStatus && (
+            <div className="flex items-center gap-2">
+              <ConnectionBadge name="NinjaOne" connected={apiStatus.ninjaone} />
+              <ConnectionBadge name="Huntress" connected={apiStatus.huntress} />
+              <ConnectionBadge name="ConnectWise" connected={apiStatus.connectwise} />
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {apiStatus && (
-              <div className="hidden md:flex items-center gap-2 mr-2">
-                <ConnectionBadge name="NinjaOne" connected={apiStatus.ninjaone} />
-                <ConnectionBadge name="Huntress" connected={apiStatus.huntress} />
-                <ConnectionBadge name="ConnectWise" connected={apiStatus.connectwise} />
-              </div>
-            )}
-            <Button variant="ghost" size="icon" onClick={toggleTheme} data-testid="button-theme-toggle">
-              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={handleLogout} data-testid="button-logout">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
+          )}
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 pb-6 space-y-6">
         {view === "overview" && (
           <>
             <ClientSelector selectedClient={selectedClient} onSelectClient={handleClientSelect} />
@@ -147,7 +117,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             }}
           />
         )}
-      </main>
+      </div>
     </div>
   );
 }

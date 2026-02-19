@@ -12,18 +12,20 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Brand**: Pelycon Technologies (Orange #E77125, Storm Gray #394442, Poppins font)
 
 ## Key Files
-- `shared/schema.ts` - TypeScript interfaces + Drizzle table definitions (tbrSnapshots)
+- `shared/schema.ts` - TypeScript interfaces + Drizzle table definitions (tbrSnapshots, tbrSchedules, tbrStaging)
 - `server/db.ts` - PostgreSQL database connection (drizzle-orm/node-postgres)
-- `server/storage.ts` - Storage interface for TBR snapshot CRUD operations
-- `server/routes.ts` - All API routes (auth, proxy to MSP APIs, CSV parsing, AI, export, TBR finalization)
+- `server/storage.ts` - Storage interface for TBR snapshot, schedule, and staging CRUD operations
+- `server/routes.ts` - All API routes (auth, proxy to MSP APIs, CSV parsing, AI, export, TBR finalization, schedules, staging)
 - `server/services/ninjaone.ts` - NinjaOne API integration (Legacy API Keys, HMAC-SHA1)
 - `server/services/huntress.ts` - Huntress API integration (Basic auth)
 - `server/services/connectwise.ts` - ConnectWise Manage API integration (Basic auth)
 - `server/services/roadmap.ts` - Claude AI roadmap generation (executive summary + priority items)
 - `server/services/export.ts` - HTML summary export ("No Surprises" framework)
-- `client/src/App.tsx` - Main app with auth state management
+- `client/src/App.tsx` - Main app with auth, wouter routing, shadcn sidebar navigation
 - `client/src/pages/login.tsx` - Password login page (Pelycon branded)
-- `client/src/pages/dashboard.tsx` - Main dashboard with all sections + Finalize TBR
+- `client/src/pages/dashboard.tsx` - Main TBR dashboard with all sections + Finalize TBR
+- `client/src/pages/tracker.tsx` - TBR Tracker: review schedules, overdue/upcoming alerts, recent completions
+- `client/src/pages/staging.tsx` - TBR Staging Area: pre-enter engineer/SM notes, upload MFA/License CSVs
 - `client/src/components/` - Dashboard section components
 - `client/src/components/meeting-export.tsx` - Export buttons: PDF download (html2pdf.js) and Print (passes previousSnapshot to export)
 
