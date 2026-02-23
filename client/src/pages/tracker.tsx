@@ -258,10 +258,12 @@ export default function Tracker() {
     openNewScheduleDialog(dateStr);
   };
 
-  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number }) => {
+  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number; snapshotId?: number }) => {
     e.stopPropagation();
     if (item.type === "scheduled" && item.scheduleId) {
       openEditScheduleDialog(item.scheduleId);
+    } else if (item.type === "completed" && item.snapshotId) {
+      handleDownloadPdf(item.snapshotId);
     }
   };
 
@@ -524,12 +526,12 @@ export default function Tracker() {
                             {event.items.slice(0, 2).map((item, idx) => (
                               <div
                                 key={idx}
-                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 ${
+                                className={`text-[10px] leading-tight truncate rounded px-1 py-0.5 cursor-pointer hover-elevate ${
                                   item.type === "completed"
-                                    ? "bg-green-500/15 text-green-700 dark:text-green-400 pointer-events-none"
-                                    : "bg-primary/15 text-primary cursor-pointer hover-elevate"
+                                    ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                                    : "bg-primary/15 text-primary"
                                 }`}
-                                title={item.type === "scheduled" ? `${item.label} — click to edit` : item.label}
+                                title={item.type === "scheduled" ? `${item.label} — click to edit` : `${item.label} — click to download PDF`}
                                 onClick={(e) => handleEventClick(e, item)}
                                 data-testid={`calendar-event-${day}-${idx}`}
                               >

@@ -628,6 +628,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
   });
 
   useEffect(() => {
+    if (finalizedEmailText) return;
     if (draftData?.draft?.fullData) {
       const fd = draftData.draft.fullData as any;
       setMfaReport(fd.mfaReport || null);
