@@ -60,6 +60,23 @@ function getMonthLabel(key: string) {
   return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
 }
 
+function getWeekStart(d: Date): Date {
+  const day = new Date(d);
+  day.setHours(0, 0, 0, 0);
+  day.setDate(day.getDate() - day.getDay());
+  return day;
+}
+
+function getWeekKey(d: Date): string {
+  const ws = getWeekStart(d);
+  return ws.toISOString().split("T")[0];
+}
+
+function getWeekLabel(key: string): string {
+  const d = new Date(key + "T12:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function Tracker() {
   const { toast } = useToast();
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
@@ -70,6 +87,7 @@ export default function Tracker() {
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [reminderEmail, setReminderEmail] = useState("");
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [chartMode, setChartMode] = useState<"weekly" | "monthly">("weekly");
 
   const { data: organizations, isLoading: orgsLoading } = useQuery<Organization[]>({
     queryKey: ["/api/organizations"],
@@ -129,25 +147,46 @@ export default function Tracker() {
   }).length;
 
   const chartData = useMemo(() => {
-    const monthMap: Record<string, number> = {};
-    const endMonth = new Date();
-    const startMonth = new Date();
-    startMonth.setMonth(startMonth.getMonth() - 11);
+    if (chartMode === "monthly") {
+      const monthMap: Record<string, number> = {};
+      const endMonth = new Date();
+      const startMonth = new Date();
+      startMonth.setMonth(startMonth.getMonth() - 11);
 
-    for (let d = new Date(startMonth); d <= endMonth; d.setMonth(d.getMonth() + 1)) {
-      monthMap[getMonthKey(d)] = 0;
+      for (let d = new Date(startMonth); d <= endMonth; d.setMonth(d.getMonth() + 1)) {
+        monthMap[getMonthKey(d)] = 0;
+      }
+
+      finalized.forEach((snap) => {
+        const key = getMonthKey(new Date(snap.createdAt));
+        if (key in monthMap) monthMap[key]++;
+      });
+
+      return Object.entries(monthMap).map(([key, count]) => ({
+        label: getMonthLabel(key),
+        reviews: count,
+      }));
+    } else {
+      const weekMap: Record<string, number> = {};
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(start.getDate() - 12 * 7);
+
+      for (let d = new Date(getWeekStart(start)); d <= now; d.setDate(d.getDate() + 7)) {
+        weekMap[getWeekKey(d)] = 0;
+      }
+
+      finalized.forEach((snap) => {
+        const key = getWeekKey(new Date(snap.createdAt));
+        if (key in weekMap) weekMap[key]++;
+      });
+
+      return Object.entries(weekMap).map(([key, count]) => ({
+        label: getWeekLabel(key),
+        reviews: count,
+      }));
     }
-
-    finalized.forEach((snap) => {
-      const key = getMonthKey(new Date(snap.createdAt));
-      if (key in monthMap) monthMap[key]++;
-    });
-
-    return Object.entries(monthMap).map(([key, count]) => ({
-      month: getMonthLabel(key),
-      reviews: count,
-    }));
-  }, [finalized]);
+  }, [finalized, chartMode]);
 
   const calendarYear = calendarDate.getFullYear();
   const calendarMonth = calendarDate.getMonth();
@@ -343,7 +382,27 @@ export default function Tracker() {
               <Card className="lg:col-span-3" data-testid="card-tbr-chart">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                   <CardTitle className="text-sm font-medium">TBR Activity</CardTitle>
-                  <Badge variant="secondary" className="text-xs">Last 12 months</Badge>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-md border border-border overflow-hidden">
+                      <button
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${chartMode === "weekly" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => setChartMode("weekly")}
+                        data-testid="button-chart-weekly"
+                      >
+                        Weekly
+                      </button>
+                      <button
+                        className={`px-2.5 py-1 text-xs font-medium transition-colors ${chartMode === "monthly" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                        onClick={() => setChartMode("monthly")}
+                        data-testid="button-chart-monthly"
+                      >
+                        Monthly
+                      </button>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      {chartMode === "weekly" ? "Last 12 weeks" : "Last 12 months"}
+                    </Badge>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="h-52">
@@ -351,7 +410,7 @@ export default function Tracker() {
                       <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                         <XAxis
-                          dataKey="month"
+                          dataKey="label"
                           tick={{ fontSize: 11 }}
                           className="fill-muted-foreground"
                           tickLine={false}

@@ -131,8 +131,22 @@ export default function Dashboard() {
 }
 
 function OpenDraftsBanner({ onSelectClient }: { onSelectClient: (org: Organization) => void }) {
+  const { toast } = useToast();
   const { data: drafts } = useQuery<TbrSnapshot[]>({
     queryKey: ["/api/tbr/drafts"],
+  });
+
+  const discardMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/tbr/draft/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/drafts"] });
+      toast({ title: "Draft discarded" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to discard draft.", variant: "destructive" });
+    },
   });
 
   if (!drafts || drafts.length === 0) return null;
@@ -168,15 +182,27 @@ function OpenDraftsBanner({ onSelectClient }: { onSelectClient: (org: Organizati
                     </Badge>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => onSelectClient({ id: draft.orgId, name: draft.orgName })}
-                  data-testid={`button-resume-draft-${draft.id}`}
-                >
-                  Resume
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => discardMutation.mutate(draft.id)}
+                    disabled={discardMutation.isPending}
+                    data-testid={`button-discard-draft-${draft.id}`}
+                  >
+                    Discard
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => onSelectClient({ id: draft.orgId, name: draft.orgName })}
+                    data-testid={`button-resume-draft-${draft.id}`}
+                  >
+                    Resume
+                  </Button>
+                </div>
               </div>
             );
           })}
