@@ -19,7 +19,7 @@ import {
   History, FileText, AlertCircle, Plus, ArrowLeft, ChevronDown,
   ChevronUp, Monitor, Shield, Ticket, KeyRound, AlertTriangle,
   MessageSquare, StickyNote, CheckSquare, Square, FileDown,
-  Unlock, Zap, Copy, Mail, Check,
+  Unlock, Zap, Copy, Mail, Check, Clock,
 } from "lucide-react";
 import { apiRequest, getToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +84,12 @@ export default function Dashboard() {
         {view === "overview" && (
           <>
             <ClientSelector selectedClient={selectedClient} onSelectClient={handleClientSelect} />
+            <OpenDraftsBanner
+              onSelectClient={(org) => {
+                setSelectedClient(org);
+                setView("editor");
+              }}
+            />
             {selectedClient ? (
               <ClientOverview
                 client={selectedClient}
@@ -115,11 +121,68 @@ export default function Dashboard() {
               queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", selectedClient.id] });
               queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", selectedClient.id] });
               queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", selectedClient.id] });
+              queryClient.invalidateQueries({ queryKey: ["/api/tbr/drafts"] });
             }}
           />
         )}
       </div>
     </div>
+  );
+}
+
+function OpenDraftsBanner({ onSelectClient }: { onSelectClient: (org: Organization) => void }) {
+  const { data: drafts } = useQuery<TbrSnapshot[]>({
+    queryKey: ["/api/tbr/drafts"],
+  });
+
+  if (!drafts || drafts.length === 0) return null;
+
+  const now = new Date();
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200" data-testid="text-open-drafts-title">
+            {drafts.length} Open Draft{drafts.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          {drafts.map((draft) => {
+            const updatedAt = new Date(draft.updatedAt);
+            const ageDays = Math.floor((now.getTime() - updatedAt.getTime()) / (1000 * 60 * 60 * 24));
+            const isStale = ageDays > 7;
+
+            return (
+              <div key={draft.id} className="flex items-center justify-between gap-2 flex-wrap" data-testid={`draft-item-${draft.id}`}>
+                <div className="flex items-center gap-2 text-sm">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="font-medium">{draft.orgName}</span>
+                  <span className="text-muted-foreground">
+                    — saved {updatedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                  {isStale && (
+                    <Badge variant="outline" className="text-xs text-amber-700 border-amber-300 bg-amber-100 dark:text-amber-300 dark:border-amber-700 dark:bg-amber-900/50">
+                      {ageDays}d old
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => onSelectClient({ id: draft.orgId, name: draft.orgName })}
+                  data-testid={`button-resume-draft-${draft.id}`}
+                >
+                  Resume
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -156,6 +219,7 @@ function ClientOverview({
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/drafts"] });
       toast({ title: "TBR Reopened", description: "The review has been reopened as a draft. You can now edit it." });
       onEditSnapshot();
     },
@@ -171,6 +235,7 @@ function ClientOverview({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/drafts"] });
       toast({ title: "Draft discarded" });
     },
     onError: () => {
@@ -644,6 +709,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tbr/drafts"] });
       setHasDraft(false);
       if (stagingData?.staging?.id) {
         clearStagingMutation.mutate();

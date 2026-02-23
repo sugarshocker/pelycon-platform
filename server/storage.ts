@@ -23,6 +23,7 @@ export interface IStorage {
   getLatestTbrSnapshot(orgId: number): Promise<TbrSnapshot | undefined>;
   getPreviousTbrSnapshot(orgId: number): Promise<TbrSnapshot | undefined>;
   getDraftByOrg(orgId: number): Promise<TbrSnapshot | undefined>;
+  getAllDrafts(): Promise<TbrSnapshot[]>;
   getTbrSnapshotById(id: number): Promise<TbrSnapshot | undefined>;
   deleteTbrSnapshot(id: number): Promise<void>;
   getAllSchedules(): Promise<TbrSchedule[]>;
@@ -120,6 +121,12 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(tbrSnapshots.orgId, orgId), eq(tbrSnapshots.status, "draft")))
       .orderBy(desc(tbrSnapshots.updatedAt)).limit(1);
     return results[0];
+  }
+
+  async getAllDrafts(): Promise<TbrSnapshot[]> {
+    return db.select().from(tbrSnapshots)
+      .where(eq(tbrSnapshots.status, "draft"))
+      .orderBy(desc(tbrSnapshots.updatedAt));
   }
 
   async getTbrSnapshotById(id: number): Promise<TbrSnapshot | undefined> {

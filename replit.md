@@ -59,6 +59,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `POST /api/tbr/save-draft` - Save TBR as draft (preserves CSV reports, notes, roadmap, live data)
 - `GET /api/tbr/draft/:orgId` - Load existing draft for an org
 - `DELETE /api/tbr/draft/:id` - Discard a draft
+- `GET /api/tbr/drafts` - List all open drafts across all clients
 - `POST /api/tbr/finalize` - Finalize TBR snapshot (promotes draft if exists), returns snapshot with ID
 - `POST /api/connectwise/ticket` - Create follow-up ticket in ConnectWise (Medium priority, client's service board, saves cwTicketId to snapshot)
 - `POST /api/tbr/unfinalize/:id` - Reopen a finalized TBR as a draft (blocked if draft already exists for that client)

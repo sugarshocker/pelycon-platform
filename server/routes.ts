@@ -980,6 +980,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tbr/drafts", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const drafts = await storage.getAllDrafts();
+      res.json(drafts);
+    } catch (err: any) {
+      log(`Get all drafts error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/tbr/draft/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
       const orgId = parseInt(req.params.orgId as string);
