@@ -279,21 +279,37 @@ export async function getProjectItems(
 export async function getServiceBoardForCompany(companyName: string): Promise<{ boardId: number; boardName: string } | null> {
   try {
     const cwCompanyId = await findCompanyByName(companyName);
-    if (!cwCompanyId) return null;
 
-    const tickets = await apiGet("/service/tickets", {
-      conditions: `company/id = ${cwCompanyId}`,
-      pageSize: "10",
-      orderBy: "dateEntered desc",
-    });
-
-    if (tickets.length > 0 && tickets[0].board) {
-      return { boardId: tickets[0].board.id, boardName: tickets[0].board.name };
+    if (cwCompanyId) {
+      try {
+        const tickets = await apiGet("/service/tickets", {
+          conditions: `company/id = ${cwCompanyId}`,
+          pageSize: "10",
+          orderBy: "dateEntered desc",
+        });
+        if (tickets.length > 0 && tickets[0].board) {
+          return { boardId: tickets[0].board.id, boardName: tickets[0].board.name };
+        }
+      } catch (e) {
+        log(`ConnectWise: could not fetch tickets for board lookup: ${e}`);
+      }
     }
 
-    const boards = await apiGet("/service/boards", { pageSize: "25" });
-    if (boards.length > 0) {
-      return { boardId: boards[0].id, boardName: boards[0].name };
+    try {
+      const boards = await apiGet("/service/boards", {
+        conditions: `name = "Help Desk"`,
+        pageSize: "1",
+      });
+      if (boards.length > 0) {
+        return { boardId: boards[0].id, boardName: boards[0].name };
+      }
+    } catch (e) {
+      log(`ConnectWise: could not find Help Desk board by name: ${e}`);
+    }
+
+    const allBoards = await apiGet("/service/boards", { pageSize: "25" });
+    if (allBoards.length > 0) {
+      return { boardId: allBoards[0].id, boardName: allBoards[0].name };
     }
 
     return null;
