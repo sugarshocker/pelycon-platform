@@ -325,6 +325,29 @@ export async function getServiceBoardForCompany(companyName: string): Promise<{ 
   return null;
 }
 
+async function findPriority(): Promise<{ id: number; name: string } | null> {
+  try {
+    const priorities = await apiGet("/service/priorities", { pageSize: "50", orderBy: "sortOrder asc" });
+    if (!priorities || priorities.length === 0) return null;
+
+    const preferred = ["Medium", "Priority 3 - Normal", "Normal", "Standard", "Low"];
+    for (const name of preferred) {
+      const match = priorities.find((p: any) => p.name?.toLowerCase() === name.toLowerCase());
+      if (match) {
+        log(`ConnectWise: using priority "${match.name}" (id: ${match.id})`);
+        return { id: match.id, name: match.name };
+      }
+    }
+
+    const mid = Math.floor(priorities.length / 2);
+    log(`ConnectWise: no preferred priority found, using "${priorities[mid].name}" (middle of ${priorities.length})`);
+    return { id: priorities[mid].id, name: priorities[mid].name };
+  } catch (e) {
+    log(`ConnectWise: could not fetch priorities: ${e}`);
+    return null;
+  }
+}
+
 export async function createFollowUpTicket(
   companyName: string,
   followUpTasks: string[],
@@ -339,35 +362,35 @@ export async function createFollowUpTicket(
   const description = `Technology Business Review — Follow-Up Tasks (${tbrDate})\n\n${bulletList}`;
 
   const board = await getServiceBoardForCompany(companyName);
+  const priority = await findPriority();
 
-  if (board) {
-    const ticketBody: any = {
+  const buildTicketBody = (boardRef?: any) => {
+    const body: any = {
       summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
       company: { id: cwCompanyId },
-      board: { id: board.boardId },
-      priority: { name: "Medium" },
       initialDescription: description,
     };
+    if (boardRef) body.board = boardRef;
+    if (priority) body.priority = { id: priority.id };
+    return body;
+  };
 
-    const ticket = await apiPost("/service/tickets", ticketBody);
-    log(`ConnectWise ticket created: #${ticket.id} on board "${board.boardName}" for ${companyName}`);
-    const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
-    return { ticketId: ticket.id, ticketUrl };
+  if (board) {
+    try {
+      const ticket = await apiPost("/service/tickets", buildTicketBody({ id: board.boardId }));
+      log(`ConnectWise ticket created: #${ticket.id} on board "${board.boardName}" for ${companyName}`);
+      const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
+      return { ticketId: ticket.id, ticketUrl };
+    } catch (e: any) {
+      log(`ConnectWise: ticket creation with board id ${board.boardId} failed: ${e.message}`);
+    }
   }
 
-  log(`ConnectWise: no board found via lookup, trying direct ticket creation with board names`);
+  log(`ConnectWise: trying direct ticket creation with board names`);
   const boardNamesToTry = ["Help Desk", "Service Desk", "Support", "Service Board"];
   for (const boardName of boardNamesToTry) {
     try {
-      const ticketBody: any = {
-        summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
-        company: { id: cwCompanyId },
-        board: { name: boardName },
-        priority: { name: "Medium" },
-        initialDescription: description,
-      };
-
-      const ticket = await apiPost("/service/tickets", ticketBody);
+      const ticket = await apiPost("/service/tickets", buildTicketBody({ name: boardName }));
       log(`ConnectWise ticket created: #${ticket.id} on board "${boardName}" for ${companyName}`);
       const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
       return { ticketId: ticket.id, ticketUrl };
@@ -377,14 +400,7 @@ export async function createFollowUpTicket(
   }
 
   try {
-    const ticketBody: any = {
-      summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
-      company: { id: cwCompanyId },
-      priority: { name: "Medium" },
-      initialDescription: description,
-    };
-
-    const ticket = await apiPost("/service/tickets", ticketBody);
+    const ticket = await apiPost("/service/tickets", buildTicketBody());
     log(`ConnectWise ticket created: #${ticket.id} (no board specified) for ${companyName}`);
     const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
     return { ticketId: ticket.id, ticketUrl };
