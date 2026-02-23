@@ -1062,7 +1062,8 @@ function FinalizationConfirmation({
   const [cwCreating, setCwCreating] = useState(false);
   const { toast } = useToast();
 
-  const incompleteTasks = (followUpTasks || []).filter(t => !t.completed);
+  const allTasks = followUpTasks || [];
+  const incompleteTasks = allTasks.filter(t => !t.completed);
 
   const handleCopy = async () => {
     try {
@@ -1137,12 +1138,14 @@ function FinalizationConfirmation({
     }
   };
 
+  const ticketTasks = allTasks.length > 0 ? allTasks : incompleteTasks;
+
   const handleCreateCwTicket = async () => {
-    if (incompleteTasks.length === 0) return;
+    if (ticketTasks.length === 0) return;
     setCwCreating(true);
     try {
       const tbrDate = new Date().toISOString().split("T")[0];
-      const taskTexts = incompleteTasks.map(t => t.text);
+      const taskTexts = ticketTasks.map(t => t.text);
       const res = await apiRequest("POST", "/api/connectwise/ticket", {
         snapshotId,
         companyName: clientName,
@@ -1194,38 +1197,40 @@ function FinalizationConfirmation({
           </CardContent>
         </Card>
 
-        {incompleteTasks.length > 0 && (
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-1.5">
-                  <Ticket className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">ConnectWise Ticket</p>
-                </div>
-                {cwTicketId ? (
-                  <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    #{cwTicketId}
-                  </Badge>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={handleCreateCwTicket} disabled={cwCreating} data-testid="button-create-cw-ticket">
-                    {cwCreating ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
-                    {cwCreating ? "Creating..." : "Create Ticket"}
-                  </Button>
-                )}
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-1.5">
+                <Ticket className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">ConnectWise Ticket</p>
               </div>
               {cwTicketId ? (
-                <p className="text-xs text-emerald-600">
-                  Follow-up ticket #{cwTicketId} created in ConnectWise with {incompleteTasks.length} task{incompleteTasks.length !== 1 ? "s" : ""}.
-                </p>
+                <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  #{cwTicketId}
+                </Badge>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Create a follow-up ticket with {incompleteTasks.length} task{incompleteTasks.length !== 1 ? "s" : ""} on the client's service board.
-                </p>
+                <Button variant="outline" size="sm" onClick={handleCreateCwTicket} disabled={cwCreating || ticketTasks.length === 0} data-testid="button-create-cw-ticket">
+                  {cwCreating ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
+                  {cwCreating ? "Creating..." : "Create Ticket"}
+                </Button>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </div>
+            {cwTicketId ? (
+              <p className="text-xs text-emerald-600">
+                Follow-up ticket #{cwTicketId} created in ConnectWise with {ticketTasks.length} task{ticketTasks.length !== 1 ? "s" : ""}.
+              </p>
+            ) : ticketTasks.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Create a follow-up ticket with {ticketTasks.length} task{ticketTasks.length !== 1 ? "s" : ""} on the client's service board.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No follow-up tasks to create a ticket for. Add tasks in the Client Feedback section before finalizing.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
