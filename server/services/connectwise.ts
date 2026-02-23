@@ -335,26 +335,65 @@ export async function createFollowUpTicket(
     throw new Error(`Could not find company "${companyName}" in ConnectWise`);
   }
 
-  const board = await getServiceBoardForCompany(companyName);
-  if (!board) {
-    throw new Error(`Could not find a service board for "${companyName}"`);
-  }
-
   const bulletList = followUpTasks.map(t => `• ${t}`).join("\n");
   const description = `Technology Business Review — Follow-Up Tasks (${tbrDate})\n\n${bulletList}`;
 
-  const ticketBody: any = {
-    summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
-    company: { id: cwCompanyId },
-    board: { id: board.boardId },
-    priority: { name: "Medium" },
-    initialDescription: description,
-  };
+  const board = await getServiceBoardForCompany(companyName);
 
-  const ticket = await apiPost("/service/tickets", ticketBody);
-  log(`ConnectWise ticket created: #${ticket.id} for ${companyName}`);
+  if (board) {
+    const ticketBody: any = {
+      summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
+      company: { id: cwCompanyId },
+      board: { id: board.boardId },
+      priority: { name: "Medium" },
+      initialDescription: description,
+    };
 
-  const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
+    const ticket = await apiPost("/service/tickets", ticketBody);
+    log(`ConnectWise ticket created: #${ticket.id} on board "${board.boardName}" for ${companyName}`);
+    const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
+    return { ticketId: ticket.id, ticketUrl };
+  }
 
-  return { ticketId: ticket.id, ticketUrl };
+  log(`ConnectWise: no board found via lookup, trying direct ticket creation with board names`);
+  const boardNamesToTry = ["Help Desk", "Service Desk", "Support", "Service Board"];
+  for (const boardName of boardNamesToTry) {
+    try {
+      const ticketBody: any = {
+        summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
+        company: { id: cwCompanyId },
+        board: { name: boardName },
+        priority: { name: "Medium" },
+        initialDescription: description,
+      };
+
+      const ticket = await apiPost("/service/tickets", ticketBody);
+      log(`ConnectWise ticket created: #${ticket.id} on board "${boardName}" for ${companyName}`);
+      const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
+      return { ticketId: ticket.id, ticketUrl };
+    } catch (e: any) {
+      log(`ConnectWise: ticket creation with board "${boardName}" failed: ${e.message}`);
+    }
+  }
+
+  try {
+    const ticketBody: any = {
+      summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
+      company: { id: cwCompanyId },
+      priority: { name: "Medium" },
+      initialDescription: description,
+    };
+
+    const ticket = await apiPost("/service/tickets", ticketBody);
+    log(`ConnectWise ticket created: #${ticket.id} (no board specified) for ${companyName}`);
+    const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
+    return { ticketId: ticket.id, ticketUrl };
+  } catch (e: any) {
+    log(`ConnectWise: ticket creation without board failed: ${e.message}`);
+  }
+
+  throw new Error(
+    `Could not create a ConnectWise ticket. The API member may need "Add" permission for Service Tickets and read access to Service Boards. ` +
+    `Check Security Roles in ConnectWise under the "Service Desk" tab.`
+  );
 }
