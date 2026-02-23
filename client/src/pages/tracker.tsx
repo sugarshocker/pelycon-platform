@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ function getWeekLabel(key: string): string {
 }
 
 export default function Tracker() {
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null);
@@ -196,14 +198,14 @@ export default function Tracker() {
   const daysInMonth = lastDay.getDate();
 
   const calendarEvents = useMemo(() => {
-    const events: Record<number, { items: Array<{ label: string; type: "completed" | "scheduled"; snapshotId?: number; scheduleId?: number }> }> = {};
+    const events: Record<number, { items: Array<{ label: string; type: "completed" | "scheduled"; snapshotId?: number; scheduleId?: number; orgId?: number }> }> = {};
 
     finalized.forEach((snap) => {
       const d = new Date(snap.createdAt);
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
         if (!events[day]) events[day] = { items: [] };
-        events[day].items.push({ label: snap.orgName, type: "completed", snapshotId: snap.id });
+        events[day].items.push({ label: snap.orgName, type: "completed", snapshotId: snap.id, orgId: snap.orgId });
       }
     });
 
@@ -258,12 +260,12 @@ export default function Tracker() {
     openNewScheduleDialog(dateStr);
   };
 
-  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number; snapshotId?: number }) => {
+  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number; snapshotId?: number; label?: string; orgId?: number }) => {
     e.stopPropagation();
     if (item.type === "scheduled" && item.scheduleId) {
       openEditScheduleDialog(item.scheduleId);
-    } else if (item.type === "completed" && item.snapshotId) {
-      handleDownloadPdf(item.snapshotId);
+    } else if (item.type === "completed" && item.orgId) {
+      setLocation(`/reviews?orgId=${item.orgId}&orgName=${encodeURIComponent(item.label || "")}`);
     }
   };
 
@@ -531,7 +533,7 @@ export default function Tracker() {
                                     ? "bg-green-500/15 text-green-700 dark:text-green-400"
                                     : "bg-primary/15 text-primary"
                                 }`}
-                                title={item.type === "scheduled" ? `${item.label} — click to edit` : `${item.label} — click to download PDF`}
+                                title={item.type === "scheduled" ? `${item.label} — click to edit` : `${item.label} — click to open review`}
                                 onClick={(e) => handleEventClick(e, item)}
                                 data-testid={`calendar-event-${day}-${idx}`}
                               >

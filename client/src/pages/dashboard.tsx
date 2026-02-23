@@ -45,6 +45,17 @@ export default function Dashboard() {
   const [view, setView] = useState<DashboardView>("overview");
   const { toast } = useToast();
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orgId = params.get("orgId");
+    const orgName = params.get("orgName");
+    if (orgId && orgName) {
+      setSelectedClient({ id: parseInt(orgId), name: orgName });
+      setView("overview");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const { data: apiStatus } = useQuery<ApiStatus>({
     queryKey: ["/api/status"],
     retry: 2,
