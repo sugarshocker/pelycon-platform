@@ -447,6 +447,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
   const [clientFeedback, setClientFeedback] = useState<ClientFeedback>({ notes: "", followUpTasks: [] });
   const [hasDraft, setHasDraft] = useState(false);
   const [finalizedEmailText, setFinalizedEmailText] = useState<string | null>(null);
+  const [finalizedSnapshotId, setFinalizedSnapshotId] = useState<number | null>(null);
   const [stagingImported, setStagingImported] = useState(false);
   const [stagingBannerDismissed, setStagingBannerDismissed] = useState(false);
   const { toast } = useToast();
@@ -634,9 +635,12 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       const payload = buildPayload();
       const emailText = generateFollowUpEmail(client.name, clientFeedback.followUpTasks);
       setFinalizedEmailText(emailText);
-      return apiRequest("POST", "/api/tbr/finalize", payload);
+      const res = await apiRequest("POST", "/api/tbr/finalize", payload);
+      const data = await res.json();
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      if (data?.id) setFinalizedSnapshotId(data.id);
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", client.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", client.id] });
@@ -647,6 +651,7 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       toast({ title: "TBR Finalized", description: `Review recorded for ${client.name}. Copy the follow-up email below, then head back to overview.` });
     },
     onError: () => {
+      setFinalizedEmailText(null);
       toast({ title: "Error", description: "Failed to finalize the TBR. Please try again.", variant: "destructive" });
     },
   });
@@ -659,6 +664,17 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
         clientName={client.name}
         emailText={finalizedEmailText}
         onBack={onBack}
+        snapshotId={finalizedSnapshotId}
+        followUpTasks={clientFeedback.followUpTasks}
+        client={client}
+        deviceHealth={deviceHealth || null}
+        security={security || null}
+        tickets={tickets || null}
+        mfaReport={mfaReport}
+        licenseReport={licenseReport}
+        roadmap={roadmap}
+        previousSnapshot={previousSnapshot}
+        deviceUserInventory={deviceUserData?.devices || null}
       />
     );
   }
@@ -927,9 +943,34 @@ function TrendBadge({ label, current, previous, invertColor = false, suffix = ""
   );
 }
 
-function FinalizationConfirmation({ clientName, emailText, onBack }: { clientName: string; emailText: string; onBack: () => void }) {
+interface FinalizationConfirmationProps {
+  clientName: string;
+  emailText: string;
+  onBack: () => void;
+  snapshotId: number | null;
+  followUpTasks: Array<{ id: string; text: string; completed: boolean }>;
+  client: Organization;
+  deviceHealth: DeviceHealthSummary | null;
+  security: SecuritySummary | null;
+  tickets: TicketSummary | null;
+  mfaReport: MfaReport | null;
+  licenseReport: LicenseReport | null;
+  roadmap: RoadmapAnalysis | null;
+  previousSnapshot: TbrSnapshot | null;
+  deviceUserInventory: DeviceUserEntry[] | null;
+}
+
+function FinalizationConfirmation({
+  clientName, emailText, onBack, snapshotId, followUpTasks,
+  client, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, previousSnapshot, deviceUserInventory,
+}: FinalizationConfirmationProps) {
   const [copied, setCopied] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [cwTicketId, setCwTicketId] = useState<number | null>(null);
+  const [cwCreating, setCwCreating] = useState(false);
   const { toast } = useToast();
+
+  const incompleteTasks = (followUpTasks || []).filter(t => !t.completed);
 
   const handleCopy = async () => {
     try {
@@ -939,6 +980,90 @@ function FinalizationConfirmation({ clientName, emailText, onBack }: { clientNam
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast({ title: "Copy failed", description: "Please select and copy the text manually.", variant: "destructive" });
+    }
+  };
+
+  const handlePdfDownload = async () => {
+    setIsExportingPdf(true);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch("/api/export/summary", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientName,
+          deviceHealth,
+          security,
+          tickets,
+          mfaReport,
+          licenseReport,
+          roadmap,
+          previousSnapshot: previousSnapshot || null,
+          deviceUserInventory: deviceUserInventory || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const html = await res.text();
+
+      const html2pdf = (await import("html2pdf.js")).default;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = "position:fixed;left:0;top:0;width:800px;z-index:99999;pointer-events:none;background:white;";
+      const styleEl = doc.querySelector("style");
+      if (styleEl) {
+        const s = document.createElement("style");
+        s.textContent = styleEl.textContent || "";
+        wrapper.appendChild(s);
+      }
+      const content = document.createElement("div");
+      content.innerHTML = doc.body.innerHTML;
+      content.style.cssText = "font-family:'Poppins',sans-serif;padding:24px 20px;color:#394442;line-height:1.45;font-size:12px;max-width:780px;margin:0 auto;background:white;";
+      wrapper.appendChild(content);
+      document.body.appendChild(wrapper);
+      await new Promise(r => setTimeout(r, 100));
+
+      const filename = `TBR_${clientName.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
+      await html2pdf().set({
+        margin: [8, 8, 8, 8],
+        filename,
+        image: { type: "jpeg" as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, width: 800, scrollX: 0, scrollY: 0, windowWidth: 800 },
+        jsPDF: { unit: "mm", format: "letter", orientation: "portrait" as const },
+        pagebreak: { mode: ["css"], avoid: [".section-top", ".item", ".action-card", ".snap-card"] },
+      } as any).from(content).save();
+
+      document.body.removeChild(wrapper);
+      toast({ title: "PDF Downloaded", description: "The meeting summary PDF has been saved." });
+    } catch (err: any) {
+      toast({ title: "PDF Export Failed", description: err.message || "Could not generate the PDF.", variant: "destructive" });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleCreateCwTicket = async () => {
+    if (incompleteTasks.length === 0) return;
+    setCwCreating(true);
+    try {
+      const tbrDate = new Date().toISOString().split("T")[0];
+      const taskTexts = incompleteTasks.map(t => t.text);
+      const res = await apiRequest("POST", "/api/connectwise/ticket", {
+        snapshotId,
+        companyName: clientName,
+        followUpTasks: taskTexts,
+        tbrDate,
+      });
+      const data = await res.json();
+      setCwTicketId(data.ticketId);
+      toast({ title: "Ticket Created", description: `ConnectWise ticket #${data.ticketId} created for ${clientName}.` });
+    } catch (err: any) {
+      toast({ title: "Ticket Creation Failed", description: err.message || "Could not create the ConnectWise ticket.", variant: "destructive" });
+    } finally {
+      setCwCreating(false);
     }
   };
 
@@ -956,6 +1081,59 @@ function FinalizationConfirmation({ clientName, emailText, onBack }: { clientNam
           <ArrowLeft className="h-4 w-4 mr-1.5" />
           Back to Overview
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-1.5">
+                <FileDown className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">PDF Summary</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handlePdfDownload} disabled={isExportingPdf} data-testid="button-finalization-pdf">
+                {isExportingPdf ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-1.5" />}
+                {isExportingPdf ? "Generating..." : "Download PDF"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Download the meeting summary PDF to attach to the follow-up email.
+            </p>
+          </CardContent>
+        </Card>
+
+        {incompleteTasks.length > 0 && (
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-1.5">
+                  <Ticket className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-medium">ConnectWise Ticket</p>
+                </div>
+                {cwTicketId ? (
+                  <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    #{cwTicketId}
+                  </Badge>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={handleCreateCwTicket} disabled={cwCreating} data-testid="button-create-cw-ticket">
+                    {cwCreating ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
+                    {cwCreating ? "Creating..." : "Create Ticket"}
+                  </Button>
+                )}
+              </div>
+              {cwTicketId ? (
+                <p className="text-xs text-emerald-600">
+                  Follow-up ticket #{cwTicketId} created in ConnectWise with {incompleteTasks.length} task{incompleteTasks.length !== 1 ? "s" : ""}.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Create a follow-up ticket with {incompleteTasks.length} task{incompleteTasks.length !== 1 ? "s" : ""} on the client's service board.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>

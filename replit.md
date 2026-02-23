@@ -59,7 +59,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `POST /api/tbr/save-draft` - Save TBR as draft (preserves CSV reports, notes, roadmap, live data)
 - `GET /api/tbr/draft/:orgId` - Load existing draft for an org
 - `DELETE /api/tbr/draft/:id` - Discard a draft
-- `POST /api/tbr/finalize` - Finalize TBR snapshot (promotes draft if exists)
+- `POST /api/tbr/finalize` - Finalize TBR snapshot (promotes draft if exists), returns snapshot with ID
+- `POST /api/connectwise/ticket` - Create follow-up ticket in ConnectWise (Medium priority, client's service board, saves cwTicketId to snapshot)
 - `POST /api/tbr/unfinalize/:id` - Reopen a finalized TBR as a draft (blocked if draft already exists for that client)
 - `GET /api/tbr/history/:orgId` - List finalized TBR snapshots for an org
 - `GET /api/tbr/snapshot/:id` - Get a single snapshot by ID
@@ -80,7 +81,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Past Reviews**: Inline list in Overview with expandable detail cards showing metrics, trend comparisons, notes, and feedback.
 - **Trend Tracking**: Editor shows previous TBR banner; snapshot cards show deltas between consecutive reviews.
 - **Export Integration**: HTML export includes "Progress Since Last Review" table when previous snapshot exists. Stored snapshots can generate PDFs from fullData.
-- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb with deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback), and ~20 metric columns
+- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb with deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback), cwTicketId (ConnectWise follow-up ticket number), and ~20 metric columns
 
 ## Export Report Structure ("No Surprises" Framework)
 1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status

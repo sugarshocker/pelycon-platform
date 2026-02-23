@@ -1053,6 +1053,30 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/connectwise/ticket", requireAuth, requireEditor, async (req: Request, res: Response) => {
+    try {
+      const { snapshotId, companyName, followUpTasks, tbrDate } = req.body;
+      if (!companyName || !followUpTasks || !Array.isArray(followUpTasks) || followUpTasks.length === 0) {
+        return res.status(400).json({ message: "companyName and followUpTasks are required" });
+      }
+      if (!connectwise.isConfigured()) {
+        return res.status(503).json({ message: "ConnectWise is not configured" });
+      }
+
+      const result = await connectwise.createFollowUpTicket(companyName, followUpTasks, tbrDate || new Date().toISOString().split("T")[0]);
+
+      if (snapshotId) {
+        await storage.updateTbrSnapshot(snapshotId, { cwTicketId: result.ticketId });
+        log(`Saved CW ticket #${result.ticketId} to snapshot ${snapshotId}`);
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      log(`ConnectWise ticket creation error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/tbr/unfinalize/:id", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);

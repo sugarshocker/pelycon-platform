@@ -21,6 +21,26 @@ function getAuthHeader(): string {
   return "Basic " + Buffer.from(credentials).toString("base64");
 }
 
+async function apiPost(path: string, body: any): Promise<any> {
+  const url = `${BASE_URL}${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: getAuthHeader(),
+      clientId: CLIENT_ID!,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`ConnectWise API error: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
 async function apiGet(path: string, params?: Record<string, string>): Promise<any> {
   const url = new URL(`${BASE_URL}${path}`);
   if (params) {
@@ -254,4 +274,65 @@ export async function getProjectItems(
   }
 
   return { completed, inProgress };
+}
+
+export async function getServiceBoardForCompany(companyName: string): Promise<{ boardId: number; boardName: string } | null> {
+  try {
+    const cwCompanyId = await findCompanyByName(companyName);
+    if (!cwCompanyId) return null;
+
+    const tickets = await apiGet("/service/tickets", {
+      conditions: `company/id = ${cwCompanyId}`,
+      pageSize: "10",
+      orderBy: "dateEntered desc",
+    });
+
+    if (tickets.length > 0 && tickets[0].board) {
+      return { boardId: tickets[0].board.id, boardName: tickets[0].board.name };
+    }
+
+    const boards = await apiGet("/service/boards", { pageSize: "25" });
+    if (boards.length > 0) {
+      return { boardId: boards[0].id, boardName: boards[0].name };
+    }
+
+    return null;
+  } catch (e) {
+    log(`ConnectWise getServiceBoard error: ${e}`);
+    return null;
+  }
+}
+
+export async function createFollowUpTicket(
+  companyName: string,
+  followUpTasks: string[],
+  tbrDate: string
+): Promise<{ ticketId: number; ticketUrl: string }> {
+  const cwCompanyId = await findCompanyByName(companyName);
+  if (!cwCompanyId) {
+    throw new Error(`Could not find company "${companyName}" in ConnectWise`);
+  }
+
+  const board = await getServiceBoardForCompany(companyName);
+  if (!board) {
+    throw new Error(`Could not find a service board for "${companyName}"`);
+  }
+
+  const bulletList = followUpTasks.map(t => `• ${t}`).join("\n");
+  const description = `Technology Business Review — Follow-Up Tasks (${tbrDate})\n\n${bulletList}`;
+
+  const ticketBody: any = {
+    summary: `TBR Follow-Up Tasks — ${companyName} (${tbrDate})`,
+    company: { id: cwCompanyId },
+    board: { id: board.boardId },
+    priority: { name: "Medium" },
+    initialDescription: description,
+  };
+
+  const ticket = await apiPost("/service/tickets", ticketBody);
+  log(`ConnectWise ticket created: #${ticket.id} for ${companyName}`);
+
+  const ticketUrl = `https://${SITE_URL}/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=${ticket.id}`;
+
+  return { ticketId: ticket.id, ticketUrl };
 }
