@@ -31,6 +31,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Mail,
+  ExternalLink,
+  Pencil,
+  Eye,
 } from "lucide-react";
 import {
   LineChart,
@@ -90,6 +93,13 @@ export default function Tracker() {
   const [reminderEmail, setReminderEmail] = useState("");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [chartMode, setChartMode] = useState<"weekly" | "monthly">("weekly");
+  const [eventActionItem, setEventActionItem] = useState<{
+    label: string;
+    type: "completed" | "scheduled";
+    snapshotId?: number;
+    scheduleId?: number;
+    orgId?: number;
+  } | null>(null);
 
   const { data: organizations, isLoading: orgsLoading } = useQuery<Organization[]>({
     queryKey: ["/api/organizations"],
@@ -215,7 +225,7 @@ export default function Tracker() {
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
         if (!events[day]) events[day] = { items: [] };
-        events[day].items.push({ label: s.orgName, type: "scheduled", scheduleId: s.id });
+        events[day].items.push({ label: s.orgName, type: "scheduled", scheduleId: s.id, orgId: s.orgId });
       }
     });
 
@@ -262,11 +272,11 @@ export default function Tracker() {
 
   const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number; snapshotId?: number; label?: string; orgId?: number }) => {
     e.stopPropagation();
-    if (item.type === "scheduled" && item.scheduleId) {
-      openEditScheduleDialog(item.scheduleId);
-    } else if (item.type === "completed" && item.orgId) {
-      setLocation(`/reviews?orgId=${item.orgId}&orgName=${encodeURIComponent(item.label || "")}`);
-    }
+    setEventActionItem(item as any);
+  };
+
+  const findScheduleForOrg = (orgId: number) => {
+    return (schedules || []).find(s => s.orgId === orgId);
   };
 
   const handleSaveSchedule = () => {
@@ -533,7 +543,7 @@ export default function Tracker() {
                                     ? "bg-green-500/15 text-green-700 dark:text-green-400"
                                     : "bg-primary/15 text-primary"
                                 }`}
-                                title={item.type === "scheduled" ? `${item.label} — click to edit` : `${item.label} — click to open review`}
+                                title={item.label}
                                 onClick={(e) => handleEventClick(e, item)}
                                 data-testid={`calendar-event-${day}-${idx}`}
                               >
@@ -564,6 +574,102 @@ export default function Tracker() {
           </>
         )}
       </div>
+
+      <Dialog open={!!eventActionItem} onOpenChange={(open) => { if (!open) setEventActionItem(null); }}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" data-testid="text-event-action-title">
+              {eventActionItem?.type === "completed" ? (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              ) : (
+                <Calendar className="h-4 w-4 text-primary" />
+              )}
+              {eventActionItem?.label}
+            </DialogTitle>
+          </DialogHeader>
+          {eventActionItem && (() => {
+            const linkedSchedule = eventActionItem.type === "completed" && eventActionItem.orgId
+              ? findScheduleForOrg(eventActionItem.orgId)
+              : null;
+            return (
+              <div className="space-y-1.5 pt-1">
+                {eventActionItem.orgId && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-9 text-sm"
+                    onClick={() => {
+                      setEventActionItem(null);
+                      setLocation(`/reviews?orgId=${eventActionItem.orgId}&orgName=${encodeURIComponent(eventActionItem.label || "")}`);
+                    }}
+                    data-testid="button-event-open-review"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open in TBR Reviews
+                  </Button>
+                )}
+                {eventActionItem.snapshotId && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-9 text-sm"
+                    onClick={() => {
+                      handleDownloadPdf(eventActionItem.snapshotId!);
+                      setEventActionItem(null);
+                    }}
+                    data-testid="button-event-download-pdf"
+                  >
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </Button>
+                )}
+                {eventActionItem.scheduleId && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-9 text-sm"
+                    onClick={() => {
+                      setEventActionItem(null);
+                      openEditScheduleDialog(eventActionItem.scheduleId!);
+                    }}
+                    data-testid="button-event-edit-schedule"
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit / Reschedule
+                  </Button>
+                )}
+                {eventActionItem.type === "completed" && !eventActionItem.scheduleId && linkedSchedule && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-9 text-sm"
+                    onClick={() => {
+                      setEventActionItem(null);
+                      openEditScheduleDialog(linkedSchedule.id);
+                    }}
+                    data-testid="button-event-linked-schedule"
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Schedule
+                  </Button>
+                )}
+                {eventActionItem.type === "completed" && !eventActionItem.scheduleId && !linkedSchedule && eventActionItem.orgId && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-9 text-sm"
+                    onClick={() => {
+                      const oid = String(eventActionItem.orgId);
+                      setEventActionItem(null);
+                      setScheduleOrgId(oid);
+                      openNewScheduleDialog();
+                    }}
+                    data-testid="button-event-create-schedule"
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Schedule Next Review
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={scheduleDialogOpen} onOpenChange={(open) => { setScheduleDialogOpen(open); if (!open) setEditingScheduleId(null); }}>
         <DialogContent>
