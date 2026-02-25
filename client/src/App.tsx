@@ -29,12 +29,14 @@ import {
   Sun,
   Moon,
   LogOut,
+  Building2,
 } from "lucide-react";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Tracker from "@/pages/tracker";
 import Staging from "@/pages/staging";
 import UserManagement from "@/pages/user-management";
+import Accounts from "@/pages/accounts";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 
 interface UserContextType {
@@ -48,6 +50,7 @@ const NAV_ITEMS = [
   { title: "Dashboard", path: "/", icon: LayoutDashboard },
   { title: "TBR Reviews", path: "/reviews", icon: FilePen },
   { title: "Staging", path: "/staging", icon: ClipboardList },
+  { title: "Accounts", path: "/accounts", icon: Building2 },
 ];
 
 function AppSidebar({ onLogout, user }: { onLogout: () => void; user: AuthUser }) {
@@ -160,6 +163,7 @@ function AuthenticatedApp({ onLogout, user }: { onLogout: () => void; user: Auth
                 <Route path="/" component={Tracker} />
                 <Route path="/reviews" component={Dashboard} />
                 <Route path="/staging" component={Staging} />
+                <Route path="/accounts" component={Accounts} />
                 {user.role === "admin" && <Route path="/users" component={UserManagement} />}
                 <Route>
                   <div className="flex items-center justify-center h-full">

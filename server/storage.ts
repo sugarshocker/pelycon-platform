@@ -3,6 +3,7 @@ import {
   type TbrSnapshot, type InsertTbrSnapshot, tbrSnapshots,
   type TbrSchedule, type InsertTbrSchedule, tbrSchedules,
   type TbrStaging, type InsertTbrStaging, tbrStaging,
+  type ClientAccount, type InsertClientAccount, clientAccounts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lte, gte, isNull, isNotNull } from "drizzle-orm";
@@ -37,6 +38,11 @@ export interface IStorage {
   upsertStaging(staging: InsertTbrStaging): Promise<TbrStaging>;
   deleteStaging(id: number): Promise<void>;
   clearStagingByOrg(orgId: number): Promise<void>;
+  getAllClientAccounts(): Promise<ClientAccount[]>;
+  getClientAccountByCwId(cwCompanyId: number): Promise<ClientAccount | undefined>;
+  upsertClientAccount(account: InsertClientAccount): Promise<ClientAccount>;
+  updateClientAccountTier(id: number, tier: string): Promise<ClientAccount>;
+  deleteClientAccount(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -226,6 +232,41 @@ export class DatabaseStorage implements IStorage {
 
   async clearStagingByOrg(orgId: number): Promise<void> {
     await db.delete(tbrStaging).where(eq(tbrStaging.orgId, orgId));
+  }
+
+  async getAllClientAccounts(): Promise<ClientAccount[]> {
+    return db.select().from(clientAccounts).orderBy(clientAccounts.companyName);
+  }
+
+  async getClientAccountByCwId(cwCompanyId: number): Promise<ClientAccount | undefined> {
+    const results = await db.select().from(clientAccounts)
+      .where(eq(clientAccounts.cwCompanyId, cwCompanyId)).limit(1);
+    return results[0];
+  }
+
+  async upsertClientAccount(account: InsertClientAccount): Promise<ClientAccount> {
+    const existing = await this.getClientAccountByCwId(account.cwCompanyId);
+    if (existing) {
+      const [result] = await db.update(clientAccounts)
+        .set({ ...account, updatedAt: new Date(), tierOverride: existing.tierOverride })
+        .where(eq(clientAccounts.id, existing.id))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(clientAccounts).values(account).returning();
+    return result;
+  }
+
+  async updateClientAccountTier(id: number, tier: string): Promise<ClientAccount> {
+    const [result] = await db.update(clientAccounts)
+      .set({ tierOverride: tier, updatedAt: new Date() })
+      .where(eq(clientAccounts.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteClientAccount(id: number): Promise<void> {
+    await db.delete(clientAccounts).where(eq(clientAccounts.id, id));
   }
 }
 

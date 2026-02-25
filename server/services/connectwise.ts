@@ -1,4 +1,4 @@
-import type { TicketSummary, ProjectItem } from "@shared/schema";
+import type { TicketSummary, ProjectItem, InsertClientAccount } from "@shared/schema";
 import { log } from "../index";
 
 function cleanEnv(key: string, fallback?: string): string {
@@ -412,4 +412,124 @@ export async function createFollowUpTicket(
     `Could not create a ConnectWise ticket. The API member may need "Add" permission for Service Tickets and read access to Service Boards. ` +
     `Check Security Roles in ConnectWise under the "Service Desk" tab.`
   );
+}
+
+export interface CwAgreementCompany {
+  cwCompanyId: number;
+  companyName: string;
+  agreementTypes: string[];
+  agreementMonthlyRevenue: number;
+}
+
+export async function getManagedServicesClients(): Promise<CwAgreementCompany[]> {
+  const companyMap = new Map<number, CwAgreementCompany>();
+  let page = 1;
+  const pageSize = 250;
+
+  while (true) {
+    try {
+      const agreements = await apiGet("/finance/agreements", {
+        conditions: `type/name contains "Top Shelf" OR type/name contains "Managed Services"`,
+        pageSize: String(pageSize),
+        page: String(page),
+        orderBy: "company/name asc",
+      });
+
+      if (!agreements || agreements.length === 0) break;
+
+      for (const agr of agreements) {
+        const companyId = agr.company?.id;
+        const companyName = agr.company?.name;
+        if (!companyId || !companyName) continue;
+
+        const existing = companyMap.get(companyId);
+        const typeName = agr.type?.name || "Unknown";
+        const monthlyAmount = agr.billAmount || 0;
+
+        if (existing) {
+          if (!existing.agreementTypes.includes(typeName)) {
+            existing.agreementTypes.push(typeName);
+          }
+          existing.agreementMonthlyRevenue += monthlyAmount;
+        } else {
+          companyMap.set(companyId, {
+            cwCompanyId: companyId,
+            companyName,
+            agreementTypes: [typeName],
+            agreementMonthlyRevenue: monthlyAmount,
+          });
+        }
+      }
+
+      if (agreements.length < pageSize) break;
+      page++;
+    } catch (e: any) {
+      log(`ConnectWise agreements error (page ${page}): ${e.message}`);
+      break;
+    }
+  }
+
+  return Array.from(companyMap.values());
+}
+
+export interface CwCompanyFinancials {
+  agreementRevenue: number;
+  projectRevenue: number;
+  totalRevenue: number;
+  grossMarginPercent: number | null;
+}
+
+export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompanyFinancials> {
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+  const dateStr = twelveMonthsAgo.toISOString().split("T")[0];
+
+  let agreementRevenue = 0;
+  try {
+    const agreements = await apiGet("/finance/agreements", {
+      conditions: `company/id = ${cwCompanyId}`,
+      pageSize: "250",
+    });
+    for (const agr of agreements) {
+      if (agr.billAmount) {
+        agreementRevenue += agr.billAmount * 12;
+      }
+    }
+  } catch (e: any) {
+    log(`ConnectWise agreement revenue error for company ${cwCompanyId}: ${e.message}`);
+  }
+
+  let projectRevenue = 0;
+  let totalInvoiced = 0;
+  let totalCost = 0;
+  try {
+    const invoices = await apiGet("/finance/invoices", {
+      conditions: `company/id = ${cwCompanyId} AND date > [${dateStr}]`,
+      pageSize: "1000",
+      orderBy: "date desc",
+    });
+    for (const inv of invoices) {
+      const amount = inv.total || 0;
+      totalInvoiced += amount;
+      if (inv.type === "Standard" || inv.type === "Progress" || inv.type === "Miscellaneous") {
+        projectRevenue += amount;
+      }
+    }
+  } catch (e: any) {
+    log(`ConnectWise invoices error for company ${cwCompanyId}: ${e.message}`);
+  }
+
+  const total = agreementRevenue + projectRevenue;
+  let grossMarginPercent: number | null = null;
+
+  if (totalInvoiced > 0 && totalCost > 0) {
+    grossMarginPercent = ((totalInvoiced - totalCost) / totalInvoiced) * 100;
+  }
+
+  return {
+    agreementRevenue,
+    projectRevenue,
+    totalRevenue: total,
+    grossMarginPercent,
+  };
 }

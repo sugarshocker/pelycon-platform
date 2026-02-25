@@ -30,6 +30,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `client/src/pages/tracker.tsx` - TBR Tracker: review schedules, overdue/upcoming alerts, recent completions
 - `client/src/pages/staging.tsx` - TBR Staging Area: pre-enter engineer/SM notes, upload MFA/License CSVs
 - `client/src/components/` - Dashboard section components
+- `client/src/pages/accounts.tsx` - Client Accounts: managed services roster, TBR compliance, revenue, tier management
 - `client/src/components/meeting-export.tsx` - Export buttons: PDF download (html2pdf.js) and Print (passes previousSnapshot to export)
 
 ## API Routes
@@ -68,6 +69,9 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - `GET /api/tbr/latest/:orgId` - Get latest + previous finalized snapshot for trend comparison
 - `GET /api/reminders/status` - Check email configuration and pending reminders
 - `POST /api/reminders/send-now` - Manually trigger sending due reminders
+- `GET /api/accounts` - List all client accounts with TBR status, revenue, tier info
+- `GET /api/accounts/sync` - Sync managed services clients from ConnectWise agreements
+- `PATCH /api/accounts/:id/tier` - Override client tier (A/B/C)
 
 ## Dashboard Architecture (Two-View Workflow)
 - **Overview View**: Client selector, draft management banner, inline past review list with expand/collapse, per-snapshot actions (Download PDF, Reopen as Draft), Start New Review button. No live API data loaded.

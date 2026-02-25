@@ -47,6 +47,40 @@ export const insertTbrSnapshotSchema = createInsertSchema(tbrSnapshots).omit({
 export type InsertTbrSnapshot = z.infer<typeof insertTbrSnapshotSchema>;
 export type TbrSnapshot = typeof tbrSnapshots.$inferSelect;
 
+export const clientAccounts = pgTable("client_accounts", {
+  id: serial("id").primaryKey(),
+  cwCompanyId: integer("cw_company_id").notNull().unique(),
+  companyName: text("company_name").notNull(),
+  tier: text("tier").default("B").notNull(),
+  tierOverride: text("tier_override"),
+  agreementRevenue: real("agreement_revenue"),
+  projectRevenue: real("project_revenue"),
+  totalRevenue: real("total_revenue"),
+  grossMarginPercent: real("gross_margin_percent"),
+  agreementTypes: text("agreement_types"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertClientAccountSchema = createInsertSchema(clientAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientAccount = z.infer<typeof insertClientAccountSchema>;
+export type ClientAccount = typeof clientAccounts.$inferSelect;
+
+export interface ClientAccountWithStatus extends ClientAccount {
+  lastTbrDate: string | null;
+  nextTbrDate: string | null;
+  tbrStatus: "green" | "yellow" | "red";
+  tbrStatusReason: string;
+  effectiveTier: string;
+  scheduleFrequency: number | null;
+}
+
 export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });

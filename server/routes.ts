@@ -1450,5 +1450,124 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/accounts/sync", requireAuth, requireEditor, async (_req: Request, res: Response) => {
+    try {
+      if (!connectwise.isConfigured()) {
+        return res.status(503).json({ message: "ConnectWise is not configured" });
+      }
+
+      const cwClients = await connectwise.getManagedServicesClients();
+      log(`Found ${cwClients.length} managed services clients from ConnectWise agreements`);
+
+      const results = [];
+      for (const client of cwClients) {
+        let financials: any = { agreementRevenue: client.agreementMonthlyRevenue * 12, projectRevenue: 0, totalRevenue: client.agreementMonthlyRevenue * 12, grossMarginPercent: null };
+        try {
+          financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
+        } catch (e: any) {
+          log(`Skipping financials for ${client.companyName}: ${e.message}`);
+        }
+
+        const autoTier = financials.totalRevenue >= 60000 ? "A" : financials.totalRevenue >= 24000 ? "B" : "C";
+
+        const account = await storage.upsertClientAccount({
+          cwCompanyId: client.cwCompanyId,
+          companyName: client.companyName,
+          tier: autoTier,
+          agreementRevenue: financials.agreementRevenue,
+          projectRevenue: financials.projectRevenue,
+          totalRevenue: financials.totalRevenue,
+          grossMarginPercent: financials.grossMarginPercent,
+          agreementTypes: client.agreementTypes.join(", "),
+          lastSyncedAt: new Date(),
+        });
+        results.push(account);
+      }
+
+      res.json({ synced: results.length, accounts: results });
+    } catch (err: any) {
+      log(`Accounts sync error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/accounts", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const accounts = await storage.getAllClientAccounts();
+      const schedules = await storage.getAllSchedules();
+      const allFinalized = await storage.getAllFinalizedSnapshots();
+
+      const now = new Date();
+      const sixMonthsAgo = new Date(now);
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const enriched = accounts.map((acct) => {
+        const schedule = schedules.find(s => s.orgName.toLowerCase() === acct.companyName.toLowerCase());
+        const snapshots = allFinalized
+          .filter(s => s.orgName.toLowerCase() === acct.companyName.toLowerCase())
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        const lastTbr = snapshots[0] || null;
+        const lastTbrDate = lastTbr ? (lastTbr.reviewDate || new Date(lastTbr.createdAt).toISOString().split("T")[0]) : null;
+        const nextTbrDate = schedule?.nextReviewDate ? new Date(schedule.nextReviewDate).toISOString().split("T")[0] : null;
+        const freq = schedule?.frequencyMonths || null;
+
+        const hadRecentTbr = lastTbr && new Date(lastTbr.createdAt) > sixMonthsAgo;
+        const hasScheduled = !!nextTbrDate;
+
+        let tbrStatus: "green" | "yellow" | "red";
+        let tbrStatusReason: string;
+
+        if (hadRecentTbr && hasScheduled) {
+          tbrStatus = "green";
+          tbrStatusReason = "On track";
+        } else if (hadRecentTbr && !hasScheduled) {
+          tbrStatus = "yellow";
+          tbrStatusReason = "No next review scheduled";
+        } else if (!hadRecentTbr && hasScheduled) {
+          tbrStatus = "yellow";
+          tbrStatusReason = "No recent review (>6 months)";
+        } else if (snapshots.length > 0) {
+          tbrStatus = "yellow";
+          tbrStatusReason = "Overdue — no recent review or schedule";
+        } else {
+          tbrStatus = "red";
+          tbrStatusReason = "Never reviewed — no TBR on record";
+        }
+
+        return {
+          ...acct,
+          lastTbrDate,
+          nextTbrDate,
+          tbrStatus,
+          tbrStatusReason,
+          effectiveTier: acct.tierOverride || acct.tier,
+          scheduleFrequency: freq,
+        };
+      });
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Accounts list error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/accounts/:id/tier", requireAuth, requireEditor, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid account ID" });
+      const { tier } = req.body;
+      if (!tier || !["A", "B", "C"].includes(tier)) {
+        return res.status(400).json({ message: "Tier must be A, B, or C" });
+      }
+      const result = await storage.updateClientAccountTier(id, tier);
+      res.json(result);
+    } catch (err: any) {
+      log(`Account tier update error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
