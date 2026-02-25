@@ -45,12 +45,19 @@ export default function Dashboard() {
   const [view, setView] = useState<DashboardView>("overview");
   const { toast } = useToast();
 
+  const [linkedScheduleId, setLinkedScheduleId] = useState<number | null>(null);
+  const [linkedReviewDate, setLinkedReviewDate] = useState<string | null>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const orgId = params.get("orgId");
     const orgName = params.get("orgName");
+    const scheduleId = params.get("scheduleId");
+    const reviewDate = params.get("reviewDate");
     if (orgId && orgName) {
       setSelectedClient({ id: parseInt(orgId), name: orgName });
+      if (scheduleId) setLinkedScheduleId(parseInt(scheduleId));
+      if (reviewDate) setLinkedReviewDate(reviewDate);
       setView("overview");
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -127,8 +134,12 @@ export default function Dashboard() {
           <TbrEditor
             key={`editor-${selectedClient.id}`}
             client={selectedClient}
+            scheduleId={linkedScheduleId}
+            reviewDate={linkedReviewDate}
             onBack={() => {
               setView("overview");
+              setLinkedScheduleId(null);
+              setLinkedReviewDate(null);
               queryClient.invalidateQueries({ queryKey: ["/api/tbr/history", selectedClient.id] });
               queryClient.invalidateQueries({ queryKey: ["/api/tbr/draft", selectedClient.id] });
               queryClient.invalidateQueries({ queryKey: ["/api/tbr/latest", selectedClient.id] });
@@ -541,7 +552,7 @@ function SnapshotCard({
   );
 }
 
-function TbrEditor({ client, onBack }: { client: Organization; onBack: () => void }) {
+function TbrEditor({ client, onBack, scheduleId, reviewDate }: { client: Organization; onBack: () => void; scheduleId?: number | null; reviewDate?: string | null }) {
   const [mfaReport, setMfaReport] = useState<MfaReport | null>(null);
   const [licenseReport, setLicenseReport] = useState<LicenseReport | null>(null);
   const [roadmap, setRoadmap] = useState<RoadmapAnalysis | null>(null);
@@ -716,8 +727,10 @@ function TbrEditor({ client, onBack }: { client: Organization; onBack: () => voi
       internalNotes: internalNotes,
       clientFeedback: clientFeedback,
       deviceUserInventory: deviceUserData?.devices || null,
+      scheduleId: scheduleId || null,
+      reviewDate: reviewDate || null,
     };
-  }, [client, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback, deviceUserData]);
+  }, [client, deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback, deviceUserData, scheduleId, reviewDate]);
 
   const saveDraftMutation = useMutation({
     mutationFn: async () => {

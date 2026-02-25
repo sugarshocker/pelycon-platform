@@ -936,7 +936,7 @@ export async function registerRoutes(
 
   app.post("/api/tbr/save-draft", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const { orgId, orgName } = req.body;
+      const { orgId, orgName, scheduleId, reviewDate } = req.body;
       if (!orgId || !orgName) {
         return res.status(400).json({ message: "Organization ID and name are required" });
       }
@@ -961,11 +961,19 @@ export async function registerRoutes(
           ...metrics,
           status: "draft",
           fullData,
+          scheduleId: scheduleId ? parseInt(scheduleId) : existingDraft.scheduleId,
+          reviewDate: reviewDate || existingDraft.reviewDate || null,
         });
         log(`TBR draft updated for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}`);
         res.json(result);
       } else {
-        const snapshotData = { ...metrics, status: "draft", fullData };
+        const snapshotData = {
+          ...metrics,
+          status: "draft",
+          fullData,
+          scheduleId: scheduleId ? parseInt(scheduleId) : null,
+          reviewDate: reviewDate || null,
+        };
         const parsed = insertTbrSnapshotSchema.safeParse(snapshotData);
         if (!parsed.success) {
           return res.status(400).json({ message: "Invalid snapshot data", errors: parsed.error.flatten().fieldErrors });
@@ -1020,7 +1028,7 @@ export async function registerRoutes(
 
   app.post("/api/tbr/finalize", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const { orgId, orgName } = req.body;
+      const { orgId, orgName, scheduleId, reviewDate } = req.body;
       if (!orgId || !orgName) {
         return res.status(400).json({ message: "Organization ID and name are required" });
       }
@@ -1046,16 +1054,48 @@ export async function registerRoutes(
           ...metrics,
           status: "finalized",
           fullData,
+          scheduleId: scheduleId ? parseInt(scheduleId) : existingDraft.scheduleId,
+          reviewDate: reviewDate || existingDraft.reviewDate || null,
         });
       } else {
-        const snapshotData = { ...metrics, status: "finalized", fullData };
+        const snapshotData = {
+          ...metrics,
+          status: "finalized",
+          fullData,
+          scheduleId: scheduleId ? parseInt(scheduleId) : null,
+          reviewDate: reviewDate || null,
+        };
         const parsed = insertTbrSnapshotSchema.safeParse(snapshotData);
         if (!parsed.success) {
           return res.status(400).json({ message: "Invalid snapshot data", errors: parsed.error.flatten().fieldErrors });
         }
         result = await storage.createTbrSnapshot(parsed.data);
       }
-      log(`TBR finalized for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}`);
+
+      if (result.scheduleId) {
+        try {
+          const schedule = await storage.getScheduleByOrg(orgId);
+          if (schedule && schedule.id === result.scheduleId) {
+            const now = new Date();
+            const nextDate = new Date(now);
+            nextDate.setMonth(nextDate.getMonth() + schedule.frequencyMonths);
+            await storage.upsertSchedule({
+              orgId: schedule.orgId,
+              orgName: schedule.orgName,
+              frequencyMonths: schedule.frequencyMonths,
+              nextReviewDate: nextDate,
+              lastReviewDate: now,
+              notes: schedule.notes,
+              reminderEmail: schedule.reminderEmail,
+            });
+            log(`Schedule ${schedule.id} updated: lastReviewDate=${now.toISOString()}, nextReviewDate=${nextDate.toISOString()}`);
+          }
+        } catch (schedErr: any) {
+          log(`Warning: Failed to update schedule after finalization: ${schedErr.message}`);
+        }
+      }
+
+      log(`TBR finalized for ${orgName} (orgId: ${orgId}), snapshot ID: ${result.id}, scheduleId: ${result.scheduleId || 'none'}`);
       res.json(result);
     } catch (err: any) {
       log(`TBR finalize error: ${err.message}`);

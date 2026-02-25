@@ -34,6 +34,8 @@ export const tbrSnapshots = pgTable("tbr_snapshots", {
   roadmapItemCount: integer("roadmap_item_count").default(0).notNull(),
   urgentItemCount: integer("urgent_item_count").default(0).notNull(),
   cwTicketId: integer("cw_ticket_id"),
+  scheduleId: integer("schedule_id"),
+  reviewDate: text("review_date"),
 });
 
 export const insertTbrSnapshotSchema = createInsertSchema(tbrSnapshots).omit({

@@ -99,6 +99,7 @@ export default function Tracker() {
     snapshotId?: number;
     scheduleId?: number;
     orgId?: number;
+    reviewDate?: string;
   } | null>(null);
 
   const { data: organizations, isLoading: orgsLoading } = useQuery<Organization[]>({
@@ -208,24 +209,38 @@ export default function Tracker() {
   const daysInMonth = lastDay.getDate();
 
   const calendarEvents = useMemo(() => {
-    const events: Record<number, { items: Array<{ label: string; type: "completed" | "scheduled"; snapshotId?: number; scheduleId?: number; orgId?: number }> }> = {};
+    type CalendarItem = { label: string; type: "completed" | "scheduled"; snapshotId?: number; scheduleId?: number; orgId?: number; reviewDate?: string };
+    const events: Record<number, { items: CalendarItem[] }> = {};
 
     finalized.forEach((snap) => {
-      const d = new Date(snap.createdAt);
+      const d = snap.reviewDate ? parseLocalDate(snap.reviewDate) : new Date(snap.createdAt);
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
         if (!events[day]) events[day] = { items: [] };
-        events[day].items.push({ label: snap.orgName, type: "completed", snapshotId: snap.id, orgId: snap.orgId });
+        events[day].items.push({
+          label: snap.orgName,
+          type: "completed",
+          snapshotId: snap.id,
+          orgId: snap.orgId,
+          scheduleId: snap.scheduleId || undefined,
+          reviewDate: snap.reviewDate || undefined,
+        });
       }
     });
 
+    const completedScheduleIds = new Set(
+      finalized.filter((snap) => snap.scheduleId).map((snap) => snap.scheduleId as number)
+    );
+
     (schedules || []).forEach((s) => {
       if (!s.nextReviewDate) return;
+      if (completedScheduleIds.has(s.id)) return;
       const d = parseLocalDate(s.nextReviewDate);
       if (d.getFullYear() === calendarYear && d.getMonth() === calendarMonth) {
         const day = d.getDate();
         if (!events[day]) events[day] = { items: [] };
-        events[day].items.push({ label: s.orgName, type: "scheduled", scheduleId: s.id, orgId: s.orgId });
+        const reviewDate = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        events[day].items.push({ label: s.orgName, type: "scheduled", scheduleId: s.id, orgId: s.orgId, reviewDate });
       }
     });
 
@@ -270,7 +285,7 @@ export default function Tracker() {
     openNewScheduleDialog(dateStr);
   };
 
-  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number; snapshotId?: number; label?: string; orgId?: number }) => {
+  const handleEventClick = (e: React.MouseEvent, item: { type: string; scheduleId?: number; snapshotId?: number; label?: string; orgId?: number; reviewDate?: string }) => {
     e.stopPropagation();
     setEventActionItem(item as any);
   };
@@ -598,8 +613,14 @@ export default function Tracker() {
                     variant="ghost"
                     className="w-full justify-start h-9 text-sm"
                     onClick={() => {
+                      const params = new URLSearchParams({
+                        orgId: String(eventActionItem.orgId),
+                        orgName: eventActionItem.label || "",
+                      });
+                      if (eventActionItem.scheduleId) params.set("scheduleId", String(eventActionItem.scheduleId));
+                      if (eventActionItem.reviewDate) params.set("reviewDate", eventActionItem.reviewDate);
                       setEventActionItem(null);
-                      setLocation(`/reviews?orgId=${eventActionItem.orgId}&orgName=${encodeURIComponent(eventActionItem.label || "")}`);
+                      setLocation(`/reviews?${params.toString()}`);
                     }}
                     data-testid="button-event-open-review"
                   >

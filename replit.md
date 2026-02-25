@@ -82,7 +82,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Past Reviews**: Inline list in Overview with expandable detail cards showing metrics, trend comparisons, notes, and feedback.
 - **Trend Tracking**: Editor shows previous TBR banner; snapshot cards show deltas between consecutive reviews.
 - **Export Integration**: HTML export includes "Progress Since Last Review" table when previous snapshot exists. Stored snapshots can generate PDFs from fullData.
-- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb with deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback), cwTicketId (ConnectWise follow-up ticket number), and ~20 metric columns
+- **Schedule Linkage**: Snapshots can be linked to a schedule entry via `scheduleId` and `reviewDate`. When navigating from a scheduled calendar event, the `scheduleId` and `reviewDate` are passed through URL params → dashboard → save-draft/finalize payload. On finalization, if linked to a schedule, the schedule's `lastReviewDate` is updated and `nextReviewDate` is auto-advanced by the schedule's frequency. Calendar shows finalized TBRs on their `reviewDate` (not `createdAt`) when linked.
+- **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb with deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback), cwTicketId (ConnectWise follow-up ticket number), scheduleId (linked schedule entry), reviewDate (scheduled review date string), and ~20 metric columns
 
 ## Export Report Structure ("No Surprises" Framework)
 1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status
