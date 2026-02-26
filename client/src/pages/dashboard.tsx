@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import DOMPurify from "dompurify";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ClientSelector } from "@/components/client-selector";
 import { DeviceHealth } from "@/components/device-health";
@@ -431,7 +432,7 @@ function SnapshotCard({
       }
 
       const content = document.createElement("div");
-      content.innerHTML = doc.body.innerHTML;
+      content.innerHTML = DOMPurify.sanitize(doc.body.innerHTML);
       content.style.cssText = "font-family:'Poppins',sans-serif;padding:24px 20px;color:#394442;line-height:1.45;font-size:12px;max-width:780px;margin:0 auto;background:white;";
       wrapper.appendChild(content);
       document.body.appendChild(wrapper);
@@ -1138,7 +1139,7 @@ function FinalizationConfirmation({
         wrapper.appendChild(s);
       }
       const content = document.createElement("div");
-      content.innerHTML = doc.body.innerHTML;
+      content.innerHTML = DOMPurify.sanitize(doc.body.innerHTML);
       content.style.cssText = "font-family:'Poppins',sans-serif;padding:24px 20px;color:#394442;line-height:1.45;font-size:12px;max-width:780px;margin:0 auto;background:white;";
       wrapper.appendChild(content);
       document.body.appendChild(wrapper);
