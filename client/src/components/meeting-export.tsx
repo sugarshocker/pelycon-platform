@@ -113,7 +113,9 @@ export function MeetingExport({
       }
 
       const content = document.createElement("div");
-      content.innerHTML = doc.body.innerHTML;
+      while (doc.body.firstChild) {
+        content.appendChild(doc.body.firstChild);
+      }
       content.style.cssText = "font-family:'Poppins',sans-serif;padding:24px 20px;color:#394442;line-height:1.45;font-size:12px;max-width:780px;margin:0 auto;background:white;";
       wrapper.appendChild(content);
       document.body.appendChild(wrapper);
