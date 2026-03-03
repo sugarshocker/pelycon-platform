@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import type { ClientAccountWithStatus } from "@shared/schema";
+import type { ClientAccountWithStatus, AgreementAdditionInfo, MarginInsight } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +45,15 @@ import {
   ExternalLink,
   ArrowUpDown,
   Users,
+  Lightbulb,
+  Package,
+  TriangleAlert,
+  Info,
 } from "lucide-react";
 
 type SortField = "companyName" | "effectiveTier" | "totalRevenue" | "tbrStatus" | "agreementRevenue" | "projectRevenue" | "grossMarginPercent" | "laborCost" | "totalHours";
 type SortDir = "asc" | "desc";
+type BreakdownTab = "overview" | "engineers" | "additions" | "analysis";
 
 interface EngineerEntry {
   memberId: number;
@@ -121,11 +126,17 @@ function TierBadge({ tier }: { tier: string }) {
 
 function MarginBadge({ margin }: { margin: number | null | undefined }) {
   if (margin === null || margin === undefined) return <span className="text-muted-foreground">—</span>;
-  const color = margin >= 50 ? "text-green-600 dark:text-green-400"
-    : margin >= 30 ? "text-yellow-600 dark:text-yellow-400"
+  const color = margin >= 70 ? "text-green-600 dark:text-green-400"
+    : margin >= 55 ? "text-yellow-600 dark:text-yellow-400"
     : margin >= 0 ? "text-orange-600 dark:text-orange-400"
     : "text-red-600 dark:text-red-400";
   return <span className={`font-medium ${color}`}>{margin.toFixed(1)}%</span>;
+}
+
+function InsightIcon({ type }: { type: string }) {
+  if (type === "warning") return <TriangleAlert className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />;
+  if (type === "suggestion") return <Lightbulb className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />;
+  return <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />;
 }
 
 function EngineerBreakdownDialog({
@@ -137,116 +148,331 @@ function EngineerBreakdownDialog({
   onOpenChange: (open: boolean) => void;
   account: ClientAccountWithStatus | null;
 }) {
+  const [tab, setTab] = useState<BreakdownTab>("overview");
+
   if (!account) return null;
 
   const engineers: EngineerEntry[] = (account.engineerBreakdown as EngineerEntry[] | null) || [];
+  const additions: AgreementAdditionInfo[] = (account.agreementAdditions as AgreementAdditionInfo[] | null) || [];
+  const insights: MarginInsight[] = (account.marginAnalysis as MarginInsight[] | null) || [];
   const hasEngineers = engineers.length > 0;
   const totalRev = account.totalRevenue || 0;
-  const totalCost = account.laborCost || 0;
+  const laborCost = account.laborCost || 0;
+  const additionCost = account.additionCost || 0;
+  const totalCost = account.totalCost || 0;
   const margin = totalRev > 0 && totalCost > 0 ? ((totalRev - totalCost) / totalRev) * 100 : null;
+  const warningCount = insights.filter(i => i.type === "warning").length;
+  const suggestionCount = insights.filter(i => i.type === "suggestion").length;
+
+  const tabs: { key: BreakdownTab; label: string; count?: number }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "engineers", label: "Engineers", count: engineers.length },
+    { key: "additions", label: "Additions", count: additions.length },
+    { key: "analysis", label: "Analysis", count: warningCount + suggestionCount },
+  ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) setTab("overview"); }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2" data-testid="text-breakdown-title">
             <Users className="h-5 w-5" />
-            {account.companyName} — Engineer Cost Breakdown
+            {account.companyName} — Cost & Margin Breakdown
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground">Total Revenue</div>
-            <div className="text-sm font-semibold" data-testid="text-breakdown-revenue">{formatCurrency(totalRev)}</div>
-          </div>
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground">Labor Cost</div>
-            <div className="text-sm font-semibold" data-testid="text-breakdown-cost">{formatCurrency(totalCost)}</div>
-          </div>
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground">Margin</div>
-            <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
-              <MarginBadge margin={margin} />
+        <div className="flex gap-1 border-b mb-4">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              data-testid={`tab-${t.key}`}
+            >
+              {t.label}
+              {t.count !== undefined && t.count > 0 && (
+                <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${t.key === "analysis" && warningCount > 0 ? "bg-amber-500/15 text-amber-600" : "bg-muted text-muted-foreground"}`}>
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {tab === "overview" && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Total Revenue</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-revenue">{formatCurrency(totalRev)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Labor Cost</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-labor">{formatCurrency(laborCost)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Addition Cost</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-additions">{formatCurrency(additionCost)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Total Cost</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-total-cost">{formatCurrency(totalCost)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Fully Loaded Margin</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
+                  <MarginBadge margin={margin} />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground">Total Hours</div>
-            <div className="text-sm font-semibold" data-testid="text-breakdown-hours">{formatHours(account.totalHours)}</div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground">Service Hours</div>
-            <div className="text-sm font-medium">{formatHours(account.serviceHours)}</div>
-          </div>
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground">Project Hours</div>
-            <div className="text-sm font-medium">{formatHours(account.projectHours)}</div>
-          </div>
-        </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Total Hours</div>
+                <div className="text-sm font-medium" data-testid="text-breakdown-hours">{formatHours(account.totalHours)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Service Hours</div>
+                <div className="text-sm font-medium">{formatHours(account.serviceHours)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Project Hours</div>
+                <div className="text-sm font-medium">{formatHours(account.projectHours)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Rev/Hour</div>
+                <div className="text-sm font-medium">
+                  {account.totalHours && account.totalHours > 0 ? `$${(totalRev / account.totalHours).toFixed(0)}/hr` : "—"}
+                </div>
+              </div>
+            </div>
 
-        {hasEngineers ? (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Engineer</TableHead>
-                  <TableHead className="text-right">Service Hrs</TableHead>
-                  <TableHead className="text-right">Project Hrs</TableHead>
-                  <TableHead className="text-right">Total Hrs</TableHead>
-                  <TableHead className="text-right">Hourly Cost</TableHead>
-                  <TableHead className="text-right">Total Cost</TableHead>
-                  <TableHead className="text-right">% of Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {engineers.map((eng, idx) => (
-                  <TableRow key={eng.memberId} data-testid={`row-engineer-${idx}`}>
-                    <TableCell className="text-sm font-medium" data-testid={`text-engineer-name-${idx}`}>
-                      {eng.memberName}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums text-right">
-                      {eng.serviceHours > 0 ? eng.serviceHours.toFixed(1) : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums text-right">
-                      {eng.projectHours > 0 ? eng.projectHours.toFixed(1) : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums text-right font-medium">
-                      {eng.totalHours.toFixed(1)}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums text-right">
-                      {eng.hourlyCost > 0 ? `$${eng.hourlyCost.toFixed(0)}/hr` : (
-                        <span className="text-muted-foreground italic">not set</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums text-right font-medium">
-                      {eng.totalCost > 0 ? formatCurrency(eng.totalCost) : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums text-right">
-                      {totalCost > 0 && eng.totalCost > 0
-                        ? `${((eng.totalCost / totalCost) * 100).toFixed(0)}%`
-                        : "—"
-                      }
-                    </TableCell>
-                  </TableRow>
+            {totalCost > 0 && (
+              <div className="border rounded-lg p-3 mb-4">
+                <div className="text-xs text-muted-foreground mb-2">Cost Breakdown</div>
+                <div className="flex gap-1 h-4 rounded overflow-hidden">
+                  {laborCost > 0 && (
+                    <div
+                      className="bg-blue-500 rounded-sm"
+                      style={{ width: `${(laborCost / totalCost) * 100}%` }}
+                      title={`Labor: ${formatCurrency(laborCost)}`}
+                    />
+                  )}
+                  {additionCost > 0 && (
+                    <div
+                      className="bg-orange-500 rounded-sm"
+                      style={{ width: `${(additionCost / totalCost) * 100}%` }}
+                      title={`Additions: ${formatCurrency(additionCost)}`}
+                    />
+                  )}
+                </div>
+                <div className="flex gap-4 mt-2 text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
+                    Labor: {formatCurrency(laborCost)} ({totalCost > 0 ? ((laborCost / totalCost) * 100).toFixed(0) : 0}%)
+                  </span>
+                  {additionCost > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
+                      Additions: {formatCurrency(additionCost)} ({((additionCost / totalCost) * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {insights.filter(i => i.type === "warning").length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-amber-600 flex items-center gap-1.5">
+                  <TriangleAlert className="h-3.5 w-3.5" />
+                  Key Concerns
+                </div>
+                {insights.filter(i => i.type === "warning").slice(0, 3).map((insight, idx) => (
+                  <div key={idx} className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                    <div className="text-sm font-medium text-amber-700 dark:text-amber-400">{insight.title}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{insight.detail}</div>
+                    {insight.impact && <div className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">{insight.impact}</div>}
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            No time entries found for this client in the last 12 months.
-            <br />
-            <span className="text-xs">Sync from ConnectWise to pull the latest data.</span>
-          </div>
+                {insights.filter(i => i.type === "warning").length > 3 && (
+                  <button onClick={() => setTab("analysis")} className="text-xs text-primary hover:underline" data-testid="link-see-all-analysis">
+                    See all analysis...
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
 
-        {hasEngineers && engineers.some(e => e.hourlyCost === 0) && (
-          <div className="mt-3 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 rounded-lg p-3" data-testid="text-missing-cost-warning">
-            Some engineers don't have hourly cost rates configured in ConnectWise. Set the "Hourly Cost" field on their member record to get accurate margin calculations.
-          </div>
+        {tab === "engineers" && (
+          <>
+            {hasEngineers ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Engineer</TableHead>
+                      <TableHead className="text-right">Service Hrs</TableHead>
+                      <TableHead className="text-right">Project Hrs</TableHead>
+                      <TableHead className="text-right">Total Hrs</TableHead>
+                      <TableHead className="text-right">Hourly Cost</TableHead>
+                      <TableHead className="text-right">Total Cost</TableHead>
+                      <TableHead className="text-right">% of Labor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {engineers.map((eng, idx) => (
+                      <TableRow key={eng.memberId} data-testid={`row-engineer-${idx}`}>
+                        <TableCell className="text-sm font-medium" data-testid={`text-engineer-name-${idx}`}>
+                          {eng.memberName}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {eng.serviceHours > 0 ? eng.serviceHours.toFixed(1) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {eng.projectHours > 0 ? eng.projectHours.toFixed(1) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right font-medium">
+                          {eng.totalHours.toFixed(1)}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {eng.hourlyCost > 0 ? `$${eng.hourlyCost.toFixed(0)}/hr` : (
+                            <span className="text-muted-foreground italic">not set</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right font-medium">
+                          {eng.totalCost > 0 ? formatCurrency(eng.totalCost) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {laborCost > 0 && eng.totalCost > 0
+                            ? `${((eng.totalCost / laborCost) * 100).toFixed(0)}%`
+                            : "—"
+                          }
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No time entries found for this client in the last 12 months.
+                <br />
+                <span className="text-xs">Sync from ConnectWise to pull the latest data.</span>
+              </div>
+            )}
+
+            {hasEngineers && engineers.some(e => e.hourlyCost === 0) && (
+              <div className="mt-3 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 rounded-lg p-3" data-testid="text-missing-cost-warning">
+                Some engineers don't have hourly cost rates configured in ConnectWise. Set the "Hourly Cost" field on their member record to get accurate margin calculations.
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "additions" && (
+          <>
+            {additions.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product/Service</TableHead>
+                      <TableHead>Agreement</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">Unit Cost</TableHead>
+                      <TableHead className="text-right">Unit Price</TableHead>
+                      <TableHead className="text-right">Annual Cost</TableHead>
+                      <TableHead className="text-right">Margin</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {additions.map((add, idx) => (
+                      <TableRow key={idx} data-testid={`row-addition-${idx}`}>
+                        <TableCell className="text-sm font-medium max-w-[200px] truncate" title={add.additionName}>
+                          {add.additionName}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate" title={add.agreementName}>
+                          {add.agreementName}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">{add.quantity}</TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {add.unitCost > 0 ? `$${add.unitCost.toFixed(2)}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          {add.unitPrice > 0 ? `$${add.unitPrice.toFixed(2)}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right font-medium">
+                          {formatCurrency(add.annualCost)}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-right">
+                          <MarginBadge margin={add.margin} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="mt-3 flex justify-between text-xs text-muted-foreground border-t pt-2">
+                  <span>Total Addition Cost: <strong>{formatCurrency(additionCost)}</strong></span>
+                  <span>Total Addition Revenue: <strong>{formatCurrency(additions.reduce((s, a) => s + a.annualRevenue, 0))}</strong></span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                No agreement additions found.
+                <br />
+                <span className="text-xs">This client's agreements may not have product or tool additions, or the data hasn't been synced yet.</span>
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "analysis" && (
+          <>
+            {insights.length > 0 ? (
+              <div className="space-y-3">
+                {insights.map((insight, idx) => (
+                  <div
+                    key={idx}
+                    className={`rounded-lg p-3 border ${
+                      insight.type === "warning" ? "bg-amber-500/10 border-amber-500/20" :
+                      insight.type === "suggestion" ? "bg-blue-500/10 border-blue-500/20" :
+                      "bg-muted/50 border-border"
+                    }`}
+                    data-testid={`insight-${idx}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <InsightIcon type={insight.type} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{insight.title}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{insight.category}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{insight.detail}</p>
+                        {insight.impact && (
+                          <p className={`text-xs mt-1.5 font-medium ${
+                            insight.type === "warning" ? "text-amber-600 dark:text-amber-400" :
+                            insight.type === "suggestion" ? "text-blue-600 dark:text-blue-400" :
+                            "text-foreground"
+                          }`}>
+                            {insight.impact}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-60" />
+                No margin concerns detected.
+                <br />
+                <span className="text-xs">This client's profitability looks healthy.</span>
+              </div>
+            )}
+          </>
         )}
       </DialogContent>
     </Dialog>
@@ -331,12 +557,14 @@ export default function Accounts() {
     totalAgreementRev: (accounts || []).reduce((sum, a) => sum + (a.agreementRevenue || 0), 0),
     totalProjectRev: (accounts || []).reduce((sum, a) => sum + (a.projectRevenue || 0), 0),
     totalLaborCost: (accounts || []).reduce((sum, a) => sum + (a.laborCost || 0), 0),
+    totalAdditionCost: (accounts || []).reduce((sum, a) => sum + (a.additionCost || 0), 0),
     totalHours: (accounts || []).reduce((sum, a) => sum + (a.totalHours || 0), 0),
   };
 
   const overallRev = summary.totalAgreementRev + summary.totalProjectRev;
-  const overallMargin = overallRev > 0 && summary.totalLaborCost > 0
-    ? ((overallRev - summary.totalLaborCost) / overallRev) * 100
+  const overallTotalCost = summary.totalLaborCost + summary.totalAdditionCost;
+  const overallMargin = overallRev > 0 && overallTotalCost > 0
+    ? ((overallRev - overallTotalCost) / overallRev) * 100
     : null;
 
   const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
@@ -548,7 +776,15 @@ export default function Accounts() {
                         {formatHours(acct.totalHours)}
                       </TableCell>
                       <TableCell className="text-xs tabular-nums" data-testid={`text-margin-${acct.id}`}>
-                        <MarginBadge margin={acct.grossMarginPercent} />
+                        <div className="flex items-center gap-1">
+                          <MarginBadge margin={acct.grossMarginPercent} />
+                          {(() => {
+                            const acctInsights = (acct.marginAnalysis as MarginInsight[] | null) || [];
+                            const warnings = acctInsights.filter(i => i.type === "warning").length;
+                            if (warnings > 0) return <TriangleAlert className="h-3 w-3 text-amber-500" />;
+                            return null;
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -564,7 +800,7 @@ export default function Accounts() {
                                 <Users className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Engineer Cost Breakdown</TooltipContent>
+                            <TooltipContent>Cost & Margin Breakdown</TooltipContent>
                           </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>

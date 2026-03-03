@@ -57,12 +57,15 @@ export const clientAccounts = pgTable("client_accounts", {
   projectRevenue: real("project_revenue"),
   totalRevenue: real("total_revenue"),
   laborCost: real("labor_cost"),
+  additionCost: real("addition_cost"),
   totalCost: real("total_cost"),
   grossMarginPercent: real("gross_margin_percent"),
   serviceHours: real("service_hours"),
   projectHours: real("project_hours"),
   totalHours: real("total_hours"),
   engineerBreakdown: jsonb("engineer_breakdown"),
+  agreementAdditions: jsonb("agreement_additions"),
+  marginAnalysis: jsonb("margin_analysis"),
   agreementTypes: text("agreement_types"),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -96,6 +99,25 @@ export interface EngineerCostBreakdown {
   totalHours: number;
   hourlyCost: number;
   totalCost: number;
+}
+
+export interface AgreementAdditionInfo {
+  additionName: string;
+  agreementName: string;
+  quantity: number;
+  unitCost: number;
+  unitPrice: number;
+  annualCost: number;
+  annualRevenue: number;
+  margin: number;
+}
+
+export interface MarginInsight {
+  type: "warning" | "suggestion" | "info";
+  category: "labor" | "additions" | "project" | "overall";
+  title: string;
+  detail: string;
+  impact?: string;
 }
 
 export const loginSchema = z.object({

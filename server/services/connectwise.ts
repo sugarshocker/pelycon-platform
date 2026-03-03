@@ -491,17 +491,30 @@ export interface CwLaborCosts {
   engineers: EngineerCostEntry[];
 }
 
+export interface AgreementAdditionEntry {
+  additionName: string;
+  agreementName: string;
+  quantity: number;
+  unitCost: number;
+  unitPrice: number;
+  annualCost: number;
+  annualRevenue: number;
+  margin: number;
+}
+
 export interface CwCompanyFinancials {
   agreementRevenue: number;
   projectRevenue: number;
   totalRevenue: number;
   laborCost: number;
+  additionCost: number;
   totalCost: number;
   grossMarginPercent: number | null;
   serviceHours: number;
   projectHours: number;
   totalHours: number;
   engineers: EngineerCostEntry[];
+  agreementAdditions: AgreementAdditionEntry[];
 }
 
 const memberCostCache = new Map<number, { name: string; identifier: string; hourlyCost: number }>();
@@ -616,6 +629,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   const dateStr = twelveMonthsAgo.toISOString().split("T")[0];
 
   let agreementRevenue = 0;
+  const agreementIds: { id: number; name: string }[] = [];
   try {
     const agreements = await apiGet("/finance/agreements", {
       conditions: `company/id = ${cwCompanyId} AND cancelledFlag = false`,
@@ -626,10 +640,51 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
       if (amount) {
         agreementRevenue += amount * 12;
       }
+      agreementIds.push({ id: agr.id, name: agr.name || `Agreement ${agr.id}` });
     }
   } catch (e: any) {
     log(`ConnectWise agreement revenue error for company ${cwCompanyId}: ${e.message}`);
   }
+
+  let additionCost = 0;
+  const agreementAdditions: AgreementAdditionEntry[] = [];
+  for (const agr of agreementIds) {
+    try {
+      const additions = await apiGet(`/finance/agreements/${agr.id}/additions`, {
+        pageSize: "250",
+      });
+      for (const add of additions) {
+        if (add.cancelledDate) continue;
+        const qty = add.quantity ?? 1;
+        const unitCost = add.unitCost ?? 0;
+        const unitPrice = add.unitPrice ?? add.billCustomer === "DoNotBill" ? 0 : (add.extendedPrice ?? 0) / (qty || 1);
+        const billingCycle = add.billCycleId ?? 1;
+        const cycleMultiplier = billingCycle === 1 ? 12 : billingCycle === 2 ? 4 : billingCycle === 3 ? 2 : 1;
+
+        const annualCost = Math.round(qty * unitCost * cycleMultiplier * 100) / 100;
+        const annualRevenue = Math.round(qty * unitPrice * cycleMultiplier * 100) / 100;
+        const margin = annualRevenue > 0 ? Math.round(((annualRevenue - annualCost) / annualRevenue) * 1000) / 10 : 0;
+
+        if (annualCost > 0 || annualRevenue > 0) {
+          additionCost += annualCost;
+          agreementAdditions.push({
+            additionName: add.product?.description || add.description || `Addition ${add.id}`,
+            agreementName: agr.name,
+            quantity: qty,
+            unitCost,
+            unitPrice,
+            annualCost,
+            annualRevenue,
+            margin,
+          });
+        }
+      }
+    } catch (e: any) {
+      log(`ConnectWise additions error for agreement ${agr.id}: ${e.message}`);
+    }
+  }
+  additionCost = Math.round(additionCost * 100) / 100;
+  agreementAdditions.sort((a, b) => b.annualCost - a.annualCost);
 
   let projectRevenue = 0;
   let invoicedAgreementRevenue = 0;
@@ -659,7 +714,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
 
   const labor = await getCompanyLaborCosts(cwCompanyId);
   const totalRev = agreementRevenue + projectRevenue;
-  const totalCostVal = labor.laborCost;
+  const totalCostVal = Math.round((labor.laborCost + additionCost) * 100) / 100;
   let grossMarginPercent: number | null = null;
 
   if (totalRev > 0) {
@@ -671,11 +726,13 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     projectRevenue,
     totalRevenue: totalRev,
     laborCost: labor.laborCost,
+    additionCost,
     totalCost: totalCostVal,
     grossMarginPercent,
     serviceHours: labor.serviceHours,
     projectHours: labor.projectHours,
     totalHours: labor.totalHours,
     engineers: labor.engineers,
+    agreementAdditions,
   };
 }
