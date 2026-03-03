@@ -159,8 +159,12 @@ function EngineerBreakdownDialog({
   const totalRev = account.totalRevenue || 0;
   const laborCost = account.laborCost || 0;
   const additionCost = account.additionCost || 0;
+  const msLicensingRevenue = (account as any).msLicensingRevenue || 0;
+  const msLicensingCost = (account as any).msLicensingCost || 0;
   const totalCost = account.totalCost || 0;
-  const margin = totalRev > 0 && totalCost > 0 ? ((totalRev - totalCost) / totalRev) * 100 : null;
+  const actionableRev = totalRev - msLicensingRevenue;
+  const actionableCost = laborCost + additionCost;
+  const margin = actionableRev > 0 ? ((actionableRev - actionableCost) / actionableRev) * 100 : null;
   const warningCount = insights.filter(i => i.type === "warning").length;
   const suggestionCount = insights.filter(i => i.type === "suggestion").length;
 
@@ -219,10 +223,11 @@ function EngineerBreakdownDialog({
                 <div className="text-sm font-semibold" data-testid="text-breakdown-total-cost">{formatCurrency(totalCost)}</div>
               </div>
               <div className="border rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Fully Loaded Margin</div>
+                <div className="text-xs text-muted-foreground">{msLicensingRevenue > 0 ? "Actionable Margin" : "Fully Loaded Margin"}</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
                   <MarginBadge margin={margin} />
                 </div>
+                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground mt-1">Excl. Microsoft pass-through</div>}
               </div>
             </div>
 
@@ -262,11 +267,18 @@ function EngineerBreakdownDialog({
                     <div
                       className="bg-orange-500 rounded-sm"
                       style={{ width: `${(additionCost / totalCost) * 100}%` }}
-                      title={`Additions: ${formatCurrency(additionCost)}`}
+                      title={`Products: ${formatCurrency(additionCost)}`}
+                    />
+                  )}
+                  {msLicensingCost > 0 && (
+                    <div
+                      className="bg-purple-400 rounded-sm"
+                      style={{ width: `${(msLicensingCost / totalCost) * 100}%` }}
+                      title={`Microsoft: ${formatCurrency(msLicensingCost)}`}
                     />
                   )}
                 </div>
-                <div className="flex gap-4 mt-2 text-xs">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />
                     Labor: {formatCurrency(laborCost)} ({totalCost > 0 ? ((laborCost / totalCost) * 100).toFixed(0) : 0}%)
@@ -274,7 +286,13 @@ function EngineerBreakdownDialog({
                   {additionCost > 0 && (
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
-                      Additions: {formatCurrency(additionCost)} ({((additionCost / totalCost) * 100).toFixed(0)}%)
+                      Products: {formatCurrency(additionCost)} ({((additionCost / totalCost) * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                  {msLicensingCost > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-purple-400" />
+                      Microsoft: {formatCurrency(msLicensingCost)} ({((msLicensingCost / totalCost) * 100).toFixed(0)}%) <span className="italic text-muted-foreground">(pass-through)</span>
                     </span>
                   )}
                 </div>
@@ -378,6 +396,7 @@ function EngineerBreakdownDialog({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product/Service</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Agreement</TableHead>
                       <TableHead className="text-right">Qty</TableHead>
                       <TableHead className="text-right">Unit Cost</TableHead>
@@ -388,9 +407,18 @@ function EngineerBreakdownDialog({
                   </TableHeader>
                   <TableBody>
                     {additions.map((add, idx) => (
-                      <TableRow key={idx} data-testid={`row-addition-${idx}`}>
+                      <TableRow key={idx} data-testid={`row-addition-${idx}`} className={add.category === "microsoft" ? "opacity-60" : ""}>
                         <TableCell className="text-sm font-medium max-w-[200px] truncate" title={add.additionName}>
                           {add.additionName}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={
+                            add.category === "labor" ? "text-blue-600 border-blue-300 text-xs" :
+                            add.category === "microsoft" ? "text-purple-600 border-purple-300 text-xs" :
+                            "text-gray-600 border-gray-300 text-xs"
+                          }>
+                            {add.category === "labor" ? "Labor" : add.category === "microsoft" ? "Microsoft" : "Product"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate" title={add.agreementName}>
                           {add.agreementName}
@@ -412,9 +440,14 @@ function EngineerBreakdownDialog({
                     ))}
                   </TableBody>
                 </Table>
-                <div className="mt-3 flex justify-between text-xs text-muted-foreground border-t pt-2">
-                  <span>Total Addition Cost: <strong>{formatCurrency(additionCost)}</strong></span>
-                  <span>Total Addition Revenue: <strong>{formatCurrency(additions.reduce((s, a) => s + a.annualRevenue, 0))}</strong></span>
+                <div className="mt-3 space-y-1 text-xs text-muted-foreground border-t pt-2">
+                  <div className="flex justify-between">
+                    <span>Third-Party Product Cost: <strong>{formatCurrency(additions.filter(a => a.category === "other").reduce((s, a) => s + a.annualCost, 0))}</strong></span>
+                    <span>Labor Addition Revenue: <strong>{formatCurrency(additions.filter(a => a.category === "labor").reduce((s, a) => s + a.annualRevenue, 0))}</strong></span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Microsoft Licensing: <strong>{formatCurrency(additions.filter(a => a.category === "microsoft").reduce((s, a) => s + a.annualRevenue, 0))}</strong> <span className="italic">(excluded from margin)</span></span>
+                  </div>
                 </div>
               </div>
             ) : (

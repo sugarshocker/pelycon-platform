@@ -500,6 +500,27 @@ export interface AgreementAdditionEntry {
   annualCost: number;
   annualRevenue: number;
   margin: number;
+  category: "labor" | "microsoft" | "other";
+}
+
+const LABOR_ADDITION_NAMES = [
+  "q-managedservices", "managedservices-srv", "24/7 emergency support",
+  "csl - network support", "it mgs bus hrs", "labor-prepaid",
+  "managedservices-pc", "managedservices-server", "managedservices-user",
+  "network mgmt-cs", "network monitor", "pelycon banked support",
+  "pelycon block hours", "server-topshelf", "umbrella it",
+  "workstn-topshelf", "topshelf",
+];
+
+function classifyAddition(name: string): "labor" | "microsoft" | "other" {
+  const lower = name.toLowerCase();
+  if (LABOR_ADDITION_NAMES.some(p => lower.includes(p))) return "labor";
+  if (lower.includes("microsoft") || lower.includes("m365") || lower.includes("office 365")
+      || lower.includes("o365") || lower.includes("azure") || lower.includes("defender")
+      || lower.includes("entra") || lower.includes("intune") || lower.includes("copilot")) {
+    return "microsoft";
+  }
+  return "other";
 }
 
 export interface CwCompanyFinancials {
@@ -508,6 +529,8 @@ export interface CwCompanyFinancials {
   totalRevenue: number;
   laborCost: number;
   additionCost: number;
+  msLicensingRevenue: number;
+  msLicensingCost: number;
   totalCost: number;
   grossMarginPercent: number | null;
   serviceHours: number;
@@ -647,6 +670,8 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   }
 
   let additionCost = 0;
+  let msLicensingRevenue = 0;
+  let msLicensingCost = 0;
   const agreementAdditions: AgreementAdditionEntry[] = [];
   for (const agr of agreementIds) {
     try {
@@ -657,19 +682,26 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
         if (add.cancelledDate) continue;
         const qty = add.quantity ?? 1;
         const unitCost = add.unitCost ?? 0;
+        const addName = add.product?.description || add.description || `Addition ${add.id}`;
         const unitPrice = add.unitPrice != null
           ? add.unitPrice
           : (add.billCustomer === "DoNotBill" ? 0 : (add.extendedPrice ?? 0) / (qty || 1));
         const cycleMultiplier = 12;
+        const category = classifyAddition(addName);
 
         const annualCost = Math.round(qty * unitCost * cycleMultiplier * 100) / 100;
         const annualRevenue = Math.round(qty * unitPrice * cycleMultiplier * 100) / 100;
         const margin = annualRevenue > 0 ? Math.round(((annualRevenue - annualCost) / annualRevenue) * 1000) / 10 : 0;
 
         if (annualCost > 0 || annualRevenue > 0) {
-          additionCost += annualCost;
+          if (category === "microsoft") {
+            msLicensingRevenue += annualRevenue;
+            msLicensingCost += annualCost;
+          } else if (category === "other") {
+            additionCost += annualCost;
+          }
           agreementAdditions.push({
-            additionName: add.product?.description || add.description || `Addition ${add.id}`,
+            additionName: addName,
             agreementName: agr.name,
             quantity: qty,
             unitCost,
@@ -677,6 +709,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
             annualCost,
             annualRevenue,
             margin,
+            category,
           });
         }
       }
@@ -685,6 +718,8 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     }
   }
   additionCost = Math.round(additionCost * 100) / 100;
+  msLicensingRevenue = Math.round(msLicensingRevenue * 100) / 100;
+  msLicensingCost = Math.round(msLicensingCost * 100) / 100;
   agreementAdditions.sort((a, b) => b.annualCost - a.annualCost);
 
   let projectRevenue = 0;
@@ -715,11 +750,13 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
 
   const labor = await getCompanyLaborCosts(cwCompanyId);
   const totalRev = agreementRevenue + projectRevenue;
-  const totalCostVal = Math.round((labor.laborCost + additionCost) * 100) / 100;
+  const actionableRev = totalRev - msLicensingRevenue;
+  const actionableCost = Math.round((labor.laborCost + additionCost) * 100) / 100;
+  const totalCostVal = Math.round((labor.laborCost + additionCost + msLicensingCost) * 100) / 100;
   let grossMarginPercent: number | null = null;
 
-  if (totalRev > 0) {
-    grossMarginPercent = Math.round(((totalRev - totalCostVal) / totalRev) * 1000) / 10;
+  if (actionableRev > 0) {
+    grossMarginPercent = Math.round(((actionableRev - actionableCost) / actionableRev) * 1000) / 10;
   }
 
   return {
@@ -728,6 +765,8 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     totalRevenue: totalRev,
     laborCost: labor.laborCost,
     additionCost,
+    msLicensingRevenue,
+    msLicensingCost,
     totalCost: totalCostVal,
     grossMarginPercent,
     serviceHours: labor.serviceHours,

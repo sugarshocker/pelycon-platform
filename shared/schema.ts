@@ -58,6 +58,8 @@ export const clientAccounts = pgTable("client_accounts", {
   totalRevenue: real("total_revenue"),
   laborCost: real("labor_cost"),
   additionCost: real("addition_cost"),
+  msLicensingRevenue: real("ms_licensing_revenue"),
+  msLicensingCost: real("ms_licensing_cost"),
   totalCost: real("total_cost"),
   grossMarginPercent: real("gross_margin_percent"),
   serviceHours: real("service_hours"),
@@ -110,6 +112,7 @@ export interface AgreementAdditionInfo {
   annualCost: number;
   annualRevenue: number;
   margin: number;
+  category: "labor" | "microsoft" | "other";
 }
 
 export interface MarginInsight {

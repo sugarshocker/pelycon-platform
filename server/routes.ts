@@ -1455,7 +1455,8 @@ export async function registerRoutes(
     const totalRev = financials.totalRevenue || 0;
     const laborCost = financials.laborCost || 0;
     const additionCost = financials.additionCost || 0;
-    const totalCost = financials.totalCost || 0;
+    const msRev = financials.msLicensingRevenue || 0;
+    const msCost = financials.msLicensingCost || 0;
     const agreementRev = financials.agreementRevenue || 0;
     const projectRev = financials.projectRevenue || 0;
     const totalHours = financials.totalHours || 0;
@@ -1465,52 +1466,42 @@ export async function registerRoutes(
 
     if (totalRev <= 0) return insights;
 
-    const overallMargin = ((totalRev - totalCost) / totalRev) * 100;
-    const laborOnlyMargin = ((totalRev - laborCost) / totalRev) * 100;
+    const actionableRev = totalRev - msRev;
+    const actionableCost = laborCost + additionCost;
+    const actionableMargin = actionableRev > 0 ? ((actionableRev - actionableCost) / actionableRev) * 100 : 0;
 
-    if (additionCost > 0) {
-      const additionPct = (additionCost / totalRev) * 100;
-      insights.push({
-        type: "info",
-        category: "additions",
-        title: "Agreement Addition Costs",
-        detail: `Product/tool costs total $${additionCost.toLocaleString()}/yr (${additionPct.toFixed(1)}% of revenue). Labor-only margin would be ${laborOnlyMargin.toFixed(1)}%.`,
-      });
-    }
+    const laborAdditions = additions.filter((a: any) => a.category === "labor");
+    const otherAdditions = additions.filter((a: any) => a.category === "other");
+    const laborAdditionRev = laborAdditions.reduce((s: number, a: any) => s + a.annualRevenue, 0);
 
-    const lowMarginAdditions = additions.filter(a => a.margin < 20 && a.annualCost > 0);
-    if (lowMarginAdditions.length > 0) {
-      const names = lowMarginAdditions.slice(0, 3).map(a => `${a.additionName} (${a.margin.toFixed(0)}%)`).join(", ");
-      const totalLowCost = lowMarginAdditions.reduce((s, a) => s + a.annualCost, 0);
+    if (laborAdditionRev > 0 && laborCost > 0) {
+      const laborServiceMargin = ((laborAdditionRev - laborCost) / laborAdditionRev) * 100;
       insights.push({
-        type: "warning",
-        category: "additions",
-        title: "Low-Margin Agreement Additions",
-        detail: `${lowMarginAdditions.length} addition(s) have margins below 20%: ${names}.`,
-        impact: `These cost $${totalLowCost.toLocaleString()}/yr with thin margins. Consider renegotiating vendor pricing or increasing the client bill rate.`,
-      });
-    }
-
-    const zeroMarginAdditions = additions.filter(a => a.annualCost > 0 && a.annualRevenue === 0);
-    if (zeroMarginAdditions.length > 0) {
-      const totalUnbilled = zeroMarginAdditions.reduce((s, a) => s + a.annualCost, 0);
-      insights.push({
-        type: "warning",
-        category: "additions",
-        title: "Unbilled Agreement Additions",
-        detail: `${zeroMarginAdditions.length} addition(s) have cost but zero revenue — you're absorbing $${totalUnbilled.toLocaleString()}/yr.`,
-        impact: `Review whether these should be billed to the client or removed from the agreement.`,
-      });
-    }
-
-    if (totalHours > 0) {
-      const effectiveRate = totalRev / totalHours;
-      const blendedCost = laborCost / totalHours;
-      insights.push({
-        type: "info",
+        type: laborServiceMargin < 50 ? "warning" : "info",
         category: "labor",
-        title: "Effective Billing Rate",
-        detail: `Revenue per hour: $${effectiveRate.toFixed(0)}/hr vs blended labor cost: $${blendedCost.toFixed(0)}/hr. Spread: $${(effectiveRate - blendedCost).toFixed(0)}/hr.`,
+        title: "Managed Services Labor Margin",
+        detail: `Service additions bring in ${fmtD(laborAdditionRev)}/yr. Your labor cost is ${fmtD(laborCost)}/yr — that's a ${laborServiceMargin.toFixed(0)}% margin on the labor side.`,
+        impact: laborServiceMargin < 50 ? `You're spending more than half the service revenue on labor. Look at ticket volume and whether the right engineers are on this account.` : undefined,
+      });
+    }
+
+    if (msRev > 0) {
+      insights.push({
+        type: "info",
+        category: "additions",
+        title: "Microsoft Licensing (excluded from margin)",
+        detail: `${fmtD(msRev)}/yr in Microsoft licensing at a fixed ~16% margin. This is pass-through and excluded from the actionable margin calculation.`,
+      });
+    }
+
+    const lowMarginOther = otherAdditions.filter((a: any) => a.margin < 20 && a.annualCost > 0);
+    if (lowMarginOther.length > 0) {
+      const names = lowMarginOther.slice(0, 3).map((a: any) => `${a.additionName} (${a.margin.toFixed(0)}%)`).join(", ");
+      insights.push({
+        type: "warning",
+        category: "additions",
+        title: "Low-Margin Third-Party Products",
+        detail: `${names} — these have thin margins. Either negotiate a better vendor rate or increase what you charge.`,
       });
     }
 
@@ -1518,27 +1509,26 @@ export async function registerRoutes(
       const topEng = engineers[0];
       const topPct = (topEng.totalCost / laborCost) * 100;
       if (topPct > 40 && topEng.hourlyCost >= 80) {
+        const savingsEstimate = Math.round(topEng.totalHours * 0.3 * (topEng.hourlyCost - 40));
         insights.push({
           type: "suggestion",
           category: "labor",
-          title: "Expensive Top Engineer Concentration",
-          detail: `${topEng.memberName} ($${topEng.hourlyCost}/hr) accounts for ${topPct.toFixed(0)}% of total labor cost ($${topEng.totalCost.toLocaleString()}).`,
-          impact: `Shifting ${Math.round(topEng.totalHours * 0.3)}hrs of routine work to a lower-cost engineer could save ~$${Math.round(topEng.totalHours * 0.3 * (topEng.hourlyCost - 40)).toLocaleString()}/yr.`,
+          title: "Heavy Use of Expensive Engineer",
+          detail: `${topEng.memberName} ($${topEng.hourlyCost}/hr) makes up ${topPct.toFixed(0)}% of labor cost. Moving routine work to a cheaper engineer could save ~${fmtD(savingsEstimate)}/yr.`,
         });
       }
     }
 
     const highCostEngineers = engineers.filter((e: any) => e.hourlyCost >= 100 && e.totalHours > 10);
-    if (highCostEngineers.length > 0) {
+    if (highCostEngineers.length > 0 && laborCost > 0) {
       const totalHighCost = highCostEngineers.reduce((s: number, e: any) => s + e.totalCost, 0);
       const highPct = (totalHighCost / laborCost) * 100;
       if (highPct > 30) {
         insights.push({
           type: "suggestion",
           category: "labor",
-          title: "Senior Engineer Utilization",
-          detail: `Engineers at $100+/hr account for ${highPct.toFixed(0)}% of labor cost ($${totalHighCost.toLocaleString()}).`,
-          impact: `Consider whether senior-level work is needed for all ${highCostEngineers.reduce((s: number, e: any) => s + e.totalHours, 0).toFixed(0)} hours, or if some can be handled by mid-tier staff.`,
+          title: "High Senior Engineer Usage",
+          detail: `$100+/hr engineers account for ${highPct.toFixed(0)}% of labor (${fmtD(totalHighCost)}). Review whether all ${highCostEngineers.reduce((s: number, e: any) => s + e.totalHours, 0).toFixed(0)} hours need senior-level attention.`,
         });
       }
     }
@@ -1551,9 +1541,8 @@ export async function registerRoutes(
           insights.push({
             type: "warning",
             category: "project",
-            title: "Low Project Margin",
-            detail: `Project work: $${projectRev.toLocaleString()} revenue vs ~$${projectCostEstimate.toLocaleString()} labor cost (${projectMargin.toFixed(0)}% margin).`,
-            impact: `Review project scoping and estimates. Consider adjusting project labor rates or using more efficient staffing.`,
+            title: "Project Work Losing Money",
+            detail: `Projects brought in ${fmtD(projectRev)} but cost ~${fmtD(projectCostEstimate)} in labor (${projectMargin.toFixed(0)}% margin). Check scoping and billing rates.`,
           });
         }
       } else if (projectCostEstimate > 0) {
@@ -1561,47 +1550,34 @@ export async function registerRoutes(
           type: "warning",
           category: "project",
           title: "Unbilled Project Work",
-          detail: `${projectHours.toFixed(1)} project hours logged (~$${projectCostEstimate.toLocaleString()} labor cost) but $0 project revenue invoiced.`,
-          impact: `This project labor is eating into agreement margin. Ensure projects are being billed or reclassify time entries.`,
+          detail: `${projectHours.toFixed(1)} project hours (~${fmtD(projectCostEstimate)} labor) with no project revenue. This eats directly into agreement margin.`,
         });
       }
     }
 
-    if (serviceHours > 0 && agreementRev > 0) {
-      const serviceCostEstimate = engineers.reduce((s: number, e: any) => s + (e.serviceHours * e.hourlyCost), 0);
-      const serviceMargin = ((agreementRev - serviceCostEstimate - additionCost) / agreementRev) * 100;
-      if (serviceMargin < 50) {
-        insights.push({
-          type: "warning",
-          category: "labor",
-          title: "Agreement Service Margin Under Pressure",
-          detail: `Agreement revenue: $${agreementRev.toLocaleString()} vs service labor + additions: $${(serviceCostEstimate + additionCost).toLocaleString()} (${serviceMargin.toFixed(0)}% margin).`,
-          impact: `This client may need an agreement price increase or service scope reduction. High service hours relative to revenue signals potential scope creep.`,
-        });
-      }
-    }
-
-    if (overallMargin < 55) {
-      const costBreakdown = [];
-      if (laborCost > 0) costBreakdown.push(`Labor: $${laborCost.toLocaleString()} (${((laborCost / totalCost) * 100).toFixed(0)}%)`);
-      if (additionCost > 0) costBreakdown.push(`Additions: $${additionCost.toLocaleString()} (${((additionCost / totalCost) * 100).toFixed(0)}%)`);
+    if (actionableMargin < 55) {
+      const gap = Math.round(actionableRev * 0.7 - (actionableRev - actionableCost));
       insights.push({
         type: "warning",
         category: "overall",
-        title: "Margin Below 55% — Action Required",
-        detail: `Fully loaded margin is ${overallMargin.toFixed(1)}%. Cost breakdown: ${costBreakdown.join(", ")}. Total cost $${totalCost.toLocaleString()} on $${totalRev.toLocaleString()} revenue.`,
-        impact: `Target margin is 70%+. Gap of $${Math.round(totalRev * 0.7 - (totalRev - totalCost)).toLocaleString()}/yr needs to be closed through price increases, cost reduction, or scope changes.`,
+        title: "Margin Below 55% — Needs Attention",
+        detail: `Actionable margin is ${actionableMargin.toFixed(1)}% (excluding Microsoft pass-through). You need to close a ${fmtD(gap)}/yr gap to reach the 70% target — through price increases, reducing hours, or shifting to cheaper engineers.`,
       });
-    } else if (overallMargin < 70) {
+    } else if (actionableMargin < 70) {
+      const gap = Math.round(actionableRev * 0.7 - (actionableRev - actionableCost));
       insights.push({
         type: "suggestion",
         category: "overall",
         title: "Margin Below 70% Target",
-        detail: `Current margin is ${overallMargin.toFixed(1)}%. To reach 70%, costs need to decrease by $${Math.round(totalCost - totalRev * 0.3).toLocaleString()} or revenue needs to increase by $${Math.round(totalCost / 0.3 - totalRev).toLocaleString()}.`,
+        detail: `Actionable margin is ${actionableMargin.toFixed(1)}%. Closing a ${fmtD(gap)}/yr gap would get you to 70%.`,
       });
     }
 
     return insights;
+  }
+
+  function fmtD(val: number): string {
+    return "$" + Math.round(val).toLocaleString();
   }
 
   app.get("/api/accounts/sync", requireAuth, requireEditor, async (_req: Request, res: Response) => {
@@ -1616,7 +1592,7 @@ export async function registerRoutes(
       const results = [];
       for (const client of cwClients) {
         const knownAgreementRevenue = client.agreementMonthlyRevenue * 12;
-        let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, laborCost: 0, additionCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
+        let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, laborCost: 0, additionCost: 0, msLicensingRevenue: 0, msLicensingCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
         try {
           financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
           if (financials.agreementRevenue === 0 && knownAgreementRevenue > 0) {
@@ -1643,6 +1619,8 @@ export async function registerRoutes(
           totalRevenue: financials.totalRevenue,
           laborCost: financials.laborCost,
           additionCost: financials.additionCost || 0,
+          msLicensingRevenue: financials.msLicensingRevenue || 0,
+          msLicensingCost: financials.msLicensingCost || 0,
           totalCost: financials.totalCost,
           grossMarginPercent: financials.grossMarginPercent,
           serviceHours: financials.serviceHours,
@@ -1720,6 +1698,8 @@ export async function registerRoutes(
             totalRevenue: acct.totalRevenue,
             laborCost: acct.laborCost || 0,
             additionCost: acct.additionCost || 0,
+            msLicensingRevenue: (acct as any).msLicensingRevenue || 0,
+            msLicensingCost: (acct as any).msLicensingCost || 0,
             totalCost: acct.totalCost || 0,
             agreementRevenue: acct.agreementRevenue || 0,
             projectRevenue: acct.projectRevenue || 0,
