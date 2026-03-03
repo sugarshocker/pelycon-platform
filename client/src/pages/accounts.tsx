@@ -487,7 +487,7 @@ export default function Accounts() {
                     <SortHeader field="laborCost">Labor Cost</SortHeader>
                     <SortHeader field="totalHours">Hours</SortHeader>
                     <SortHeader field="grossMarginPercent">Margin</SortHeader>
-                    <TableHead className="w-[60px]"></TableHead>
+                    <TableHead className="w-[80px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -542,41 +542,45 @@ export default function Accounts() {
                         {formatCurrency(acct.totalRevenue)}
                       </TableCell>
                       <TableCell className="text-xs tabular-nums" data-testid={`text-labor-cost-${acct.id}`}>
-                        <button
-                          className="hover:underline cursor-pointer text-left"
-                          onClick={() => setSelectedAccount(acct)}
-                          data-testid={`button-cost-detail-${acct.id}`}
-                        >
-                          {formatCurrency(acct.laborCost)}
-                        </button>
+                        {formatCurrency(acct.laborCost)}
                       </TableCell>
                       <TableCell className="text-xs tabular-nums" data-testid={`text-hours-${acct.id}`}>
                         {formatHours(acct.totalHours)}
                       </TableCell>
                       <TableCell className="text-xs tabular-nums" data-testid={`text-margin-${acct.id}`}>
-                        <button
-                          className="hover:underline cursor-pointer"
-                          onClick={() => setSelectedAccount(acct)}
-                          data-testid={`button-margin-detail-${acct.id}`}
-                        >
-                          <MarginBadge margin={acct.grossMarginPercent} />
-                        </button>
+                        <MarginBadge margin={acct.grossMarginPercent} />
                       </TableCell>
                       <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7"
-                              onClick={() => setLocation(`/reviews?orgId=${acct.cwCompanyId}&orgName=${encodeURIComponent(acct.companyName)}`)}
-                              data-testid={`button-open-review-${acct.id}`}
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Open TBR Reviews</TooltipContent>
-                        </Tooltip>
+                        <div className="flex items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => setSelectedAccount(acct)}
+                                data-testid={`button-engineer-breakdown-${acct.id}`}
+                              >
+                                <Users className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Engineer Cost Breakdown</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => setLocation(`/reviews?orgId=${acct.cwCompanyId}&orgName=${encodeURIComponent(acct.companyName)}`)}
+                                data-testid={`button-open-review-${acct.id}`}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Open TBR Reviews</TooltipContent>
+                          </Tooltip>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
