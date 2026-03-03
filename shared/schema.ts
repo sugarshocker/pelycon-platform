@@ -56,7 +56,13 @@ export const clientAccounts = pgTable("client_accounts", {
   agreementRevenue: real("agreement_revenue"),
   projectRevenue: real("project_revenue"),
   totalRevenue: real("total_revenue"),
+  laborCost: real("labor_cost"),
+  totalCost: real("total_cost"),
   grossMarginPercent: real("gross_margin_percent"),
+  serviceHours: real("service_hours"),
+  projectHours: real("project_hours"),
+  totalHours: real("total_hours"),
+  engineerBreakdown: jsonb("engineer_breakdown"),
   agreementTypes: text("agreement_types"),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -79,6 +85,17 @@ export interface ClientAccountWithStatus extends ClientAccount {
   tbrStatusReason: string;
   effectiveTier: string;
   scheduleFrequency: number | null;
+}
+
+export interface EngineerCostBreakdown {
+  memberId: number;
+  memberName: string;
+  memberIdentifier: string;
+  serviceHours: number;
+  projectHours: number;
+  totalHours: number;
+  hourlyCost: number;
+  totalCost: number;
 }
 
 export const loginSchema = z.object({

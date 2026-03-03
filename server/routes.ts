@@ -1462,12 +1462,15 @@ export async function registerRoutes(
       const results = [];
       for (const client of cwClients) {
         const knownAgreementRevenue = client.agreementMonthlyRevenue * 12;
-        let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null };
+        let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, laborCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [] };
         try {
           financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
           if (financials.agreementRevenue === 0 && knownAgreementRevenue > 0) {
             financials.agreementRevenue = knownAgreementRevenue;
             financials.totalRevenue = knownAgreementRevenue + financials.projectRevenue;
+            if (financials.totalRevenue > 0) {
+              financials.grossMarginPercent = Math.round(((financials.totalRevenue - financials.totalCost) / financials.totalRevenue) * 1000) / 10;
+            }
           }
         } catch (e: any) {
           log(`Skipping financials for ${client.companyName}: ${e.message}`);
@@ -1482,7 +1485,13 @@ export async function registerRoutes(
           agreementRevenue: financials.agreementRevenue,
           projectRevenue: financials.projectRevenue,
           totalRevenue: financials.totalRevenue,
+          laborCost: financials.laborCost,
+          totalCost: financials.totalCost,
           grossMarginPercent: financials.grossMarginPercent,
+          serviceHours: financials.serviceHours,
+          projectHours: financials.projectHours,
+          totalHours: financials.totalHours,
+          engineerBreakdown: financials.engineers,
           agreementTypes: client.agreementTypes.join(", "),
           lastSyncedAt: new Date(),
         });

@@ -472,11 +472,142 @@ export async function getManagedServicesClients(): Promise<CwAgreementCompany[]>
   return Array.from(companyMap.values());
 }
 
+export interface EngineerCostEntry {
+  memberId: number;
+  memberName: string;
+  memberIdentifier: string;
+  serviceHours: number;
+  projectHours: number;
+  totalHours: number;
+  hourlyCost: number;
+  totalCost: number;
+}
+
+export interface CwLaborCosts {
+  laborCost: number;
+  serviceHours: number;
+  projectHours: number;
+  totalHours: number;
+  engineers: EngineerCostEntry[];
+}
+
 export interface CwCompanyFinancials {
   agreementRevenue: number;
   projectRevenue: number;
   totalRevenue: number;
+  laborCost: number;
+  totalCost: number;
   grossMarginPercent: number | null;
+  serviceHours: number;
+  projectHours: number;
+  totalHours: number;
+  engineers: EngineerCostEntry[];
+}
+
+const memberCostCache = new Map<number, { name: string; identifier: string; hourlyCost: number }>();
+
+async function getMemberCost(memberId: number): Promise<{ name: string; identifier: string; hourlyCost: number }> {
+  if (memberCostCache.has(memberId)) {
+    return memberCostCache.get(memberId)!;
+  }
+
+  try {
+    const member = await apiGet(`/system/members/${memberId}`);
+    const result = {
+      name: member.firstName && member.lastName
+        ? `${member.firstName} ${member.lastName}`
+        : member.identifier || `Member ${memberId}`,
+      identifier: member.identifier || `member-${memberId}`,
+      hourlyCost: member.hourlyCost ?? (member.dailyCost ? (member.dailyCost / 8) : 0),
+    };
+    memberCostCache.set(memberId, result);
+    return result;
+  } catch (e: any) {
+    log(`ConnectWise member lookup error for member ${memberId}: ${e.message}`);
+    const fallback = { name: `Member ${memberId}`, identifier: `member-${memberId}`, hourlyCost: 0 };
+    memberCostCache.set(memberId, fallback);
+    return fallback;
+  }
+}
+
+export async function getCompanyLaborCosts(cwCompanyId: number): Promise<CwLaborCosts> {
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+  const dateStr = twelveMonthsAgo.toISOString().split("T")[0];
+
+  const memberMap = new Map<number, { serviceHours: number; projectHours: number }>();
+
+  let page = 1;
+  const pageSize = 250;
+  while (true) {
+    try {
+      const entries = await apiGet("/time/entries", {
+        conditions: `company/id = ${cwCompanyId} AND dateEntered > [${dateStr}]`,
+        pageSize: String(pageSize),
+        page: String(page),
+        orderBy: "dateEntered desc",
+      });
+
+      if (!entries || entries.length === 0) break;
+
+      for (const entry of entries) {
+        const memberId = entry.member?.id;
+        if (!memberId) continue;
+        const hours = entry.actualHours || 0;
+        if (hours === 0) continue;
+
+        const existing = memberMap.get(memberId) || { serviceHours: 0, projectHours: 0 };
+        if (entry.chargeToType === "ProjectTicket") {
+          existing.projectHours += hours;
+        } else {
+          existing.serviceHours += hours;
+        }
+        memberMap.set(memberId, existing);
+      }
+
+      if (entries.length < pageSize) break;
+      page++;
+    } catch (e: any) {
+      log(`ConnectWise time entries error for company ${cwCompanyId} (page ${page}): ${e.message}`);
+      break;
+    }
+  }
+
+  const engineers: EngineerCostEntry[] = [];
+  let totalLaborCost = 0;
+  let totalServiceHours = 0;
+  let totalProjectHours = 0;
+
+  for (const [memberId, hours] of memberMap.entries()) {
+    const memberInfo = await getMemberCost(memberId);
+    const totalHrs = hours.serviceHours + hours.projectHours;
+    const cost = totalHrs * memberInfo.hourlyCost;
+
+    totalLaborCost += cost;
+    totalServiceHours += hours.serviceHours;
+    totalProjectHours += hours.projectHours;
+
+    engineers.push({
+      memberId,
+      memberName: memberInfo.name,
+      memberIdentifier: memberInfo.identifier,
+      serviceHours: Math.round(hours.serviceHours * 100) / 100,
+      projectHours: Math.round(hours.projectHours * 100) / 100,
+      totalHours: Math.round(totalHrs * 100) / 100,
+      hourlyCost: memberInfo.hourlyCost,
+      totalCost: Math.round(cost * 100) / 100,
+    });
+  }
+
+  engineers.sort((a, b) => b.totalCost - a.totalCost);
+
+  return {
+    laborCost: Math.round(totalLaborCost * 100) / 100,
+    serviceHours: Math.round(totalServiceHours * 100) / 100,
+    projectHours: Math.round(totalProjectHours * 100) / 100,
+    totalHours: Math.round((totalServiceHours + totalProjectHours) * 100) / 100,
+    engineers,
+  };
 }
 
 export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompanyFinancials> {
@@ -503,7 +634,6 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   let projectRevenue = 0;
   let invoicedAgreementRevenue = 0;
   let totalInvoiced = 0;
-  let totalCost = 0;
   try {
     const invoices = await apiGet("/finance/invoices", {
       conditions: `company/id = ${cwCompanyId} AND date > [${dateStr}]`,
@@ -527,17 +657,25 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     agreementRevenue = invoicedAgreementRevenue;
   }
 
-  const total = agreementRevenue + projectRevenue;
+  const labor = await getCompanyLaborCosts(cwCompanyId);
+  const totalRev = agreementRevenue + projectRevenue;
+  const totalCostVal = labor.laborCost;
   let grossMarginPercent: number | null = null;
 
-  if (totalInvoiced > 0 && totalCost > 0) {
-    grossMarginPercent = ((totalInvoiced - totalCost) / totalInvoiced) * 100;
+  if (totalRev > 0) {
+    grossMarginPercent = Math.round(((totalRev - totalCostVal) / totalRev) * 1000) / 10;
   }
 
   return {
     agreementRevenue,
     projectRevenue,
-    totalRevenue: total,
+    totalRevenue: totalRev,
+    laborCost: labor.laborCost,
+    totalCost: totalCostVal,
     grossMarginPercent,
+    serviceHours: labor.serviceHours,
+    projectHours: labor.projectHours,
+    totalHours: labor.totalHours,
+    engineers: labor.engineers,
   };
 }

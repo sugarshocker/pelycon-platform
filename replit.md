@@ -94,6 +94,9 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Agreement Revenue**: Annualized from ConnectWise `billAmount * 12` on non-cancelled agreements. Falls back to actual Agreement-type invoice totals from the last 12 months when billAmount is $0 (common for addition-billed agreements). Also falls back to `getManagedServicesClients` known revenue during sync.
 - **Project Revenue**: Sum of Standard/Progress/Miscellaneous invoices from the last 12 months.
 - **Total Revenue**: Agreement + Project (annualized).
+- **Labor Cost & Margin**: Calculated from ConnectWise `/time/entries` for the last 12 months. Groups hours by engineer, fetches `hourlyCost` from `/system/members/{id}` (cached). Cost = sum(hours × engineer cost rate). Margin = (revenue - labor cost) / revenue. Per-engineer breakdown stored in `engineerBreakdown` jsonb column showing service hours, project hours, hourly cost, and total cost per engineer. Sorted by highest cost contributor first.
+- **Engineer Breakdown Dialog**: Click on any client's Labor Cost or Margin cell to see per-engineer breakdown with hours, cost rates, and cost share percentage. Warning shown if engineers lack cost rates in ConnectWise.
+- **Schema Columns**: `laborCost`, `totalCost`, `serviceHours`, `projectHours`, `totalHours`, `engineerBreakdown` (jsonb)
 - **Next TBR**: Only shows scheduled review dates within the next 12 months (filtered by `now <= date <= now+12mo`).
 - **TBR Status**: Green (recent review + future scheduled), Yellow (missing one or both), Red (never reviewed).
 

@@ -28,6 +28,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   RefreshCw,
   Loader2,
   Building2,
@@ -38,10 +44,22 @@ import {
   XCircle,
   ExternalLink,
   ArrowUpDown,
+  Users,
 } from "lucide-react";
 
-type SortField = "companyName" | "effectiveTier" | "totalRevenue" | "tbrStatus" | "agreementRevenue" | "projectRevenue" | "grossMarginPercent";
+type SortField = "companyName" | "effectiveTier" | "totalRevenue" | "tbrStatus" | "agreementRevenue" | "projectRevenue" | "grossMarginPercent" | "laborCost" | "totalHours";
 type SortDir = "asc" | "desc";
+
+interface EngineerEntry {
+  memberId: number;
+  memberName: string;
+  memberIdentifier: string;
+  serviceHours: number;
+  projectHours: number;
+  totalHours: number;
+  hourlyCost: number;
+  totalCost: number;
+}
 
 function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -56,6 +74,11 @@ function formatPercent(value: number | null | undefined): string {
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatHours(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `${value.toFixed(1)}h`;
 }
 
 function StatusBadge({ status, reason }: { status: string; reason: string }) {
@@ -96,6 +119,140 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
+function MarginBadge({ margin }: { margin: number | null | undefined }) {
+  if (margin === null || margin === undefined) return <span className="text-muted-foreground">—</span>;
+  const color = margin >= 50 ? "text-green-600 dark:text-green-400"
+    : margin >= 30 ? "text-yellow-600 dark:text-yellow-400"
+    : margin >= 0 ? "text-orange-600 dark:text-orange-400"
+    : "text-red-600 dark:text-red-400";
+  return <span className={`font-medium ${color}`}>{margin.toFixed(1)}%</span>;
+}
+
+function EngineerBreakdownDialog({
+  open,
+  onOpenChange,
+  account,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  account: ClientAccountWithStatus | null;
+}) {
+  if (!account) return null;
+
+  const engineers: EngineerEntry[] = (account.engineerBreakdown as EngineerEntry[] | null) || [];
+  const hasEngineers = engineers.length > 0;
+  const totalRev = account.totalRevenue || 0;
+  const totalCost = account.laborCost || 0;
+  const margin = totalRev > 0 && totalCost > 0 ? ((totalRev - totalCost) / totalRev) * 100 : null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2" data-testid="text-breakdown-title">
+            <Users className="h-5 w-5" />
+            {account.companyName} — Engineer Cost Breakdown
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground">Total Revenue</div>
+            <div className="text-sm font-semibold" data-testid="text-breakdown-revenue">{formatCurrency(totalRev)}</div>
+          </div>
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground">Labor Cost</div>
+            <div className="text-sm font-semibold" data-testid="text-breakdown-cost">{formatCurrency(totalCost)}</div>
+          </div>
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground">Margin</div>
+            <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
+              <MarginBadge margin={margin} />
+            </div>
+          </div>
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground">Total Hours</div>
+            <div className="text-sm font-semibold" data-testid="text-breakdown-hours">{formatHours(account.totalHours)}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground">Service Hours</div>
+            <div className="text-sm font-medium">{formatHours(account.serviceHours)}</div>
+          </div>
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground">Project Hours</div>
+            <div className="text-sm font-medium">{formatHours(account.projectHours)}</div>
+          </div>
+        </div>
+
+        {hasEngineers ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Engineer</TableHead>
+                  <TableHead className="text-right">Service Hrs</TableHead>
+                  <TableHead className="text-right">Project Hrs</TableHead>
+                  <TableHead className="text-right">Total Hrs</TableHead>
+                  <TableHead className="text-right">Hourly Cost</TableHead>
+                  <TableHead className="text-right">Total Cost</TableHead>
+                  <TableHead className="text-right">% of Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {engineers.map((eng, idx) => (
+                  <TableRow key={eng.memberId} data-testid={`row-engineer-${idx}`}>
+                    <TableCell className="text-sm font-medium" data-testid={`text-engineer-name-${idx}`}>
+                      {eng.memberName}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-right">
+                      {eng.serviceHours > 0 ? eng.serviceHours.toFixed(1) : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-right">
+                      {eng.projectHours > 0 ? eng.projectHours.toFixed(1) : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-right font-medium">
+                      {eng.totalHours.toFixed(1)}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-right">
+                      {eng.hourlyCost > 0 ? `$${eng.hourlyCost.toFixed(0)}/hr` : (
+                        <span className="text-muted-foreground italic">not set</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-right font-medium">
+                      {eng.totalCost > 0 ? formatCurrency(eng.totalCost) : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-right">
+                      {totalCost > 0 && eng.totalCost > 0
+                        ? `${((eng.totalCost / totalCost) * 100).toFixed(0)}%`
+                        : "—"
+                      }
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            No time entries found for this client in the last 12 months.
+            <br />
+            <span className="text-xs">Sync from ConnectWise to pull the latest data.</span>
+          </div>
+        )}
+
+        {hasEngineers && engineers.some(e => e.hourlyCost === 0) && (
+          <div className="mt-3 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 rounded-lg p-3" data-testid="text-missing-cost-warning">
+            Some engineers don't have hourly cost rates configured in ConnectWise. Set the "Hourly Cost" field on their member record to get accurate margin calculations.
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Accounts() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -103,6 +260,7 @@ export default function Accounts() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterTier, setFilterTier] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [selectedAccount, setSelectedAccount] = useState<ClientAccountWithStatus | null>(null);
 
   const { data: accounts, isLoading } = useQuery<ClientAccountWithStatus[]>({
     queryKey: ["/api/accounts"],
@@ -155,6 +313,8 @@ export default function Accounts() {
         case "agreementRevenue": cmp = (a.agreementRevenue || 0) - (b.agreementRevenue || 0); break;
         case "projectRevenue": cmp = (a.projectRevenue || 0) - (b.projectRevenue || 0); break;
         case "grossMarginPercent": cmp = (a.grossMarginPercent || 0) - (b.grossMarginPercent || 0); break;
+        case "laborCost": cmp = (a.laborCost || 0) - (b.laborCost || 0); break;
+        case "totalHours": cmp = (a.totalHours || 0) - (b.totalHours || 0); break;
         case "tbrStatus": cmp = (statusOrder[a.tbrStatus] ?? 1) - (statusOrder[b.tbrStatus] ?? 1); break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -170,7 +330,14 @@ export default function Accounts() {
     tierC: (accounts || []).filter(a => a.effectiveTier === "C").length,
     totalAgreementRev: (accounts || []).reduce((sum, a) => sum + (a.agreementRevenue || 0), 0),
     totalProjectRev: (accounts || []).reduce((sum, a) => sum + (a.projectRevenue || 0), 0),
+    totalLaborCost: (accounts || []).reduce((sum, a) => sum + (a.laborCost || 0), 0),
+    totalHours: (accounts || []).reduce((sum, a) => sum + (a.totalHours || 0), 0),
   };
+
+  const overallRev = summary.totalAgreementRev + summary.totalProjectRev;
+  const overallMargin = overallRev > 0 && summary.totalLaborCost > 0
+    ? ((overallRev - summary.totalLaborCost) / overallRev) * 100
+    : null;
 
   const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
     <TableHead
@@ -223,7 +390,7 @@ export default function Accounts() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
             <Card className="p-3">
               <div className="text-xs text-muted-foreground mb-1">TBR Compliance</div>
               <div className="flex items-center gap-2">
@@ -231,9 +398,9 @@ export default function Accounts() {
                   {summary.total > 0 ? Math.round((summary.green / summary.total) * 100) : 0}%
                 </span>
                 <div className="flex gap-1 text-xs">
-                  <span className="text-green-600">{summary.green}✓</span>
+                  <span className="text-green-600">{summary.green}&#10003;</span>
                   <span className="text-yellow-600">{summary.yellow}!</span>
-                  <span className="text-red-600">{summary.red}✗</span>
+                  <span className="text-red-600">{summary.red}&#10007;</span>
                 </div>
               </div>
             </Card>
@@ -259,6 +426,19 @@ export default function Accounts() {
               <div className="text-lg font-semibold" data-testid="text-total-project-rev">
                 {formatCurrency(summary.totalProjectRev)}
                 <span className="text-xs font-normal text-muted-foreground">/yr</span>
+              </div>
+            </Card>
+            <Card className="p-3">
+              <div className="text-xs text-muted-foreground mb-1">Labor Cost</div>
+              <div className="text-lg font-semibold" data-testid="text-total-labor-cost">
+                {formatCurrency(summary.totalLaborCost)}
+                <span className="text-xs font-normal text-muted-foreground"> ({summary.totalHours.toFixed(0)}h)</span>
+              </div>
+            </Card>
+            <Card className="p-3">
+              <div className="text-xs text-muted-foreground mb-1">Overall Margin</div>
+              <div className="text-lg font-semibold" data-testid="text-overall-margin">
+                <MarginBadge margin={overallMargin} />
               </div>
             </Card>
           </div>
@@ -301,9 +481,11 @@ export default function Accounts() {
                     <SortHeader field="tbrStatus">TBR Status</SortHeader>
                     <TableHead>Last TBR</TableHead>
                     <TableHead>Next TBR</TableHead>
-                    <SortHeader field="agreementRevenue">Agreement Rev</SortHeader>
-                    <SortHeader field="projectRevenue">Project Rev</SortHeader>
+                    <SortHeader field="agreementRevenue">Agree Rev</SortHeader>
+                    <SortHeader field="projectRevenue">Proj Rev</SortHeader>
                     <SortHeader field="totalRevenue">Total Rev</SortHeader>
+                    <SortHeader field="laborCost">Labor Cost</SortHeader>
+                    <SortHeader field="totalHours">Hours</SortHeader>
                     <SortHeader field="grossMarginPercent">Margin</SortHeader>
                     <TableHead className="w-[60px]"></TableHead>
                   </TableRow>
@@ -359,8 +541,26 @@ export default function Accounts() {
                       <TableCell className="text-xs font-medium tabular-nums" data-testid={`text-total-rev-${acct.id}`}>
                         {formatCurrency(acct.totalRevenue)}
                       </TableCell>
+                      <TableCell className="text-xs tabular-nums" data-testid={`text-labor-cost-${acct.id}`}>
+                        <button
+                          className="hover:underline cursor-pointer text-left"
+                          onClick={() => setSelectedAccount(acct)}
+                          data-testid={`button-cost-detail-${acct.id}`}
+                        >
+                          {formatCurrency(acct.laborCost)}
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-xs tabular-nums" data-testid={`text-hours-${acct.id}`}>
+                        {formatHours(acct.totalHours)}
+                      </TableCell>
                       <TableCell className="text-xs tabular-nums" data-testid={`text-margin-${acct.id}`}>
-                        {formatPercent(acct.grossMarginPercent)}
+                        <button
+                          className="hover:underline cursor-pointer"
+                          onClick={() => setSelectedAccount(acct)}
+                          data-testid={`button-margin-detail-${acct.id}`}
+                        >
+                          <MarginBadge margin={acct.grossMarginPercent} />
+                        </button>
                       </TableCell>
                       <TableCell>
                         <Tooltip>
@@ -386,6 +586,12 @@ export default function Accounts() {
           </Card>
         </>
       )}
+
+      <EngineerBreakdownDialog
+        open={!!selectedAccount}
+        onOpenChange={(open) => { if (!open) setSelectedAccount(null); }}
+        account={selectedAccount}
+      />
     </div>
   );
 }
