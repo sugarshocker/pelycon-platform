@@ -1461,9 +1461,14 @@ export async function registerRoutes(
 
       const results = [];
       for (const client of cwClients) {
-        let financials: any = { agreementRevenue: client.agreementMonthlyRevenue * 12, projectRevenue: 0, totalRevenue: client.agreementMonthlyRevenue * 12, grossMarginPercent: null };
+        const knownAgreementRevenue = client.agreementMonthlyRevenue * 12;
+        let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null };
         try {
           financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
+          if (financials.agreementRevenue === 0 && knownAgreementRevenue > 0) {
+            financials.agreementRevenue = knownAgreementRevenue;
+            financials.totalRevenue = knownAgreementRevenue + financials.projectRevenue;
+          }
         } catch (e: any) {
           log(`Skipping financials for ${client.companyName}: ${e.message}`);
         }
@@ -1500,6 +1505,8 @@ export async function registerRoutes(
       const now = new Date();
       const sixMonthsAgo = new Date(now);
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const twelveMonthsAhead = new Date(now);
+      twelveMonthsAhead.setMonth(twelveMonthsAhead.getMonth() + 12);
 
       const enriched = accounts.map((acct) => {
         const schedule = schedules.find(s => s.orgName.toLowerCase() === acct.companyName.toLowerCase());
@@ -1509,7 +1516,10 @@ export async function registerRoutes(
 
         const lastTbr = snapshots[0] || null;
         const lastTbrDate = lastTbr ? (lastTbr.reviewDate || new Date(lastTbr.createdAt).toISOString().split("T")[0]) : null;
-        const nextTbrDate = schedule?.nextReviewDate ? new Date(schedule.nextReviewDate).toISOString().split("T")[0] : null;
+        const rawNextDate = schedule?.nextReviewDate ? new Date(schedule.nextReviewDate) : null;
+        const nextTbrDate = rawNextDate && rawNextDate >= now && rawNextDate <= twelveMonthsAhead
+          ? rawNextDate.toISOString().split("T")[0]
+          : null;
         const freq = schedule?.frequencyMonths || null;
 
         const hadRecentTbr = lastTbr && new Date(lastTbr.createdAt) > sixMonthsAgo;

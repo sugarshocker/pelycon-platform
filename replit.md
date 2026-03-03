@@ -89,6 +89,14 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Schedule Linkage**: Snapshots can be linked to a schedule entry via `scheduleId` and `reviewDate`. When navigating from a scheduled calendar event, the `scheduleId` and `reviewDate` are passed through URL params → dashboard → save-draft/finalize payload. On finalization, if linked to a schedule, the schedule's `lastReviewDate` is updated and `nextReviewDate` is auto-advanced by the schedule's frequency. Calendar shows finalized TBRs on their `reviewDate` (not `createdAt`) when linked.
 - **Schema**: `tbr_snapshots` table with orgId, orgName, createdAt, updatedAt, status (draft/finalized), fullData (jsonb with deviceHealth, security, tickets, mfaReport, licenseReport, roadmap, internalNotes, clientFeedback), cwTicketId (ConnectWise follow-up ticket number), scheduleId (linked schedule entry), reviewDate (scheduled review date string), and ~20 metric columns
 
+## Client Accounts & Revenue
+- **Tier Logic**: A (≥$60k/yr), B ($24k–$60k/yr), C (<$24k/yr) based on total revenue. Manual tier overrides stored in `tier_override` column.
+- **Agreement Revenue**: Annualized from ConnectWise `billAmount * 12` on non-cancelled agreements. Falls back to actual Agreement-type invoice totals from the last 12 months when billAmount is $0 (common for addition-billed agreements). Also falls back to `getManagedServicesClients` known revenue during sync.
+- **Project Revenue**: Sum of Standard/Progress/Miscellaneous invoices from the last 12 months.
+- **Total Revenue**: Agreement + Project (annualized).
+- **Next TBR**: Only shows scheduled review dates within the next 12 months (filtered by `now <= date <= now+12mo`).
+- **TBR Status**: Green (recent review + future scheduled), Yellow (missing one or both), Red (never reviewed).
+
 ## Export Report Structure ("No Surprises" Framework)
 1. **Operational Readiness** - Security incidents, MFA coverage, SAT enrollment, lingering tickets, antivirus status
 2. **Capacity Planning** - Device inventory, aging hardware, EOL OS, patch compliance, stale devices

@@ -487,12 +487,13 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   let agreementRevenue = 0;
   try {
     const agreements = await apiGet("/finance/agreements", {
-      conditions: `company/id = ${cwCompanyId}`,
+      conditions: `company/id = ${cwCompanyId} AND cancelledFlag = false`,
       pageSize: "250",
     });
     for (const agr of agreements) {
-      if (agr.billAmount) {
-        agreementRevenue += agr.billAmount * 12;
+      const amount = agr.billAmount ?? agr.amount ?? 0;
+      if (amount) {
+        agreementRevenue += amount * 12;
       }
     }
   } catch (e: any) {
@@ -500,6 +501,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   }
 
   let projectRevenue = 0;
+  let invoicedAgreementRevenue = 0;
   let totalInvoiced = 0;
   let totalCost = 0;
   try {
@@ -513,10 +515,16 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
       totalInvoiced += amount;
       if (inv.type === "Standard" || inv.type === "Progress" || inv.type === "Miscellaneous") {
         projectRevenue += amount;
+      } else if (inv.type === "Agreement") {
+        invoicedAgreementRevenue += amount;
       }
     }
   } catch (e: any) {
     log(`ConnectWise invoices error for company ${cwCompanyId}: ${e.message}`);
+  }
+
+  if (agreementRevenue === 0 && invoicedAgreementRevenue > 0) {
+    agreementRevenue = invoicedAgreementRevenue;
   }
 
   const total = agreementRevenue + projectRevenue;
