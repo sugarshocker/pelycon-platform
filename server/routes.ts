@@ -1543,16 +1543,26 @@ export async function registerRoutes(
       }
     }
 
-    if (projectHours > 0 && projectRev > 0) {
+    if (projectHours > 0) {
       const projectCostEstimate = engineers.reduce((s: number, e: any) => s + (e.projectHours * e.hourlyCost), 0);
-      const projectMargin = ((projectRev - projectCostEstimate) / projectRev) * 100;
-      if (projectMargin < 50) {
+      if (projectRev > 0) {
+        const projectMargin = ((projectRev - projectCostEstimate) / projectRev) * 100;
+        if (projectMargin < 50) {
+          insights.push({
+            type: "warning",
+            category: "project",
+            title: "Low Project Margin",
+            detail: `Project work: $${projectRev.toLocaleString()} revenue vs ~$${projectCostEstimate.toLocaleString()} labor cost (${projectMargin.toFixed(0)}% margin).`,
+            impact: `Review project scoping and estimates. Consider adjusting project labor rates or using more efficient staffing.`,
+          });
+        }
+      } else if (projectCostEstimate > 0) {
         insights.push({
           type: "warning",
           category: "project",
-          title: "Low Project Margin",
-          detail: `Project work: $${projectRev.toLocaleString()} revenue vs ~$${projectCostEstimate.toLocaleString()} labor cost (${projectMargin.toFixed(0)}% margin).`,
-          impact: `Review project scoping and estimates. Consider adjusting project labor rates or using more efficient staffing.`,
+          title: "Unbilled Project Work",
+          detail: `${projectHours.toFixed(1)} project hours logged (~$${projectCostEstimate.toLocaleString()} labor cost) but $0 project revenue invoiced.`,
+          impact: `This project labor is eating into agreement margin. Ensure projects are being billed or reclassify time entries.`,
         });
       }
     }
@@ -1703,8 +1713,26 @@ export async function registerRoutes(
           tbrStatusReason = "Never reviewed — no TBR on record";
         }
 
+        const needsAnalysis = !acct.marginAnalysis && acct.totalRevenue && acct.totalRevenue > 0;
+        let marginAnalysis = acct.marginAnalysis;
+        if (needsAnalysis) {
+          marginAnalysis = generateMarginAnalysis({
+            totalRevenue: acct.totalRevenue,
+            laborCost: acct.laborCost || 0,
+            additionCost: acct.additionCost || 0,
+            totalCost: acct.totalCost || 0,
+            agreementRevenue: acct.agreementRevenue || 0,
+            projectRevenue: acct.projectRevenue || 0,
+            totalHours: acct.totalHours || 0,
+            serviceHours: acct.serviceHours || 0,
+            projectHours: acct.projectHours || 0,
+            agreementAdditions: acct.agreementAdditions || [],
+          }, (acct.engineerBreakdown as any[]) || []);
+        }
+
         return {
           ...acct,
+          marginAnalysis,
           lastTbrDate,
           nextTbrDate,
           tbrStatus,

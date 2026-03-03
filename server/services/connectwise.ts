@@ -657,9 +657,10 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
         if (add.cancelledDate) continue;
         const qty = add.quantity ?? 1;
         const unitCost = add.unitCost ?? 0;
-        const unitPrice = add.unitPrice ?? add.billCustomer === "DoNotBill" ? 0 : (add.extendedPrice ?? 0) / (qty || 1);
-        const billingCycle = add.billCycleId ?? 1;
-        const cycleMultiplier = billingCycle === 1 ? 12 : billingCycle === 2 ? 4 : billingCycle === 3 ? 2 : 1;
+        const unitPrice = add.unitPrice != null
+          ? add.unitPrice
+          : (add.billCustomer === "DoNotBill" ? 0 : (add.extendedPrice ?? 0) / (qty || 1));
+        const cycleMultiplier = 12;
 
         const annualCost = Math.round(qty * unitCost * cycleMultiplier * 100) / 100;
         const annualRevenue = Math.round(qty * unitPrice * cycleMultiplier * 100) / 100;
