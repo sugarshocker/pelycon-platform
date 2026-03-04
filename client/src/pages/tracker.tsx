@@ -47,6 +47,7 @@ import {
 import { apiRequest, getToken, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Organization, TbrSnapshot, TbrSchedule } from "@shared/schema";
+import { DollarSign } from "lucide-react";
 
 function getMonthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -79,6 +80,79 @@ function getWeekKey(d: Date): string {
 function getWeekLabel(key: string): string {
   const d = new Date(key + "T12:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function TopClientsNeedingTbr() {
+  const [, setLocation] = useLocation();
+  const { data: accounts, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/accounts"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <Skeleton className="h-6 w-64 mb-3" />
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const needingTbr = (accounts || [])
+    .filter((a: any) => a.tbrStatus === "red" || a.tbrStatus === "yellow")
+    .sort((a: any, b: any) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
+    .slice(0, 5);
+
+  if (needingTbr.length === 0) return null;
+
+  const fmtCurrency = (val: number) => "$" + Math.round(val).toLocaleString();
+
+  const statusColors: Record<string, string> = {
+    red: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+    yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  };
+
+  return (
+    <Card data-testid="card-top-clients-needing-tbr">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-[#E77125]" />
+          Top Clients Needing a TBR
+        </CardTitle>
+        <span className="text-xs text-muted-foreground">By annual revenue</span>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-1">
+          {needingTbr.map((acct: any, idx: number) => (
+            <button
+              key={acct.id}
+              data-testid={`btn-tbr-needed-${acct.id}`}
+              onClick={() => setLocation(`/reviews?orgId=${acct.cwCompanyId}&orgName=${encodeURIComponent(acct.companyName)}`)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md hover:bg-muted/50 transition-colors text-left group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}.</span>
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColors[acct.tbrStatus] || ""}`}>
+                  {acct.tbrStatus === "red" ? "Never" : "Overdue"}
+                </span>
+                <span className="text-sm font-medium truncate group-hover:text-primary transition-colors">{acct.companyName}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs text-muted-foreground hidden sm:inline">{acct.tbrStatusReason}</span>
+                <span className="text-sm font-semibold tabular-nums flex items-center gap-0.5">
+                  <DollarSign className="h-3 w-3 text-muted-foreground" />
+                  {fmtCurrency(acct.totalRevenue || 0).replace("$", "")}/yr
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Tracker() {
@@ -586,6 +660,8 @@ export default function Tracker() {
                 </div>
               </CardContent>
             </Card>
+
+            <TopClientsNeedingTbr />
           </>
         )}
       </div>
