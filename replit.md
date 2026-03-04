@@ -61,6 +61,12 @@ Rule-based analysis generates concise, plain-English insights stored in `marginA
 ## Schema Columns (clientAccounts)
 `laborCost`, `serviceLaborCost`, `projectLaborCost`, `additionCost`, `msLicensingRevenue`, `msLicensingCost`, `totalCost`, `serviceMarginPercent`, `projectMarginPercent`, `grossMarginPercent`, `serviceHours`, `projectHours`, `totalHours`, `engineerBreakdown` (jsonb), `agreementAdditions` (jsonb with category field), `marginAnalysis` (jsonb)
 
+## Auto-Sync
+- ConnectWise financial data syncs automatically every 6 hours (first run 30s after startup)
+- Manual "Sync from ConnectWise" button still available
+- Sync only updates financial data (`client_accounts`); TBR schedules and snapshots are stored separately and never overwritten by sync
+- TBR status (green/yellow/red) is computed live on each Accounts page load by matching schedule `orgName` to account `companyName` (case-insensitive)
+
 ## TBR Status
 - Green = reviewed within 6mo AND has future scheduled review
 - Yellow = missing one or both

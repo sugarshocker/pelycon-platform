@@ -1562,68 +1562,95 @@ export async function registerRoutes(
     return "$" + Math.round(val).toLocaleString();
   }
 
+  async function syncAccountsFromConnectWise(): Promise<any[]> {
+    const cwClients = await connectwise.getManagedServicesClients();
+    log(`[accounts-sync] Found ${cwClients.length} managed services clients from ConnectWise agreements`);
+
+    const results = [];
+    for (const client of cwClients) {
+      const knownAgreementRevenue = client.agreementMonthlyRevenue * 12;
+      let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, serviceMarginPercent: null, projectMarginPercent: null, laborCost: 0, serviceLaborCost: 0, projectLaborCost: 0, additionCost: 0, msLicensingRevenue: 0, msLicensingCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
+      try {
+        financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
+        if (financials.agreementRevenue === 0 && knownAgreementRevenue > 0) {
+          financials.agreementRevenue = knownAgreementRevenue;
+          financials.totalRevenue = knownAgreementRevenue + financials.projectRevenue;
+          if (financials.totalRevenue > 0) {
+            financials.grossMarginPercent = Math.round(((financials.totalRevenue - financials.totalCost) / financials.totalRevenue) * 1000) / 10;
+          }
+        }
+      } catch (e: any) {
+        log(`[accounts-sync] Skipping financials for ${client.companyName}: ${e.message}`);
+      }
+
+      const autoTier = financials.totalRevenue >= 60000 ? "A" : financials.totalRevenue >= 24000 ? "B" : "C";
+
+      const marginInsights = generateMarginAnalysis(financials, financials.engineers || []);
+
+      const account = await storage.upsertClientAccount({
+        cwCompanyId: client.cwCompanyId,
+        companyName: client.companyName,
+        tier: autoTier,
+        agreementRevenue: financials.agreementRevenue,
+        projectRevenue: financials.projectRevenue,
+        totalRevenue: financials.totalRevenue,
+        laborCost: financials.laborCost,
+        serviceLaborCost: financials.serviceLaborCost,
+        projectLaborCost: financials.projectLaborCost,
+        additionCost: financials.additionCost || 0,
+        msLicensingRevenue: financials.msLicensingRevenue || 0,
+        msLicensingCost: financials.msLicensingCost || 0,
+        totalCost: financials.totalCost,
+        serviceMarginPercent: financials.serviceMarginPercent,
+        projectMarginPercent: financials.projectMarginPercent,
+        grossMarginPercent: financials.grossMarginPercent,
+        serviceHours: financials.serviceHours,
+        projectHours: financials.projectHours,
+        totalHours: financials.totalHours,
+        engineerBreakdown: financials.engineers,
+        agreementAdditions: financials.agreementAdditions || [],
+        marginAnalysis: marginInsights,
+        agreementTypes: client.agreementTypes.join(", "),
+        lastSyncedAt: new Date(),
+      });
+      results.push(account);
+    }
+
+    return results;
+  }
+
+  const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  let autoSyncRunning = false;
+
+  async function runAutoSync() {
+    if (autoSyncRunning) return;
+    if (!connectwise.isConfigured()) return;
+    autoSyncRunning = true;
+    try {
+      log("[accounts-sync] Starting automatic sync...");
+      const results = await syncAccountsFromConnectWise();
+      log(`[accounts-sync] Auto-sync complete: ${results.length} accounts updated`);
+    } catch (err: any) {
+      log(`[accounts-sync] Auto-sync error: ${err.message}`);
+    } finally {
+      autoSyncRunning = false;
+    }
+  }
+
+  setTimeout(() => runAutoSync(), 30000);
+  setInterval(() => runAutoSync(), AUTO_SYNC_INTERVAL_MS);
+  log(`[accounts-sync] Scheduled automatic sync every ${AUTO_SYNC_INTERVAL_MS / 3600000} hours`);
+
   app.get("/api/accounts/sync", requireAuth, requireEditor, async (_req: Request, res: Response) => {
     try {
       if (!connectwise.isConfigured()) {
         return res.status(503).json({ message: "ConnectWise is not configured" });
       }
 
-      const cwClients = await connectwise.getManagedServicesClients();
-      log(`Found ${cwClients.length} managed services clients from ConnectWise agreements`);
-
-      const results = [];
-      for (const client of cwClients) {
-        const knownAgreementRevenue = client.agreementMonthlyRevenue * 12;
-        let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, serviceMarginPercent: null, projectMarginPercent: null, laborCost: 0, serviceLaborCost: 0, projectLaborCost: 0, additionCost: 0, msLicensingRevenue: 0, msLicensingCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
-        try {
-          financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
-          if (financials.agreementRevenue === 0 && knownAgreementRevenue > 0) {
-            financials.agreementRevenue = knownAgreementRevenue;
-            financials.totalRevenue = knownAgreementRevenue + financials.projectRevenue;
-            if (financials.totalRevenue > 0) {
-              financials.grossMarginPercent = Math.round(((financials.totalRevenue - financials.totalCost) / financials.totalRevenue) * 1000) / 10;
-            }
-          }
-        } catch (e: any) {
-          log(`Skipping financials for ${client.companyName}: ${e.message}`);
-        }
-
-        const autoTier = financials.totalRevenue >= 60000 ? "A" : financials.totalRevenue >= 24000 ? "B" : "C";
-
-        const marginInsights = generateMarginAnalysis(financials, financials.engineers || []);
-
-        const account = await storage.upsertClientAccount({
-          cwCompanyId: client.cwCompanyId,
-          companyName: client.companyName,
-          tier: autoTier,
-          agreementRevenue: financials.agreementRevenue,
-          projectRevenue: financials.projectRevenue,
-          totalRevenue: financials.totalRevenue,
-          laborCost: financials.laborCost,
-          serviceLaborCost: financials.serviceLaborCost,
-          projectLaborCost: financials.projectLaborCost,
-          additionCost: financials.additionCost || 0,
-          msLicensingRevenue: financials.msLicensingRevenue || 0,
-          msLicensingCost: financials.msLicensingCost || 0,
-          totalCost: financials.totalCost,
-          serviceMarginPercent: financials.serviceMarginPercent,
-          projectMarginPercent: financials.projectMarginPercent,
-          grossMarginPercent: financials.grossMarginPercent,
-          serviceHours: financials.serviceHours,
-          projectHours: financials.projectHours,
-          totalHours: financials.totalHours,
-          engineerBreakdown: financials.engineers,
-          agreementAdditions: financials.agreementAdditions || [],
-          marginAnalysis: marginInsights,
-          agreementTypes: client.agreementTypes.join(", "),
-          lastSyncedAt: new Date(),
-        });
-        results.push(account);
-      }
-
+      const results = await syncAccountsFromConnectWise();
       res.json({ synced: results.length, accounts: results });
     } catch (err: any) {
-      log(`Accounts sync error: ${err.message}`);
+      log(`[accounts-sync] Manual sync error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });
