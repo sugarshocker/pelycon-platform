@@ -33,8 +33,8 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 
 ## Client Accounts & Revenue
 - **Tier Logic**: A (≥$60k/yr), B ($24k–$60k/yr), C (<$24k/yr) based on total revenue. Manual tier overrides stored in `tier_override` column.
-- **12-Month Lookback Window**: All financial data (labor hours, invoices, revenue) uses a consistent 12-month lookback from current date.
-- **Agreement Revenue**: Annualized from ConnectWise `billAmount * 12` on non-cancelled agreements. Falls back to actual Agreement-type invoice totals from the last 12 months.
+- **12-Month Lookback Window**: All financial data (labor hours, invoices, revenue) uses a consistent trailing 12-month window from current date.
+- **Agreement Revenue**: Uses actual invoiced Agreement-type invoice totals from the trailing 12 months (primary). Falls back to projected `billAmount * 12` only if no invoices are found. This ensures numbers match accounting system actuals.
 - **Project Revenue**: Sum of Standard/Progress/Miscellaneous invoices from the last 12 months.
 - **Total Revenue**: Agreement + Project (annualized).
 

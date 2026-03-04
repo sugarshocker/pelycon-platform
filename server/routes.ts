@@ -1572,13 +1572,6 @@ export async function registerRoutes(
       let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, serviceMarginPercent: null, projectMarginPercent: null, laborCost: 0, serviceLaborCost: 0, projectLaborCost: 0, additionCost: 0, msLicensingRevenue: 0, msLicensingCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
       try {
         financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
-        if (financials.agreementRevenue === 0 && knownAgreementRevenue > 0) {
-          financials.agreementRevenue = knownAgreementRevenue;
-          financials.totalRevenue = knownAgreementRevenue + financials.projectRevenue;
-          if (financials.totalRevenue > 0) {
-            financials.grossMarginPercent = Math.round(((financials.totalRevenue - financials.totalCost) / financials.totalRevenue) * 1000) / 10;
-          }
-        }
       } catch (e: any) {
         log(`[accounts-sync] Skipping financials for ${client.companyName}: ${e.message}`);
       }

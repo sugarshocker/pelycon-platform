@@ -675,8 +675,8 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
   const dateStr = twelveMonthsAgo.toISOString().split("T")[0];
 
-  let agreementRevenue = 0;
   const agreementIds: { id: number; name: string }[] = [];
+  let projectedAgreementRevenue = 0;
   try {
     const agreements = await apiGet("/finance/agreements", {
       conditions: `company/id = ${cwCompanyId} AND agreementStatus = "Active"`,
@@ -685,7 +685,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     for (const agr of agreements) {
       const amount = agr.billAmount ?? agr.amount ?? 0;
       if (amount) {
-        agreementRevenue += amount * 12;
+        projectedAgreementRevenue += amount * 12;
       }
       agreementIds.push({ id: agr.id, name: agr.name || `Agreement ${agr.id}` });
     }
@@ -763,7 +763,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
 
   let projectRevenue = 0;
   let invoicedAgreementRevenue = 0;
-  let totalInvoiced = 0;
+  let agreementInvoiceCount = 0;
   try {
     const invoices = await apiGet("/finance/invoices", {
       conditions: `company/id = ${cwCompanyId} AND date > [${dateStr}]`,
@@ -772,20 +772,19 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     });
     for (const inv of invoices) {
       const amount = inv.total || 0;
-      totalInvoiced += amount;
       if (inv.type === "Standard" || inv.type === "Progress" || inv.type === "Miscellaneous") {
         projectRevenue += amount;
       } else if (inv.type === "Agreement") {
         invoicedAgreementRevenue += amount;
+        agreementInvoiceCount++;
       }
     }
   } catch (e: any) {
     log(`ConnectWise invoices error for company ${cwCompanyId}: ${e.message}`);
   }
 
-  if (agreementRevenue === 0 && invoicedAgreementRevenue > 0) {
-    agreementRevenue = invoicedAgreementRevenue;
-  }
+  const agreementRevenue = agreementInvoiceCount > 0 ? invoicedAgreementRevenue : projectedAgreementRevenue;
+  log(`[financials] Company ${cwCompanyId}: agrRev invoiced=${invoicedAgreementRevenue.toFixed(2)} (${agreementInvoiceCount} invoices) projected=${projectedAgreementRevenue.toFixed(2)} → using ${agreementInvoiceCount > 0 ? "invoiced" : "projected"}=${agreementRevenue.toFixed(2)}, projRev=${projectRevenue.toFixed(2)}`);
 
   const labor = await getCompanyLaborCosts(cwCompanyId);
   const totalRev = agreementRevenue + projectRevenue;
