@@ -1,30 +1,82 @@
 # MSP Technology Business Review (TBR) Dashboard
 
 ## Overview
-The MSP Technology Business Review (TBR) Dashboard is a client-facing tool designed for MSP owners to conduct semi-annual client review meetings. It integrates live data from various MSP tools (NinjaOne, Huntress, ConnectWise), allows manual CSV report uploads, and leverages AI to generate a plain-language priority roadmap. A core feature is the ability to track TBR snapshots over time, enabling trend analysis across reviews. The project aims to streamline client reporting, enhance client communication, and provide actionable insights for MSPs.
+A client-facing TBR dashboard for MSP owners to screen-share during 30-minute semi-annual client review meetings. Pulls live data from MSP tools (NinjaOne, Huntress, ConnectWise), accepts manual CSV report uploads, and uses AI to generate a plain-language priority roadmap. Features TBR snapshot history for trend tracking across reviews.
+
+## Architecture
+- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui components
+- **Backend**: Express.js API routes
+- **Database**: PostgreSQL (Neon-backed) for TBR snapshot history
+- **Auth**: Individual user accounts with email/password login (bcrypt hashed), role-based access (admin/editor/viewer), bearer token sessions
+- **AI**: Anthropic Claude via Replit AI Integrations for roadmap generation
+- **Brand**: Pelycon Technologies (Orange #E77125, Storm Gray #394442, Poppins font)
+
+## Key Files
+- `shared/schema.ts` - TypeScript interfaces + Drizzle table definitions (tbrSnapshots, tbrSchedules, tbrStaging, clientAccounts)
+- `server/db.ts` - PostgreSQL database connection (drizzle-orm/node-postgres)
+- `server/storage.ts` - Storage interface for TBR snapshot, schedule, staging, and client account CRUD operations
+- `server/routes.ts` - All API routes (auth, proxy to MSP APIs, CSV parsing, AI, export, TBR finalization, schedules, staging, accounts sync, margin analysis)
+- `server/services/ninjaone.ts` - NinjaOne API integration (Legacy API Keys, HMAC-SHA1)
+- `server/services/huntress.ts` - Huntress API integration (Basic auth)
+- `server/services/connectwise.ts` - ConnectWise Manage API integration (Basic auth), addition categorization, labor/project cost separation
+- `server/services/roadmap.ts` - Claude AI roadmap generation (executive summary + priority items)
+- `server/services/export.ts` - HTML summary export ("No Surprises" framework)
+- `server/services/email.ts` - SMTP2GO REST API email service for TBR reminders
+- `server/services/reminderJob.ts` - Background job checking every hour for TBRs due in 2 days
+- `client/src/App.tsx` - Main app with auth, wouter routing, shadcn sidebar navigation
+- `client/src/pages/login.tsx` - Email/password login page with first-time setup flow
+- `client/src/pages/dashboard.tsx` - Main TBR dashboard with all sections + Finalize TBR
+- `client/src/pages/tracker.tsx` - TBR Tracker: review schedules, overdue/upcoming alerts
+- `client/src/pages/staging.tsx` - TBR Staging Area: pre-enter engineer/SM notes, upload MFA/License CSVs
+- `client/src/pages/accounts.tsx` - Client Accounts: managed services roster, TBR compliance, revenue, tier management, separated service/project margins
+- `client/src/components/meeting-export.tsx` - Export buttons: PDF download (html2pdf.js) and Print
+
+## Client Accounts & Revenue
+- **Tier Logic**: A (≥$60k/yr), B ($24k–$60k/yr), C (<$24k/yr) based on total revenue. Manual tier overrides stored in `tier_override` column.
+- **12-Month Lookback Window**: All financial data (labor hours, invoices, revenue) uses a consistent 12-month lookback from current date.
+- **Agreement Revenue**: Annualized from ConnectWise `billAmount * 12` on non-cancelled agreements. Falls back to actual Agreement-type invoice totals from the last 12 months.
+- **Project Revenue**: Sum of Standard/Progress/Miscellaneous invoices from the last 12 months.
+- **Total Revenue**: Agreement + Project (annualized).
+
+## Margin Calculation (Separated Service vs Project)
+- **Service Margin** = (Agreement Rev − MS Rev − Service Labor − Product Costs) / (Agreement Rev − MS Rev). Only agreement labor (service tickets) and third-party product costs count against agreement revenue.
+- **Project Margin** = (Project Rev − Project Labor) / Project Rev. Only project ticket labor counts against project revenue.
+- **Overall Margin** = (Total Rev − MS Rev − All Labor − Product Costs) / (Total Rev − MS Rev). Combined view.
+- **Labor Cost Separation**: `serviceLaborCost` from service ticket time entries, `projectLaborCost` from project ticket time entries. Both from `/time/entries` with `chargeToType` field.
+- **Addition Cost**: From `/finance/agreements/{id}/additions` — uses `extendedCost/qty` when available (preferred), falls back to `unitCost`. Debug logging shows raw API values for verification.
+- **Addition Categories**: "labor" (managed services with labor-backed cost), "microsoft" (fixed ~16% margin, pass-through, excluded from margin calc), or "other" (third-party products included in margin).
+- **Microsoft Licensing**: Excluded from all margin calculations. Tracked separately (`msLicensingRevenue`, `msLicensingCost`). Never cited as improvement opportunity in insights.
+- **Margin Thresholds**: green ≥70%, yellow ≥55%, orange <55%.
+
+## Margin Analysis Engine
+Rule-based analysis generates concise, plain-English insights stored in `marginAnalysis` jsonb. Computed during sync and on-the-fly for existing data. Analysis checks:
+- Service Agreement Margin (service labor + product costs vs agreement revenue)
+- Project Margin (project labor vs project revenue)
+- Unbilled Project Work (project hours with $0 revenue)
+- Microsoft Licensing info (excluded from margin)
+- Low-Margin Third-Party Products (<20%)
+- Expensive Engineer Concentration (>40% of cost at $80+/hr)
+- Overall Margin warnings (<55%) and suggestions (<70%)
+
+## Schema Columns (clientAccounts)
+`laborCost`, `serviceLaborCost`, `projectLaborCost`, `additionCost`, `msLicensingRevenue`, `msLicensingCost`, `totalCost`, `serviceMarginPercent`, `projectMarginPercent`, `grossMarginPercent`, `serviceHours`, `projectHours`, `totalHours`, `engineerBreakdown` (jsonb), `agreementAdditions` (jsonb with category field), `marginAnalysis` (jsonb)
+
+## TBR Status
+- Green = reviewed within 6mo AND has future scheduled review
+- Yellow = missing one or both
+- Red = never reviewed
+
+## Environment Variables
+All API keys stored as Replit Secrets:
+- NINJAONE_CLIENT_ID, NINJAONE_CLIENT_SECRET, NINJAONE_INSTANCE
+- NINJAONE_LEGACY_KEY_ID, NINJAONE_LEGACY_SECRET
+- HUNTRESS_API_KEY, HUNTRESS_API_SECRET
+- HUNTRESS_SAT_API_KEY, HUNTRESS_SAT_API_SECRET
+- CW_COMPANY_ID, CW_PUBLIC_KEY, CW_PRIVATE_KEY, CW_CLIENT_ID, CW_SITE_URL
+- DASHBOARD_PASSWORD, SESSION_SECRET
+- SMTP2GO_API_KEY, SMTP_FROM
+- DATABASE_URL (auto-configured)
+- AI_INTEGRATIONS_ANTHROPIC_API_KEY, AI_INTEGRATIONS_ANTHROPIC_BASE_URL (auto-configured)
 
 ## User Preferences
-I prefer simple language in explanations.
-I want iterative development.
-Ask before making major changes.
-I prefer detailed explanations.
-
-## System Architecture
-The application uses a modern web stack with **React**, **Vite**, **Tailwind CSS**, and **shadcn/ui** for the frontend, providing a responsive and aesthetically pleasing user interface. The backend is built with **Express.js** to handle API routes, data processing, and integrations. **PostgreSQL**, specifically a Neon-backed instance, is used for storing TBR snapshot history and other relational data.
-
-Authentication is managed through individual user accounts with email/password login (bcrypt hashed), supporting role-based access (admin, editor, viewer) and bearer token sessions.
-
-AI capabilities for roadmap generation are powered by **Anthropic Claude** via Replit AI Integrations. The branding adheres to **Pelycon Technologies** guidelines, utilizing Orange (#E77125), Storm Gray (#394442), and the Poppins font for a consistent visual identity.
-
-The dashboard supports a "Two-View Workflow" comprising an Overview for client selection and draft management, and an Editor View for on-demand data loading, editing, and finalization. It incorporates a comprehensive TBR Snapshot System for saving drafts, finalizing reviews, tracking trends, and linking with review schedules. A key feature is the "No Surprises" framework for report generation, covering operational readiness, capacity planning, financial efficiency, and recommended actions.
-
-Client Accounts and Revenue management includes a tier-based system (A, B, C) with manual overrides, detailed agreement and project revenue calculations, and a sophisticated margin analysis engine that identifies actionable insights based on labor costs, addition costs, and various revenue streams.
-
-## External Dependencies
-- **NinjaOne**: For device health, patch management, and organizational data (Legacy API Keys with HMAC-SHA1).
-- **Huntress**: For security data, incident reports, agent status, and Security Awareness Training (SAT) enrollment (Basic auth and OAuth2 Client Credentials for Curricula integration).
-- **ConnectWise**: For ticket data, projects, client agreements, financial data, time entries, and member information (CW_COMPANY_ID, CW_PUBLIC_KEY, CW_PRIVATE_KEY, CW_CLIENT_ID, CW_SITE_URL).
-- **Anthropic Claude**: For AI-powered roadmap generation (via Replit AI Integrations).
-- **Neon (PostgreSQL)**: Managed PostgreSQL database for data storage.
-- **SMTP2GO**: For sending email reminders (SMTP2GO REST API).
-- **html2pdf.js**: For PDF generation of reports.
+Simple language in explanations. Iterative development. Ask before major changes. Detailed explanations.

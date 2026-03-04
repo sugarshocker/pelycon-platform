@@ -158,13 +158,19 @@ function EngineerBreakdownDialog({
   const hasEngineers = engineers.length > 0;
   const totalRev = account.totalRevenue || 0;
   const laborCost = account.laborCost || 0;
+  const serviceLaborCost = (account as any).serviceLaborCost || 0;
+  const projectLaborCost = (account as any).projectLaborCost || 0;
   const additionCost = account.additionCost || 0;
   const msLicensingRevenue = (account as any).msLicensingRevenue || 0;
   const msLicensingCost = (account as any).msLicensingCost || 0;
   const totalCost = account.totalCost || 0;
-  const actionableRev = totalRev - msLicensingRevenue;
-  const actionableCost = laborCost + additionCost;
-  const margin = actionableRev > 0 ? ((actionableRev - actionableCost) / actionableRev) * 100 : null;
+  const agreementRev = account.agreementRevenue || 0;
+  const projectRev = account.projectRevenue || 0;
+  const actionableAgrRev = agreementRev - msLicensingRevenue;
+  const serviceMargin = actionableAgrRev > 0 ? ((actionableAgrRev - serviceLaborCost - additionCost) / actionableAgrRev) * 100 : null;
+  const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost) / projectRev) * 100 : null;
+  const actionableTotalRev = totalRev - msLicensingRevenue;
+  const overallMargin = actionableTotalRev > 0 ? ((actionableTotalRev - (laborCost + additionCost)) / actionableTotalRev) * 100 : null;
   const warningCount = insights.filter(i => i.type === "warning").length;
   const suggestionCount = insights.filter(i => i.type === "suggestion").length;
 
@@ -205,29 +211,74 @@ function EngineerBreakdownDialog({
 
         {tab === "overview" && (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Service Agreement (12 months)</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Agreement Revenue</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-agr-rev">{formatCurrency(agreementRev)}</div>
+                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Incl. {formatCurrency(msLicensingRevenue)} MS pass-through</div>}
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Service Labor</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-svc-labor">{formatCurrency(serviceLaborCost)}</div>
+                <div className="text-[10px] text-muted-foreground">{(account.serviceHours || 0).toFixed(0)} hrs</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Product Costs</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-additions">{formatCurrency(additionCost)}</div>
+              </div>
+              <div className="border rounded-lg p-3">
+                <div className="text-xs text-muted-foreground">Service Margin</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-svc-margin">
+                  <MarginBadge margin={serviceMargin} />
+                </div>
+                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
+              </div>
+            </div>
+
+            {(projectRev > 0 || projectLaborCost > 0) && (
+              <>
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Project Work (12 months)</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                  <div className="border rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground">Project Revenue</div>
+                    <div className="text-sm font-semibold" data-testid="text-breakdown-proj-rev">{formatCurrency(projectRev)}</div>
+                  </div>
+                  <div className="border rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground">Project Labor</div>
+                    <div className="text-sm font-semibold" data-testid="text-breakdown-proj-labor">{formatCurrency(projectLaborCost)}</div>
+                    <div className="text-[10px] text-muted-foreground">{(account.projectHours || 0).toFixed(0)} hrs</div>
+                  </div>
+                  <div className="border rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground">Project Margin</div>
+                    <div className="text-sm font-semibold" data-testid="text-breakdown-proj-margin">
+                      <MarginBadge margin={projectMargin} />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Combined (12 months)</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Total Revenue</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-revenue">{formatCurrency(totalRev)}</div>
               </div>
               <div className="border rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Labor Cost</div>
+                <div className="text-xs text-muted-foreground">Total Labor</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-labor">{formatCurrency(laborCost)}</div>
-              </div>
-              <div className="border rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Addition Cost</div>
-                <div className="text-sm font-semibold" data-testid="text-breakdown-additions">{formatCurrency(additionCost)}</div>
               </div>
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Total Cost</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-total-cost">{formatCurrency(totalCost)}</div>
               </div>
               <div className="border rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">{msLicensingRevenue > 0 ? "Actionable Margin" : "Fully Loaded Margin"}</div>
+                <div className="text-xs text-muted-foreground">Overall Margin</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
-                  <MarginBadge margin={margin} />
+                  <MarginBadge margin={overallMargin} />
                 </div>
-                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground mt-1">Excl. Microsoft pass-through</div>}
+                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
               </div>
             </div>
 

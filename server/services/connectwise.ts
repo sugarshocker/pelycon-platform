@@ -485,6 +485,8 @@ export interface EngineerCostEntry {
 
 export interface CwLaborCosts {
   laborCost: number;
+  serviceLaborCost: number;
+  projectLaborCost: number;
   serviceHours: number;
   projectHours: number;
   totalHours: number;
@@ -527,11 +529,15 @@ export interface CwCompanyFinancials {
   agreementRevenue: number;
   projectRevenue: number;
   totalRevenue: number;
+  serviceLaborCost: number;
+  projectLaborCost: number;
   laborCost: number;
   additionCost: number;
   msLicensingRevenue: number;
   msLicensingCost: number;
   totalCost: number;
+  serviceMarginPercent: number | null;
+  projectMarginPercent: number | null;
   grossMarginPercent: number | null;
   serviceHours: number;
   projectHours: number;
@@ -611,15 +617,21 @@ export async function getCompanyLaborCosts(cwCompanyId: number): Promise<CwLabor
 
   const engineers: EngineerCostEntry[] = [];
   let totalLaborCost = 0;
+  let totalServiceLaborCost = 0;
+  let totalProjectLaborCost = 0;
   let totalServiceHours = 0;
   let totalProjectHours = 0;
 
   for (const [memberId, hours] of memberMap.entries()) {
     const memberInfo = await getMemberCost(memberId);
     const totalHrs = hours.serviceHours + hours.projectHours;
-    const cost = totalHrs * memberInfo.hourlyCost;
+    const svcCost = hours.serviceHours * memberInfo.hourlyCost;
+    const projCost = hours.projectHours * memberInfo.hourlyCost;
+    const cost = svcCost + projCost;
 
     totalLaborCost += cost;
+    totalServiceLaborCost += svcCost;
+    totalProjectLaborCost += projCost;
     totalServiceHours += hours.serviceHours;
     totalProjectHours += hours.projectHours;
 
@@ -639,6 +651,8 @@ export async function getCompanyLaborCosts(cwCompanyId: number): Promise<CwLabor
 
   return {
     laborCost: Math.round(totalLaborCost * 100) / 100,
+    serviceLaborCost: Math.round(totalServiceLaborCost * 100) / 100,
+    projectLaborCost: Math.round(totalProjectLaborCost * 100) / 100,
     serviceHours: Math.round(totalServiceHours * 100) / 100,
     projectHours: Math.round(totalProjectHours * 100) / 100,
     totalHours: Math.round((totalServiceHours + totalProjectHours) * 100) / 100,
@@ -681,11 +695,26 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
       for (const add of additions) {
         if (add.cancelledDate) continue;
         const qty = add.quantity ?? 1;
-        const unitCost = add.unitCost ?? 0;
         const addName = add.product?.description || add.description || `Addition ${add.id}`;
-        const unitPrice = add.unitPrice != null
-          ? add.unitPrice
-          : (add.billCustomer === "DoNotBill" ? 0 : (add.extendedPrice ?? 0) / (qty || 1));
+
+        let unitCost: number;
+        if (add.extendedCost != null && qty > 0) {
+          unitCost = add.extendedCost / qty;
+        } else {
+          unitCost = add.unitCost ?? 0;
+        }
+
+        let unitPrice: number;
+        if (add.extendedPrice != null && qty > 0) {
+          unitPrice = add.extendedPrice / qty;
+        } else if (add.unitPrice != null) {
+          unitPrice = add.unitPrice;
+        } else {
+          unitPrice = add.billCustomer === "DoNotBill" ? 0 : 0;
+        }
+
+        log(`[addition-debug] "${addName}" qty=${qty} unitCost=${add.unitCost} extCost=${add.extendedCost} unitPrice=${add.unitPrice} extPrice=${add.extendedPrice} → used unitCost=${unitCost.toFixed(2)} unitPrice=${unitPrice.toFixed(2)}`);
+
         const cycleMultiplier = 12;
         const category = classifyAddition(addName);
 
@@ -750,24 +779,39 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
 
   const labor = await getCompanyLaborCosts(cwCompanyId);
   const totalRev = agreementRevenue + projectRevenue;
-  const actionableRev = totalRev - msLicensingRevenue;
-  const actionableCost = Math.round((labor.laborCost + additionCost) * 100) / 100;
+  const actionableAgrRev = agreementRevenue - msLicensingRevenue;
   const totalCostVal = Math.round((labor.laborCost + additionCost + msLicensingCost) * 100) / 100;
-  let grossMarginPercent: number | null = null;
 
-  if (actionableRev > 0) {
-    grossMarginPercent = Math.round(((actionableRev - actionableCost) / actionableRev) * 1000) / 10;
+  let serviceMarginPercent: number | null = null;
+  if (actionableAgrRev > 0) {
+    serviceMarginPercent = Math.round(((actionableAgrRev - labor.serviceLaborCost - additionCost) / actionableAgrRev) * 1000) / 10;
+  }
+
+  let projectMarginPercent: number | null = null;
+  if (projectRevenue > 0) {
+    projectMarginPercent = Math.round(((projectRevenue - labor.projectLaborCost) / projectRevenue) * 1000) / 10;
+  }
+
+  const actionableTotalRev = totalRev - msLicensingRevenue;
+  const actionableTotalCost = labor.laborCost + additionCost;
+  let grossMarginPercent: number | null = null;
+  if (actionableTotalRev > 0) {
+    grossMarginPercent = Math.round(((actionableTotalRev - actionableTotalCost) / actionableTotalRev) * 1000) / 10;
   }
 
   return {
     agreementRevenue,
     projectRevenue,
     totalRevenue: totalRev,
+    serviceLaborCost: labor.serviceLaborCost,
+    projectLaborCost: labor.projectLaborCost,
     laborCost: labor.laborCost,
     additionCost,
     msLicensingRevenue,
     msLicensingCost,
     totalCost: totalCostVal,
+    serviceMarginPercent,
+    projectMarginPercent,
     grossMarginPercent,
     serviceHours: labor.serviceHours,
     projectHours: labor.projectHours,
