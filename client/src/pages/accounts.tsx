@@ -7,6 +7,8 @@ import type { ClientAccountWithStatus, AgreementAdditionInfo, MarginInsight } fr
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -143,10 +145,12 @@ function EngineerBreakdownDialog({
   open,
   onOpenChange,
   account,
+  includeMs,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   account: ClientAccountWithStatus | null;
+  includeMs: boolean;
 }) {
   const [tab, setTab] = useState<BreakdownTab>("overview");
 
@@ -156,21 +160,25 @@ function EngineerBreakdownDialog({
   const additions: AgreementAdditionInfo[] = (account.agreementAdditions as AgreementAdditionInfo[] | null) || [];
   const insights: MarginInsight[] = (account.marginAnalysis as MarginInsight[] | null) || [];
   const hasEngineers = engineers.length > 0;
-  const totalRev = account.totalRevenue || 0;
+  const rawTotalRev = account.totalRevenue || 0;
   const laborCost = account.laborCost || 0;
   const serviceLaborCost = (account as any).serviceLaborCost || 0;
   const projectLaborCost = (account as any).projectLaborCost || 0;
   const additionCost = account.additionCost || 0;
   const msLicensingRevenue = (account as any).msLicensingRevenue || 0;
   const msLicensingCost = (account as any).msLicensingCost || 0;
-  const totalCost = account.totalCost || 0;
+  const rawTotalCost = account.totalCost || 0;
   const agreementRev = account.agreementRevenue || 0;
   const projectRev = account.projectRevenue || 0;
-  const actionableAgrRev = agreementRev - msLicensingRevenue;
-  const serviceMargin = actionableAgrRev > 0 ? ((actionableAgrRev - serviceLaborCost - additionCost) / actionableAgrRev) * 100 : null;
+
+  const totalRev = includeMs ? rawTotalRev : rawTotalRev - msLicensingRevenue;
+  const totalCost = includeMs ? rawTotalCost : rawTotalCost - msLicensingCost;
+  const effectiveAgrRev = includeMs ? agreementRev : agreementRev - msLicensingRevenue;
+  const effectiveAdditionCost = includeMs ? additionCost + msLicensingCost : additionCost;
+
+  const serviceMargin = effectiveAgrRev > 0 ? ((effectiveAgrRev - serviceLaborCost - effectiveAdditionCost) / effectiveAgrRev) * 100 : null;
   const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost) / projectRev) * 100 : null;
-  const actionableTotalRev = totalRev - msLicensingRevenue;
-  const overallMargin = actionableTotalRev > 0 ? ((actionableTotalRev - (laborCost + additionCost)) / actionableTotalRev) * 100 : null;
+  const overallMargin = totalRev > 0 ? ((totalRev - (laborCost + effectiveAdditionCost)) / totalRev) * 100 : null;
   const warningCount = insights.filter(i => i.type === "warning").length;
   const suggestionCount = insights.filter(i => i.type === "suggestion").length;
 
@@ -215,8 +223,9 @@ function EngineerBreakdownDialog({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Agreement Revenue</div>
-                <div className="text-sm font-semibold" data-testid="text-breakdown-agr-rev">{formatCurrency(agreementRev)}</div>
-                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Incl. {formatCurrency(msLicensingRevenue)} MS pass-through</div>}
+                <div className="text-sm font-semibold" data-testid="text-breakdown-agr-rev">{formatCurrency(effectiveAgrRev)}</div>
+                {!includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. {formatCurrency(msLicensingRevenue)} MS</div>}
+                {includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Incl. {formatCurrency(msLicensingRevenue)} MS</div>}
               </div>
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Service Labor</div>
@@ -225,14 +234,15 @@ function EngineerBreakdownDialog({
               </div>
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Product Costs</div>
-                <div className="text-sm font-semibold" data-testid="text-breakdown-additions">{formatCurrency(additionCost)}</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-additions">{formatCurrency(effectiveAdditionCost)}</div>
+                {includeMs && msLicensingCost > 0 && <div className="text-[10px] text-muted-foreground">Incl. {formatCurrency(msLicensingCost)} MS</div>}
               </div>
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Service Margin</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-svc-margin">
                   <MarginBadge margin={serviceMargin} />
                 </div>
-                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
+                {!includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
               </div>
             </div>
 
@@ -264,6 +274,7 @@ function EngineerBreakdownDialog({
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Total Revenue</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-revenue">{formatCurrency(totalRev)}</div>
+                {!includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. {formatCurrency(msLicensingRevenue)} MS</div>}
               </div>
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Total Labor</div>
@@ -272,13 +283,14 @@ function EngineerBreakdownDialog({
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Total Cost</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-total-cost">{formatCurrency(totalCost)}</div>
+                {!includeMs && msLicensingCost > 0 && <div className="text-[10px] text-muted-foreground">Excl. {formatCurrency(msLicensingCost)} MS</div>}
               </div>
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Overall Margin</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
                   <MarginBadge margin={overallMargin} />
                 </div>
-                {msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
+                {!includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
               </div>
             </div>
 
@@ -571,6 +583,7 @@ export default function Accounts() {
   const [filterTier, setFilterTier] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [selectedAccount, setSelectedAccount] = useState<ClientAccountWithStatus | null>(null);
+  const [includeMs, setIncludeMs] = useState(false);
 
   const { data: accounts, isLoading } = useQuery<ClientAccountWithStatus[]>({
     queryKey: ["/api/accounts"],
@@ -630,6 +643,9 @@ export default function Accounts() {
       return sortDir === "asc" ? cmp : -cmp;
     });
 
+  const totalMsRev = (accounts || []).reduce((sum, a) => sum + ((a as any).msLicensingRevenue || 0), 0);
+  const totalMsCost = (accounts || []).reduce((sum, a) => sum + ((a as any).msLicensingCost || 0), 0);
+
   const summary = {
     total: (accounts || []).length,
     green: (accounts || []).filter(a => a.tbrStatus === "green").length,
@@ -645,8 +661,10 @@ export default function Accounts() {
     totalHours: (accounts || []).reduce((sum, a) => sum + (a.totalHours || 0), 0),
   };
 
-  const overallRev = summary.totalAgreementRev + summary.totalProjectRev;
-  const overallTotalCost = summary.totalLaborCost + summary.totalAdditionCost;
+  const effectiveAgrRev = includeMs ? summary.totalAgreementRev : summary.totalAgreementRev - totalMsRev;
+  const effectiveAddCost = includeMs ? summary.totalAdditionCost + totalMsCost : summary.totalAdditionCost;
+  const overallRev = effectiveAgrRev + summary.totalProjectRev;
+  const overallTotalCost = summary.totalLaborCost + effectiveAddCost;
   const overallMargin = overallRev > 0 && overallTotalCost > 0
     ? ((overallRev - overallTotalCost) / overallRev) * 100
     : null;
@@ -729,7 +747,7 @@ export default function Accounts() {
             <Card className="p-3">
               <div className="text-xs text-muted-foreground mb-1">Agreement Revenue</div>
               <div className="text-lg font-semibold" data-testid="text-total-agreement-rev">
-                {formatCurrency(summary.totalAgreementRev)}
+                {formatCurrency(effectiveAgrRev)}
                 <span className="text-xs font-normal text-muted-foreground">/yr</span>
               </div>
             </Card>
@@ -755,7 +773,7 @@ export default function Accounts() {
             </Card>
           </div>
 
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3 mb-3 flex-wrap">
             <Select value={filterTier} onValueChange={setFilterTier}>
               <SelectTrigger className="w-[130px] h-8 text-xs" data-testid="select-filter-tier">
                 <SelectValue placeholder="All Tiers" />
@@ -778,6 +796,17 @@ export default function Accounts() {
                 <SelectItem value="red">Needs TBR</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="include-ms"
+                checked={includeMs}
+                onCheckedChange={setIncludeMs}
+                data-testid="switch-include-ms"
+              />
+              <Label htmlFor="include-ms" className="text-xs cursor-pointer">
+                Include MS Licensing
+              </Label>
+            </div>
             <span className="text-xs text-muted-foreground ml-auto">
               {filtered.length} of {summary.total} clients
             </span>
@@ -861,7 +890,15 @@ export default function Accounts() {
                       </TableCell>
                       <TableCell className="text-xs tabular-nums" data-testid={`text-margin-${acct.id}`}>
                         <div className="flex items-center gap-1">
-                          <MarginBadge margin={acct.grossMarginPercent} />
+                          {(() => {
+                            if (includeMs) {
+                              const rev = acct.totalRevenue || 0;
+                              const cost = (acct.laborCost || 0) + (acct.additionCost || 0) + ((acct as any).msLicensingCost || 0);
+                              const m = rev > 0 ? ((rev - cost) / rev) * 100 : null;
+                              return <MarginBadge margin={m} />;
+                            }
+                            return <MarginBadge margin={acct.grossMarginPercent} />;
+                          })()}
                           {(() => {
                             const acctInsights = (acct.marginAnalysis as MarginInsight[] | null) || [];
                             const warnings = acctInsights.filter(i => i.type === "warning").length;
@@ -915,6 +952,7 @@ export default function Accounts() {
         open={!!selectedAccount}
         onOpenChange={(open) => { if (!open) setSelectedAccount(null); }}
         account={selectedAccount}
+        includeMs={includeMs}
       />
     </div>
   );
