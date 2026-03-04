@@ -41,7 +41,7 @@ async function apiPost(path: string, body: any): Promise<any> {
   return res.json();
 }
 
-async function apiGet(path: string, params?: Record<string, string>): Promise<any> {
+export async function apiGet(path: string, params?: Record<string, string>): Promise<any> {
   const url = new URL(`${BASE_URL}${path}`);
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
