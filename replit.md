@@ -43,7 +43,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Project Margin** = (Project Rev − Project Labor) / Project Rev. Only project ticket labor counts against project revenue.
 - **Overall Margin** = (Total Rev − MS Rev − All Labor − Product Costs) / (Total Rev − MS Rev). Combined view.
 - **Labor Cost Separation**: `serviceLaborCost` from service ticket time entries, `projectLaborCost` from project ticket time entries. Both from `/time/entries` with `chargeToType` field.
-- **Addition Cost**: From `/finance/agreements/{id}/additions` — uses `extendedCost/qty` when available (preferred), falls back to `unitCost`. Debug logging shows raw API values for verification.
+- **Addition Cost**: Uses actual invoiced costs from CW Reports API `Product` report (primary) — sums `Extended_Cost` for agreement-linked products invoiced in trailing 12 months. Falls back to projected `/finance/agreements/{id}/additions` costs × 12 only if no invoiced product data found.
 - **Addition Categories**: "labor" (managed services with labor-backed cost), "microsoft" (fixed ~16% margin, pass-through, excluded from margin calc), or "other" (third-party products included in margin).
 - **Microsoft Licensing Toggle**: "Include MS Licensing" switch on Accounts page. OFF (default) = MS excluded from both revenue and cost in margin calc. ON = MS revenue and cost both included. Toggle applies to summary cards, table margin column, and detail dialog. Backend analysis insights always use the "excluded" baseline.
 - **Margin Thresholds**: green ≥70%, yellow ≥55%, orange <55%.

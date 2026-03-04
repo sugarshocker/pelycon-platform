@@ -535,6 +535,130 @@ function classifyAddition(name: string): "labor" | "microsoft" | "other" {
   return "other";
 }
 
+interface InvoicedAdditionTotals {
+  additionCost: number;
+  msLicensingRevenue: number;
+  msLicensingCost: number;
+  agreementAdditions: AgreementAdditionEntry[];
+}
+
+async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): Promise<InvoicedAdditionTotals | null> {
+  try {
+    let allRows: any[][] = [];
+    let columnKeys: string[] = [];
+    let page = 1;
+    const pageSize = 250;
+
+    while (true) {
+      const data = await apiGet(`/system/reports/Product`, {
+        conditions: `company_recid = ${cwCompanyId} AND date_invoice > [${dateStr}] AND Agreement != null`,
+        pageSize: String(pageSize),
+        page: String(page),
+      });
+
+      if (data.column_definitions && columnKeys.length === 0) {
+        columnKeys = data.column_definitions.map((c: any) => Object.keys(c)[0]);
+      }
+
+      if (!data.row_values || data.row_values.length === 0) break;
+      allRows = allRows.concat(data.row_values);
+      if (data.row_values.length < pageSize) break;
+      page++;
+    }
+
+    if (allRows.length === 0) return null;
+
+    const colIndexMap = new Map<string, number>();
+    for (let i = 0; i < columnKeys.length; i++) {
+      colIndexMap.set(columnKeys[i].toLowerCase().trim(), i);
+    }
+
+    const requiredCols = ["item_desc", "extended_cost", "extended_price_amount", "quantity", "agreement"];
+    for (const col of requiredCols) {
+      if (!colIndexMap.has(col)) {
+        log(`[financials] Product report missing required column '${col}' (available: ${columnKeys.join(", ")})`);
+        return null;
+      }
+    }
+
+    const getStr = (row: any[], col: string): string => {
+      const idx = colIndexMap.get(col.toLowerCase().trim());
+      return idx != null ? String(row[idx] ?? "") : "";
+    };
+    const getNum = (row: any[], col: string): number => {
+      const idx = colIndexMap.get(col.toLowerCase().trim());
+      if (idx == null) return 0;
+      const val = Number(row[idx]);
+      return isNaN(val) ? 0 : val;
+    };
+
+    let additionCost = 0;
+    let msLicensingRevenue = 0;
+    let msLicensingCost = 0;
+    const additionMap = new Map<string, { cost: number; revenue: number; qty: number; agreement: string }>();
+
+    for (const row of allRows) {
+      const itemDesc = getStr(row, "item_desc");
+      const extCost = getNum(row, "Extended_Cost");
+      const extPrice = getNum(row, "Extended_Price_Amount");
+      const qty = getNum(row, "Quantity");
+      const agreement = getStr(row, "Agreement");
+
+      const category = classifyAddition(itemDesc);
+      const key = `${itemDesc}|||${agreement}`;
+      const existing = additionMap.get(key) || { cost: 0, revenue: 0, qty: 0, agreement };
+      existing.cost += extCost;
+      existing.revenue += extPrice;
+      existing.qty += qty;
+      additionMap.set(key, existing);
+
+      if (category === "microsoft") {
+        msLicensingRevenue += extPrice;
+        msLicensingCost += extCost;
+      } else if (category === "other") {
+        additionCost += extCost;
+      }
+    }
+
+    const agreementAdditions: AgreementAdditionEntry[] = [];
+    for (const [key, data] of additionMap.entries()) {
+      const additionName = key.split("|||")[0];
+      const annualCost = Math.round(data.cost * 100) / 100;
+      const annualRevenue = Math.round(data.revenue * 100) / 100;
+      if (annualCost === 0 && annualRevenue === 0) continue;
+      const margin = annualRevenue > 0 ? Math.round(((annualRevenue - annualCost) / annualRevenue) * 1000) / 10 : 0;
+      const avgQty = data.qty > 0 ? Math.round(data.qty / 12) : 0;
+      const unitCost = avgQty > 0 ? Math.round((annualCost / (avgQty * 12)) * 100) / 100 : 0;
+      const unitPrice = avgQty > 0 ? Math.round((annualRevenue / (avgQty * 12)) * 100) / 100 : 0;
+      agreementAdditions.push({
+        additionName,
+        agreementName: data.agreement,
+        quantity: avgQty,
+        unitCost,
+        unitPrice,
+        annualCost,
+        annualRevenue,
+        margin,
+        category: classifyAddition(additionName),
+      });
+    }
+
+    agreementAdditions.sort((a, b) => b.annualCost - a.annualCost);
+
+    log(`[financials] Company ${cwCompanyId}: invoiced additions from Product report: ${allRows.length} line items, additionCost=${additionCost.toFixed(2)}, msRev=${msLicensingRevenue.toFixed(2)}, msCost=${msLicensingCost.toFixed(2)}`);
+
+    return {
+      additionCost: Math.round(additionCost * 100) / 100,
+      msLicensingRevenue: Math.round(msLicensingRevenue * 100) / 100,
+      msLicensingCost: Math.round(msLicensingCost * 100) / 100,
+      agreementAdditions,
+    };
+  } catch (e: any) {
+    log(`[financials] Product report error for company ${cwCompanyId}: ${e.message}`);
+    return null;
+  }
+}
+
 export interface CwCompanyFinancials {
   agreementRevenue: number;
   projectRevenue: number;
@@ -693,73 +817,82 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     log(`ConnectWise agreement revenue error for company ${cwCompanyId}: ${e.message}`);
   }
 
+  const invoicedAdditions = await getInvoicedAdditionCosts(cwCompanyId, dateStr);
+
   let additionCost = 0;
   let msLicensingRevenue = 0;
   let msLicensingCost = 0;
-  const agreementAdditions: AgreementAdditionEntry[] = [];
-  for (const agr of agreementIds) {
-    try {
-      const additions = await apiGet(`/finance/agreements/${agr.id}/additions`, {
-        pageSize: "250",
-      });
-      for (const add of additions) {
-        if (add.cancelledDate) continue;
-        const qty = add.quantity ?? 1;
-        const addName = add.product?.description || add.description || `Addition ${add.id}`;
+  let agreementAdditions: AgreementAdditionEntry[] = [];
 
-        let unitCost: number;
-        if (add.extendedCost != null && qty > 0) {
-          unitCost = add.extendedCost / qty;
-        } else {
-          unitCost = add.unitCost ?? 0;
-        }
+  if (invoicedAdditions) {
+    additionCost = invoicedAdditions.additionCost;
+    msLicensingRevenue = invoicedAdditions.msLicensingRevenue;
+    msLicensingCost = invoicedAdditions.msLicensingCost;
+    agreementAdditions = invoicedAdditions.agreementAdditions;
+    log(`[financials] Company ${cwCompanyId}: using INVOICED addition costs (Product report)`);
+  } else {
+    log(`[financials] Company ${cwCompanyId}: no invoiced addition data, falling back to PROJECTED addition costs`);
+    for (const agr of agreementIds) {
+      try {
+        const additions = await apiGet(`/finance/agreements/${agr.id}/additions`, {
+          pageSize: "250",
+        });
+        for (const add of additions) {
+          if (add.cancelledDate) continue;
+          const qty = add.quantity ?? 1;
+          const addName = add.product?.description || add.description || `Addition ${add.id}`;
 
-        let unitPrice: number;
-        if (add.extendedPrice != null && qty > 0) {
-          unitPrice = add.extendedPrice / qty;
-        } else if (add.unitPrice != null) {
-          unitPrice = add.unitPrice;
-        } else {
-          unitPrice = add.billCustomer === "DoNotBill" ? 0 : 0;
-        }
-
-        log(`[addition-debug] "${addName}" qty=${qty} unitCost=${add.unitCost} extCost=${add.extendedCost} unitPrice=${add.unitPrice} extPrice=${add.extendedPrice} → used unitCost=${unitCost.toFixed(2)} unitPrice=${unitPrice.toFixed(2)}`);
-
-        const cycleMultiplier = 12;
-        const category = classifyAddition(addName);
-
-        const annualCost = Math.round(qty * unitCost * cycleMultiplier * 100) / 100;
-        const annualRevenue = Math.round(qty * unitPrice * cycleMultiplier * 100) / 100;
-        const margin = annualRevenue > 0 ? Math.round(((annualRevenue - annualCost) / annualRevenue) * 1000) / 10 : 0;
-
-        if (annualCost > 0 || annualRevenue > 0) {
-          if (category === "microsoft") {
-            msLicensingRevenue += annualRevenue;
-            msLicensingCost += annualCost;
-          } else if (category === "other") {
-            additionCost += annualCost;
+          let unitCost: number;
+          if (add.extendedCost != null && qty > 0) {
+            unitCost = add.extendedCost / qty;
+          } else {
+            unitCost = add.unitCost ?? 0;
           }
-          agreementAdditions.push({
-            additionName: addName,
-            agreementName: agr.name,
-            quantity: qty,
-            unitCost,
-            unitPrice,
-            annualCost,
-            annualRevenue,
-            margin,
-            category,
-          });
+
+          let unitPrice: number;
+          if (add.extendedPrice != null && qty > 0) {
+            unitPrice = add.extendedPrice / qty;
+          } else if (add.unitPrice != null) {
+            unitPrice = add.unitPrice;
+          } else {
+            unitPrice = 0;
+          }
+
+          const cycleMultiplier = 12;
+          const category = classifyAddition(addName);
+          const annualCost = Math.round(qty * unitCost * cycleMultiplier * 100) / 100;
+          const annualRevenue = Math.round(qty * unitPrice * cycleMultiplier * 100) / 100;
+          const margin = annualRevenue > 0 ? Math.round(((annualRevenue - annualCost) / annualRevenue) * 1000) / 10 : 0;
+
+          if (annualCost > 0 || annualRevenue > 0) {
+            if (category === "microsoft") {
+              msLicensingRevenue += annualRevenue;
+              msLicensingCost += annualCost;
+            } else if (category === "other") {
+              additionCost += annualCost;
+            }
+            agreementAdditions.push({
+              additionName: addName,
+              agreementName: agr.name,
+              quantity: qty,
+              unitCost,
+              unitPrice,
+              annualCost,
+              annualRevenue,
+              margin,
+              category,
+            });
+          }
         }
+      } catch (e: any) {
+        log(`ConnectWise additions error for agreement ${agr.id}: ${e.message}`);
       }
-    } catch (e: any) {
-      log(`ConnectWise additions error for agreement ${agr.id}: ${e.message}`);
     }
+    additionCost = Math.round(additionCost * 100) / 100;
+    msLicensingRevenue = Math.round(msLicensingRevenue * 100) / 100;
+    msLicensingCost = Math.round(msLicensingCost * 100) / 100;
+    agreementAdditions.sort((a, b) => b.annualCost - a.annualCost);
   }
-  additionCost = Math.round(additionCost * 100) / 100;
-  msLicensingRevenue = Math.round(msLicensingRevenue * 100) / 100;
-  msLicensingCost = Math.round(msLicensingCost * 100) / 100;
-  agreementAdditions.sort((a, b) => b.annualCost - a.annualCost);
 
   let projectRevenue = 0;
   let invoicedAgreementRevenue = 0;
