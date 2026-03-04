@@ -117,15 +117,18 @@ export default function Dashboard() {
                 onEditSnapshot={() => setView("editor")}
               />
             ) : (
-              <div className="text-center py-20">
-                <img src={pelyconLogo} alt="Pelycon Technologies" className="h-16 w-16 object-contain mx-auto mb-4" />
-                <h2 className="text-xl font-semibold mb-2" data-testid="text-select-prompt">
-                  Select a Client
-                </h2>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Choose a client from the dropdown above to view their review history
-                  or start a new Technology Business Review.
-                </p>
+              <div className="space-y-6">
+                <div className="text-center py-12">
+                  <img src={pelyconLogo} alt="Pelycon Technologies" className="h-16 w-16 object-contain mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2" data-testid="text-select-prompt">
+                    Select a Client
+                  </h2>
+                  <p className="text-muted-foreground max-w-md mx-auto">
+                    Choose a client from the dropdown above to view their review history
+                    or start a new Technology Business Review.
+                  </p>
+                </div>
+                <TopClientsNeedingTbr onSelectClient={handleClientSelect} />
               </div>
             )}
           </>
@@ -150,6 +153,71 @@ export default function Dashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+function TopClientsNeedingTbr({ onSelectClient }: { onSelectClient: (org: Organization) => void }) {
+  const { data: accounts, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/accounts"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <Skeleton className="h-6 w-64 mb-3" />
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const needingTbr = (accounts || [])
+    .filter((a: any) => a.tbrStatus === "red" || a.tbrStatus === "yellow")
+    .sort((a: any, b: any) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
+    .slice(0, 5);
+
+  if (needingTbr.length === 0) return null;
+
+  const fmtCurrency = (val: number) => "$" + Math.round(val).toLocaleString();
+
+  const statusColors: Record<string, string> = {
+    red: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+    yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  };
+
+  return (
+    <Card data-testid="card-top-clients-needing-tbr">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-[#E77125]" />
+          <h3 className="text-sm font-semibold">Top Clients Needing a TBR</h3>
+        </div>
+        <div className="space-y-1">
+          {needingTbr.map((acct: any) => (
+            <button
+              key={acct.id}
+              data-testid={`btn-tbr-needed-${acct.id}`}
+              onClick={() => onSelectClient({ id: acct.cwCompanyId, name: acct.companyName })}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted/50 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColors[acct.tbrStatus] || ""}`}>
+                  {acct.tbrStatus === "red" ? "Never" : "Overdue"}
+                </span>
+                <span className="text-sm font-medium truncate">{acct.companyName}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs text-muted-foreground">{acct.tbrStatusReason}</span>
+                <span className="text-sm font-semibold tabular-nums">{fmtCurrency(acct.totalRevenue || 0)}/yr</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
