@@ -421,54 +421,64 @@ export interface CwAgreementCompany {
   agreementMonthlyRevenue: number;
 }
 
+const MANAGED_SERVICES_AGREEMENT_TYPES = [
+  "IT Managed Services (M-F 8-5)",
+  "IT Managed Services 24/7",
+  "TopShelf-SupportIncluded",
+];
+
 export async function getManagedServicesClients(): Promise<CwAgreementCompany[]> {
   const companyMap = new Map<number, CwAgreementCompany>();
-  let page = 1;
-  const pageSize = 250;
 
-  while (true) {
-    try {
-      const agreements = await apiGet("/finance/agreements", {
-        conditions: `type/name contains "Top Shelf" OR type/name contains "Managed Services"`,
-        pageSize: String(pageSize),
-        page: String(page),
-        orderBy: "company/name asc",
-      });
+  for (const typeName of MANAGED_SERVICES_AGREEMENT_TYPES) {
+    let page = 1;
+    const pageSize = 250;
 
-      if (!agreements || agreements.length === 0) break;
+    while (true) {
+      try {
+        const agreements = await apiGet("/finance/agreements", {
+          conditions: `type/name = "${typeName}" AND agreementStatus = "Active"`,
+          pageSize: String(pageSize),
+          page: String(page),
+          orderBy: "company/name asc",
+        });
 
-      for (const agr of agreements) {
-        const companyId = agr.company?.id;
-        const companyName = agr.company?.name;
-        if (!companyId || !companyName) continue;
+        if (!agreements || agreements.length === 0) break;
 
-        const existing = companyMap.get(companyId);
-        const typeName = agr.type?.name || "Unknown";
-        const monthlyAmount = agr.billAmount || 0;
+        for (const agr of agreements) {
+          const companyId = agr.company?.id;
+          const companyName = agr.company?.name;
+          if (!companyId || !companyName) continue;
 
-        if (existing) {
-          if (!existing.agreementTypes.includes(typeName)) {
-            existing.agreementTypes.push(typeName);
+          const existing = companyMap.get(companyId);
+          const agrTypeName = agr.type?.name || typeName;
+          const monthlyAmount = agr.billAmount || 0;
+
+          if (existing) {
+            if (!existing.agreementTypes.includes(agrTypeName)) {
+              existing.agreementTypes.push(agrTypeName);
+            }
+            existing.agreementMonthlyRevenue += monthlyAmount;
+          } else {
+            companyMap.set(companyId, {
+              cwCompanyId: companyId,
+              companyName,
+              agreementTypes: [agrTypeName],
+              agreementMonthlyRevenue: monthlyAmount,
+            });
           }
-          existing.agreementMonthlyRevenue += monthlyAmount;
-        } else {
-          companyMap.set(companyId, {
-            cwCompanyId: companyId,
-            companyName,
-            agreementTypes: [typeName],
-            agreementMonthlyRevenue: monthlyAmount,
-          });
         }
-      }
 
-      if (agreements.length < pageSize) break;
-      page++;
-    } catch (e: any) {
-      log(`ConnectWise agreements error (page ${page}): ${e.message}`);
-      break;
+        if (agreements.length < pageSize) break;
+        page++;
+      } catch (e: any) {
+        log(`ConnectWise agreements error for type "${typeName}" (page ${page}): ${e.message}`);
+        break;
+      }
     }
   }
 
+  log(`Found ${companyMap.size} clients with active managed services agreements`);
   return Array.from(companyMap.values());
 }
 
@@ -669,7 +679,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   const agreementIds: { id: number; name: string }[] = [];
   try {
     const agreements = await apiGet("/finance/agreements", {
-      conditions: `company/id = ${cwCompanyId} AND cancelledFlag = false`,
+      conditions: `company/id = ${cwCompanyId} AND agreementStatus = "Active"`,
       pageSize: "250",
     });
     for (const agr of agreements) {
