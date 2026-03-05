@@ -668,6 +668,56 @@ async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): P
   }
 }
 
+async function getInvoicedExpenseCosts(cwCompanyId: number, dateStr: string): Promise<number> {
+  try {
+    let allRows: any[][] = [];
+    let columnKeys: string[] = [];
+    let page = 1;
+    const pageSize = 250;
+
+    while (true) {
+      const data = await apiGet(`/system/reports/Expense`, {
+        conditions: `Company_RecID = ${cwCompanyId} AND Date_Invoice > [${dateStr}]`,
+        pageSize: String(pageSize),
+        page: String(page),
+      });
+
+      if (data.column_definitions && columnKeys.length === 0) {
+        columnKeys = data.column_definitions.map((c: any) => Object.keys(c)[0]);
+      }
+
+      if (!data.row_values || data.row_values.length === 0) break;
+      allRows = allRows.concat(data.row_values);
+      if (data.row_values.length < pageSize) break;
+      page++;
+    }
+
+    if (allRows.length === 0) return 0;
+
+    const colIndexMap = new Map<string, number>();
+    for (let i = 0; i < columnKeys.length; i++) {
+      colIndexMap.set(columnKeys[i].toLowerCase().trim(), i);
+    }
+
+    const costIdx = colIndexMap.get("expense_cost");
+    if (costIdx == null) {
+      log(`[financials] Expense report missing Expense_Cost column for company ${cwCompanyId}`);
+      return 0;
+    }
+
+    let totalExpenseCost = 0;
+    for (const row of allRows) {
+      totalExpenseCost += Number(row[costIdx]) || 0;
+    }
+
+    log(`[financials] Company ${cwCompanyId}: ${allRows.length} expense entries, expenseCost=${totalExpenseCost.toFixed(2)}`);
+    return Math.round(totalExpenseCost * 100) / 100;
+  } catch (e: any) {
+    log(`[financials] Expense report error for company ${cwCompanyId}: ${e.message}`);
+    return 0;
+  }
+}
+
 export interface CwCompanyFinancials {
   agreementRevenue: number;
   projectRevenue: number;
@@ -677,6 +727,7 @@ export interface CwCompanyFinancials {
   laborCost: number;
   additionCost: number;
   projectProductCost: number;
+  expenseCost: number;
   msLicensingRevenue: number;
   msLicensingCost: number;
   totalCost: number;
@@ -931,10 +982,12 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   const agreementRevenue = agreementInvoiceCount > 0 ? invoicedAgreementRevenue : projectedAgreementRevenue;
   log(`[financials] Company ${cwCompanyId}: agrRev invoiced=${invoicedAgreementRevenue.toFixed(2)} (${agreementInvoiceCount} invoices) projected=${projectedAgreementRevenue.toFixed(2)} → using ${agreementInvoiceCount > 0 ? "invoiced" : "projected"}=${agreementRevenue.toFixed(2)}, projRev=${projectRevenue.toFixed(2)}`);
 
+  const expenseCost = await getInvoicedExpenseCosts(cwCompanyId, dateStr);
+
   const labor = await getCompanyLaborCosts(cwCompanyId);
   const totalRev = agreementRevenue + projectRevenue;
   const actionableAgrRev = agreementRevenue - msLicensingRevenue;
-  const totalCostVal = Math.round((labor.laborCost + additionCost + projectProductCost + msLicensingCost) * 100) / 100;
+  const totalCostVal = Math.round((labor.laborCost + additionCost + projectProductCost + expenseCost + msLicensingCost) * 100) / 100;
 
   let serviceMarginPercent: number | null = null;
   if (actionableAgrRev > 0) {
@@ -962,6 +1015,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     laborCost: labor.laborCost,
     additionCost,
     projectProductCost,
+    expenseCost,
     msLicensingRevenue,
     msLicensingCost,
     totalCost: totalCostVal,

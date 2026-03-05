@@ -222,10 +222,58 @@ export async function registerRoutes(
         productReport: { prodRevenue, prodCost, agrProdRevenue, agrProdCost, nonAgrProdRevenue, nonAgrProdCost, rowCount: allProdRows.length },
         derivedTotals: {
           revenueFromLineItems: timeBilledRevenue + prodRevenue,
-          revenueFromLineItemsNet: timeBilledRevenue + prodRevenue,
           costFromLineItems: timeCost + prodCost,
-          noteAboutTimeCost: "Time report Hourly_Cost is often inaccurate; use member hourlyCost method instead",
         },
+        expenseReport: await (async () => {
+          try {
+            const expData = await apiGet("/system/reports/Expense", {
+              conditions: `Company_RecID = ${cwCompanyId} AND Date_Invoice >= [${dateFrom}] AND Date_Invoice <= [${dateTo}]`,
+              pageSize: "1000",
+            });
+            const expCols = (expData.column_definitions || []).map((c: any) => Object.keys(c)[0]);
+            const expColMap = new Map<string, number>();
+            for (let i = 0; i < expCols.length; i++) expColMap.set(expCols[i].toLowerCase(), i);
+            const getExpNum = (row: any[], col: string) => {
+              const idx = expColMap.get(col.toLowerCase());
+              return idx != null ? Number(row[idx]) || 0 : 0;
+            };
+            const getExpStr = (row: any[], col: string) => {
+              const idx = expColMap.get(col.toLowerCase());
+              return idx != null ? String(row[idx] ?? "") : "";
+            };
+            let totalExpCost = 0;
+            let totalExpRevenue = 0;
+            let agrExpCost = 0;
+            let agrExpRevenue = 0;
+            let nonAgrExpCost = 0;
+            let nonAgrExpRevenue = 0;
+            const sampleRows: any[] = [];
+            for (const row of (expData.row_values || [])) {
+              const cost = getExpNum(row, "Expense_Cost");
+              const billAmt = getExpNum(row, "Bill_Amount");
+              const agr = getExpStr(row, "Agreement");
+              totalExpCost += cost;
+              totalExpRevenue += billAmt;
+              if (agr) { agrExpCost += cost; agrExpRevenue += billAmt; }
+              else { nonAgrExpCost += cost; nonAgrExpRevenue += billAmt; }
+              if (sampleRows.length < 3) {
+                const desc = getExpStr(row, "Expense_Detail");
+                const type = getExpStr(row, "Expense_Type");
+                sampleRows.push({ type, desc, cost, billAmt, agreement: agr || null });
+              }
+            }
+            return {
+              columns: expCols,
+              rowCount: (expData.row_values || []).length,
+              totalExpCost, totalExpRevenue,
+              agrExpCost, agrExpRevenue,
+              nonAgrExpCost, nonAgrExpRevenue,
+              sampleRows,
+            };
+          } catch (e: any) {
+            return { error: e.message, columns: [] };
+          }
+        })(),
         invoiceBreakdown: invoiceBreakdown.slice(0, 5),
         ihBreakdown: ihBreakdown.slice(0, 5),
       });
@@ -1632,6 +1680,7 @@ export async function registerRoutes(
     const projectLaborCost = financials.projectLaborCost || 0;
     const additionCost = financials.additionCost || 0;
     const projectProductCost = financials.projectProductCost || 0;
+    const expenseCost = financials.expenseCost || 0;
     const msRev = financials.msLicensingRevenue || 0;
     const agreementRev = financials.agreementRevenue || 0;
     const projectRev = financials.projectRevenue || 0;
@@ -1643,9 +1692,9 @@ export async function registerRoutes(
 
     const actionableAgrRev = agreementRev - msRev;
     const serviceMargin = actionableAgrRev > 0 ? ((actionableAgrRev - serviceLaborCost - additionCost) / actionableAgrRev) * 100 : 0;
-    const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost - projectProductCost) / projectRev) * 100 : null;
+    const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost - projectProductCost - expenseCost) / projectRev) * 100 : null;
     const actionableTotalRev = totalRev - msRev;
-    const actionableTotalCost = laborCost + additionCost + projectProductCost;
+    const actionableTotalCost = laborCost + additionCost + projectProductCost + expenseCost;
     const overallMargin = actionableTotalRev > 0 ? ((actionableTotalRev - actionableTotalCost) / actionableTotalRev) * 100 : 0;
 
     if (actionableAgrRev > 0) {
@@ -1664,7 +1713,7 @@ export async function registerRoutes(
           type: projectMargin! < 50 ? "warning" : "info",
           category: "project",
           title: "Project Margin",
-          detail: `Project revenue: ${fmtD(projectRev)}. Project labor: ${fmtD(projectLaborCost)} (${projectHours.toFixed(0)} hrs)${projectProductCost > 0 ? `. Product costs: ${fmtD(projectProductCost)}` : ""}. Project margin: ${projectMargin!.toFixed(1)}%.`,
+          detail: `Project revenue: ${fmtD(projectRev)}. Project labor: ${fmtD(projectLaborCost)} (${projectHours.toFixed(0)} hrs)${projectProductCost > 0 ? `. Product costs: ${fmtD(projectProductCost)}` : ""}${expenseCost > 0 ? `. Expenses: ${fmtD(expenseCost)}` : ""}. Project margin: ${projectMargin!.toFixed(1)}%.`,
           impact: projectMargin! < 50 ? `Project work is below 50% margin. Check scoping, billing rates, and whether projects are being invoiced promptly.` : undefined,
         });
       } else if (projectLaborCost > 0 && projectRev === 0) {
@@ -1744,7 +1793,7 @@ export async function registerRoutes(
     const results = [];
     for (const client of cwClients) {
       const knownAgreementRevenue = client.agreementMonthlyRevenue * 12;
-      let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, serviceMarginPercent: null, projectMarginPercent: null, laborCost: 0, serviceLaborCost: 0, projectLaborCost: 0, additionCost: 0, projectProductCost: 0, msLicensingRevenue: 0, msLicensingCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
+      let financials: any = { agreementRevenue: knownAgreementRevenue, projectRevenue: 0, totalRevenue: knownAgreementRevenue, grossMarginPercent: null, serviceMarginPercent: null, projectMarginPercent: null, laborCost: 0, serviceLaborCost: 0, projectLaborCost: 0, additionCost: 0, projectProductCost: 0, expenseCost: 0, msLicensingRevenue: 0, msLicensingCost: 0, totalCost: 0, serviceHours: 0, projectHours: 0, totalHours: 0, engineers: [], agreementAdditions: [] };
       try {
         financials = await connectwise.getCompanyFinancials(client.cwCompanyId);
       } catch (e: any) {
@@ -1767,6 +1816,7 @@ export async function registerRoutes(
         projectLaborCost: financials.projectLaborCost,
         additionCost: financials.additionCost || 0,
         projectProductCost: financials.projectProductCost || 0,
+        expenseCost: financials.expenseCost || 0,
         msLicensingRevenue: financials.msLicensingRevenue || 0,
         msLicensingCost: financials.msLicensingCost || 0,
         totalCost: financials.totalCost,

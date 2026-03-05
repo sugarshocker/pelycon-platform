@@ -166,6 +166,7 @@ function EngineerBreakdownDialog({
   const projectLaborCost = (account as any).projectLaborCost || 0;
   const additionCost = account.additionCost || 0;
   const projectProductCost = (account as any).projectProductCost || 0;
+  const expenseCost = (account as any).expenseCost || 0;
   const msLicensingRevenue = (account as any).msLicensingRevenue || 0;
   const msLicensingCost = (account as any).msLicensingCost || 0;
   const rawTotalCost = account.totalCost || 0;
@@ -178,8 +179,8 @@ function EngineerBreakdownDialog({
   const effectiveAdditionCost = includeMs ? additionCost + msLicensingCost : additionCost;
 
   const serviceMargin = effectiveAgrRev > 0 ? ((effectiveAgrRev - serviceLaborCost - effectiveAdditionCost) / effectiveAgrRev) * 100 : null;
-  const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost - projectProductCost) / projectRev) * 100 : null;
-  const overallMargin = totalRev > 0 ? ((totalRev - (laborCost + effectiveAdditionCost + projectProductCost)) / totalRev) * 100 : null;
+  const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost - projectProductCost - expenseCost) / projectRev) * 100 : null;
+  const overallMargin = totalRev > 0 ? ((totalRev - (laborCost + effectiveAdditionCost + projectProductCost + expenseCost)) / totalRev) * 100 : null;
   const warningCount = insights.filter(i => i.type === "warning").length;
   const suggestionCount = insights.filter(i => i.type === "suggestion").length;
 
@@ -341,6 +342,13 @@ function EngineerBreakdownDialog({
                       title={`Project Products: ${formatCurrency(projectProductCost)}`}
                     />
                   )}
+                  {expenseCost > 0 && (
+                    <div
+                      className="bg-rose-400 rounded-sm"
+                      style={{ width: `${(expenseCost / totalCost) * 100}%` }}
+                      title={`Expenses: ${formatCurrency(expenseCost)}`}
+                    />
+                  )}
                   {msLicensingCost > 0 && (
                     <div
                       className="bg-purple-400 rounded-sm"
@@ -364,6 +372,12 @@ function EngineerBreakdownDialog({
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
                       Project Products: {formatCurrency(projectProductCost)} ({((projectProductCost / totalCost) * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                  {expenseCost > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-rose-400" />
+                      Expenses: {formatCurrency(expenseCost)} ({((expenseCost / totalCost) * 100).toFixed(0)}%)
                     </span>
                   )}
                   {msLicensingCost > 0 && (
@@ -673,13 +687,14 @@ export default function Accounts() {
     totalLaborCost: (accounts || []).reduce((sum, a) => sum + (a.laborCost || 0), 0),
     totalAdditionCost: (accounts || []).reduce((sum, a) => sum + (a.additionCost || 0), 0),
     totalProjectProductCost: (accounts || []).reduce((sum, a) => sum + ((a as any).projectProductCost || 0), 0),
+    totalExpenseCost: (accounts || []).reduce((sum, a) => sum + ((a as any).expenseCost || 0), 0),
     totalHours: (accounts || []).reduce((sum, a) => sum + (a.totalHours || 0), 0),
   };
 
   const effectiveAgrRev = includeMs ? summary.totalAgreementRev : summary.totalAgreementRev - totalMsRev;
   const effectiveAddCost = includeMs ? summary.totalAdditionCost + totalMsCost : summary.totalAdditionCost;
   const overallRev = effectiveAgrRev + summary.totalProjectRev;
-  const overallTotalCost = summary.totalLaborCost + effectiveAddCost + summary.totalProjectProductCost;
+  const overallTotalCost = summary.totalLaborCost + effectiveAddCost + summary.totalProjectProductCost + summary.totalExpenseCost;
   const overallMargin = overallRev > 0 && overallTotalCost > 0
     ? ((overallRev - overallTotalCost) / overallRev) * 100
     : null;
