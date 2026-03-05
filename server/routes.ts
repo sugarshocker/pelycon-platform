@@ -1887,9 +1887,9 @@ export async function registerRoutes(
       twelveMonthsAhead.setMonth(twelveMonthsAhead.getMonth() + 12);
 
       const enriched = accounts.map((acct) => {
-        const schedule = schedules.find(s => s.orgName.toLowerCase() === acct.companyName.toLowerCase());
+        const schedule = schedules.find(s => s.orgName.toLowerCase().trim() === acct.companyName.toLowerCase().trim());
         const snapshots = allFinalized
-          .filter(s => s.orgName.toLowerCase() === acct.companyName.toLowerCase())
+          .filter(s => s.orgName.toLowerCase().trim() === acct.companyName.toLowerCase().trim())
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         const lastTbr = snapshots[0] || null;
