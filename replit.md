@@ -39,7 +39,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Total Revenue**: Agreement + Project (annualized).
 
 ## Margin Calculation (Separated Service vs Project)
-- **Service Margin** = (Agreement Rev − MS Rev − Service Labor − Product Costs) / (Agreement Rev − MS Rev). Only agreement labor (service tickets) and third-party product costs count against agreement revenue.
+- **Agreement Margin** = (Agreement Rev − MS Rev − Agreement Labor − Product Costs) / (Agreement Rev − MS Rev). Only agreement labor (service tickets) and third-party product costs count against agreement revenue.
 - **Project Margin** = (Project Rev − Project Labor − Project Product Costs − Expense Costs) / Project Rev. Project ticket labor, non-agreement product costs, and expense costs count against project revenue.
 - **Overall Margin** = (Total Rev − MS Rev − All Labor − Product Costs − Project Product Costs − Expense Costs) / (Total Rev − MS Rev). Combined view.
 - **Labor Cost Separation**: `serviceLaborCost` from service ticket time entries, `projectLaborCost` from project ticket time entries. Both from `/time/entries` with `chargeToType` field.
@@ -48,11 +48,11 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Expense Cost**: From CW Reports API `Expense` report — sums `Expense_Cost` for invoiced expense entries (Parts and Supplies, mileage, etc.) in the trailing 12 months. Deducted from project margin and overall margin.
 - **Addition Categories**: "labor" (managed services with labor-backed cost), "microsoft" (fixed ~16% margin, pass-through, excluded from margin calc), or "other" (third-party products included in margin).
 - **Microsoft Licensing Toggle**: "Include MS Licensing" switch on Accounts page. OFF (default) = MS excluded from both revenue and cost in margin calc. ON = MS revenue and cost both included. Toggle applies to summary cards, table margin column, and detail dialog. Backend analysis insights always use the "excluded" baseline.
-- **Margin Thresholds**: green ≥70%, yellow ≥55%, orange <55%.
+- **Margin Thresholds (Agreement/Project)**: green ≥60%, yellow 50–59%, red <50%. **(Overall)**: green ≥52%, yellow 43–51%, red <43%.
 
 ## Margin Analysis Engine
 Rule-based analysis generates concise, plain-English insights stored in `marginAnalysis` jsonb. Computed during sync and on-the-fly for existing data. Analysis checks:
-- Service Agreement Margin (service labor + product costs vs agreement revenue)
+- Agreement Margin (agreement labor + product costs vs agreement revenue)
 - Project Margin (project labor vs project revenue)
 - Unbilled Project Work (project hours with $0 revenue)
 - Microsoft Licensing info (excluded from margin)

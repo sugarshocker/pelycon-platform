@@ -1699,18 +1699,18 @@ export async function registerRoutes(
 
     if (actionableAgrRev > 0) {
       insights.push({
-        type: serviceMargin < 55 ? "warning" : serviceMargin < 70 ? "suggestion" : "info",
+        type: serviceMargin < 50 ? "warning" : serviceMargin < 60 ? "suggestion" : "info",
         category: "labor",
-        title: "Service Agreement Margin",
-        detail: `Agreement revenue (excl. Microsoft): ${fmtD(actionableAgrRev)}/yr. Service labor: ${fmtD(serviceLaborCost)} (${serviceHours.toFixed(0)} hrs). Product costs: ${fmtD(additionCost)}. Service margin: ${serviceMargin.toFixed(1)}%.`,
-        impact: serviceMargin < 55 ? `Service margin is below 55%. Review whether too many hours are being spent or if the agreement price needs adjusting.` : undefined,
+        title: "Agreement Margin",
+        detail: `Agreement revenue (excl. Microsoft): ${fmtD(actionableAgrRev)}/yr. Agreement labor: ${fmtD(serviceLaborCost)} (${serviceHours.toFixed(0)} hrs). Product costs: ${fmtD(additionCost)}. Agreement margin: ${serviceMargin.toFixed(1)}%.`,
+        impact: serviceMargin < 50 ? `Agreement margin is below 50%. Review whether too many hours are being spent or if the agreement price needs adjusting.` : undefined,
       });
     }
 
     if (projectRev > 0 || projectLaborCost > 0) {
       if (projectRev > 0 && projectLaborCost > 0) {
         insights.push({
-          type: projectMargin! < 50 ? "warning" : "info",
+          type: projectMargin! < 50 ? "warning" : projectMargin! < 60 ? "suggestion" : "info",
           category: "project",
           title: "Project Margin",
           detail: `Project revenue: ${fmtD(projectRev)}. Project labor: ${fmtD(projectLaborCost)} (${projectHours.toFixed(0)} hrs)${projectProductCost > 0 ? `. Product costs: ${fmtD(projectProductCost)}` : ""}${expenseCost > 0 ? `. Expenses: ${fmtD(expenseCost)}` : ""}. Project margin: ${projectMargin!.toFixed(1)}%.`,
@@ -1761,21 +1761,21 @@ export async function registerRoutes(
       }
     }
 
-    if (overallMargin < 55) {
-      const gap = Math.round(actionableTotalRev * 0.7 - (actionableTotalRev - actionableTotalCost));
+    if (overallMargin < 43) {
+      const gap = Math.round(actionableTotalRev * 0.52 - (actionableTotalRev - actionableTotalCost));
       insights.push({
         type: "warning",
         category: "overall",
-        title: "Overall Margin Below 55%",
-        detail: `Combined margin is ${overallMargin.toFixed(1)}% (excl. Microsoft). Close a ${fmtD(gap)}/yr gap to reach 70% — price increases, fewer hours, or cheaper staffing.`,
+        title: "Overall Margin Below 43%",
+        detail: `Combined margin is ${overallMargin.toFixed(1)}% (excl. Microsoft). Close a ${fmtD(gap)}/yr gap to reach 52% — price increases, fewer hours, or cheaper staffing.`,
       });
-    } else if (overallMargin < 70) {
-      const gap = Math.round(actionableTotalRev * 0.7 - (actionableTotalRev - actionableTotalCost));
+    } else if (overallMargin < 52) {
+      const gap = Math.round(actionableTotalRev * 0.52 - (actionableTotalRev - actionableTotalCost));
       insights.push({
         type: "suggestion",
         category: "overall",
-        title: "Overall Margin Below 70% Target",
-        detail: `Combined margin is ${overallMargin.toFixed(1)}%. Closing a ${fmtD(gap)}/yr gap would get you to 70%.`,
+        title: "Overall Margin Below 52% Target",
+        detail: `Combined margin is ${overallMargin.toFixed(1)}%. Closing a ${fmtD(gap)}/yr gap would get you to 52%.`,
       });
     }
 

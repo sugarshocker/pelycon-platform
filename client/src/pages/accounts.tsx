@@ -126,12 +126,18 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
-function MarginBadge({ margin }: { margin: number | null | undefined }) {
+function MarginBadge({ margin, type = "segment" }: { margin: number | null | undefined; type?: "segment" | "overall" }) {
   if (margin === null || margin === undefined) return <span className="text-muted-foreground">—</span>;
-  const color = margin >= 70 ? "text-green-600 dark:text-green-400"
-    : margin >= 55 ? "text-yellow-600 dark:text-yellow-400"
-    : margin >= 0 ? "text-orange-600 dark:text-orange-400"
-    : "text-red-600 dark:text-red-400";
+  let color: string;
+  if (type === "overall") {
+    color = margin >= 52 ? "text-green-600 dark:text-green-400"
+      : margin >= 43 ? "text-yellow-600 dark:text-yellow-400"
+      : "text-red-600 dark:text-red-400";
+  } else {
+    color = margin >= 60 ? "text-green-600 dark:text-green-400"
+      : margin >= 50 ? "text-yellow-600 dark:text-yellow-400"
+      : "text-red-600 dark:text-red-400";
+  }
   return <span className={`font-medium ${color}`}>{margin.toFixed(1)}%</span>;
 }
 
@@ -240,8 +246,8 @@ function EngineerBreakdownDialog({
                 {includeMs && msLicensingCost > 0 && <div className="text-[10px] text-muted-foreground">Incl. {formatCurrency(msLicensingCost)} MS</div>}
               </div>
               <div className="border rounded-lg p-3">
-                <div className="text-xs text-muted-foreground">Service Margin</div>
-                <div className="text-sm font-semibold" data-testid="text-breakdown-svc-margin">
+                <div className="text-xs text-muted-foreground">Agreement Margin</div>
+                <div className="text-sm font-semibold" data-testid="text-breakdown-agr-margin">
                   <MarginBadge margin={serviceMargin} />
                 </div>
                 {!includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
@@ -290,7 +296,7 @@ function EngineerBreakdownDialog({
               <div className="border rounded-lg p-3">
                 <div className="text-xs text-muted-foreground">Overall Margin</div>
                 <div className="text-sm font-semibold" data-testid="text-breakdown-margin">
-                  <MarginBadge margin={overallMargin} />
+                  <MarginBadge margin={overallMargin} type="overall" />
                 </div>
                 {!includeMs && msLicensingRevenue > 0 && <div className="text-[10px] text-muted-foreground">Excl. Microsoft</div>}
               </div>
@@ -798,7 +804,7 @@ export default function Accounts() {
             <Card className="p-3">
               <div className="text-xs text-muted-foreground mb-1">Overall Margin</div>
               <div className="text-lg font-semibold" data-testid="text-overall-margin">
-                <MarginBadge margin={overallMargin} />
+                <MarginBadge margin={overallMargin} type="overall" />
               </div>
             </Card>
           </div>
@@ -925,9 +931,9 @@ export default function Accounts() {
                               const rev = acct.totalRevenue || 0;
                               const cost = (acct.laborCost || 0) + (acct.additionCost || 0) + ((acct as any).msLicensingCost || 0);
                               const m = rev > 0 ? ((rev - cost) / rev) * 100 : null;
-                              return <MarginBadge margin={m} />;
+                              return <MarginBadge margin={m} type="overall" />;
                             }
-                            return <MarginBadge margin={acct.grossMarginPercent} />;
+                            return <MarginBadge margin={acct.grossMarginPercent} type="overall" />;
                           })()}
                           {(() => {
                             const acctInsights = (acct.marginAnalysis as MarginInsight[] | null) || [];
