@@ -165,6 +165,7 @@ function EngineerBreakdownDialog({
   const serviceLaborCost = (account as any).serviceLaborCost || 0;
   const projectLaborCost = (account as any).projectLaborCost || 0;
   const additionCost = account.additionCost || 0;
+  const projectProductCost = (account as any).projectProductCost || 0;
   const msLicensingRevenue = (account as any).msLicensingRevenue || 0;
   const msLicensingCost = (account as any).msLicensingCost || 0;
   const rawTotalCost = account.totalCost || 0;
@@ -177,8 +178,8 @@ function EngineerBreakdownDialog({
   const effectiveAdditionCost = includeMs ? additionCost + msLicensingCost : additionCost;
 
   const serviceMargin = effectiveAgrRev > 0 ? ((effectiveAgrRev - serviceLaborCost - effectiveAdditionCost) / effectiveAgrRev) * 100 : null;
-  const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost) / projectRev) * 100 : null;
-  const overallMargin = totalRev > 0 ? ((totalRev - (laborCost + effectiveAdditionCost)) / totalRev) * 100 : null;
+  const projectMargin = projectRev > 0 ? ((projectRev - projectLaborCost - projectProductCost) / projectRev) * 100 : null;
+  const overallMargin = totalRev > 0 ? ((totalRev - (laborCost + effectiveAdditionCost + projectProductCost)) / totalRev) * 100 : null;
   const warningCount = insights.filter(i => i.type === "warning").length;
   const suggestionCount = insights.filter(i => i.type === "suggestion").length;
 
@@ -330,7 +331,14 @@ function EngineerBreakdownDialog({
                     <div
                       className="bg-orange-500 rounded-sm"
                       style={{ width: `${(additionCost / totalCost) * 100}%` }}
-                      title={`Products: ${formatCurrency(additionCost)}`}
+                      title={`Agr. Products: ${formatCurrency(additionCost)}`}
+                    />
+                  )}
+                  {projectProductCost > 0 && (
+                    <div
+                      className="bg-amber-500 rounded-sm"
+                      style={{ width: `${(projectProductCost / totalCost) * 100}%` }}
+                      title={`Project Products: ${formatCurrency(projectProductCost)}`}
                     />
                   )}
                   {msLicensingCost > 0 && (
@@ -349,7 +357,13 @@ function EngineerBreakdownDialog({
                   {additionCost > 0 && (
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
-                      Products: {formatCurrency(additionCost)} ({((additionCost / totalCost) * 100).toFixed(0)}%)
+                      Agr. Products: {formatCurrency(additionCost)} ({((additionCost / totalCost) * 100).toFixed(0)}%)
+                    </span>
+                  )}
+                  {projectProductCost > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" />
+                      Project Products: {formatCurrency(projectProductCost)} ({((projectProductCost / totalCost) * 100).toFixed(0)}%)
                     </span>
                   )}
                   {msLicensingCost > 0 && (
@@ -658,13 +672,14 @@ export default function Accounts() {
     totalProjectRev: (accounts || []).reduce((sum, a) => sum + (a.projectRevenue || 0), 0),
     totalLaborCost: (accounts || []).reduce((sum, a) => sum + (a.laborCost || 0), 0),
     totalAdditionCost: (accounts || []).reduce((sum, a) => sum + (a.additionCost || 0), 0),
+    totalProjectProductCost: (accounts || []).reduce((sum, a) => sum + ((a as any).projectProductCost || 0), 0),
     totalHours: (accounts || []).reduce((sum, a) => sum + (a.totalHours || 0), 0),
   };
 
   const effectiveAgrRev = includeMs ? summary.totalAgreementRev : summary.totalAgreementRev - totalMsRev;
   const effectiveAddCost = includeMs ? summary.totalAdditionCost + totalMsCost : summary.totalAdditionCost;
   const overallRev = effectiveAgrRev + summary.totalProjectRev;
-  const overallTotalCost = summary.totalLaborCost + effectiveAddCost;
+  const overallTotalCost = summary.totalLaborCost + effectiveAddCost + summary.totalProjectProductCost;
   const overallMargin = overallRev > 0 && overallTotalCost > 0
     ? ((overallRev - overallTotalCost) / overallRev) * 100
     : null;

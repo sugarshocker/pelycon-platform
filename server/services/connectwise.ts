@@ -537,6 +537,7 @@ function classifyAddition(name: string): "labor" | "microsoft" | "other" {
 
 interface InvoicedAdditionTotals {
   additionCost: number;
+  projectProductCost: number;
   msLicensingRevenue: number;
   msLicensingCost: number;
   agreementAdditions: AgreementAdditionEntry[];
@@ -551,7 +552,7 @@ async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): P
 
     while (true) {
       const data = await apiGet(`/system/reports/Product`, {
-        conditions: `company_recid = ${cwCompanyId} AND date_invoice > [${dateStr}] AND Agreement != null`,
+        conditions: `company_recid = ${cwCompanyId} AND date_invoice > [${dateStr}]`,
         pageSize: String(pageSize),
         page: String(page),
       });
@@ -593,6 +594,7 @@ async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): P
     };
 
     let additionCost = 0;
+    let projectProductCost = 0;
     let msLicensingRevenue = 0;
     let msLicensingCost = 0;
     const additionMap = new Map<string, { cost: number; revenue: number; qty: number; agreement: string }>();
@@ -604,19 +606,25 @@ async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): P
       const qty = getNum(row, "Quantity");
       const agreement = getStr(row, "Agreement");
 
-      const category = classifyAddition(itemDesc);
-      const key = `${itemDesc}|||${agreement}`;
-      const existing = additionMap.get(key) || { cost: 0, revenue: 0, qty: 0, agreement };
-      existing.cost += extCost;
-      existing.revenue += extPrice;
-      existing.qty += qty;
-      additionMap.set(key, existing);
+      const isAgreementLinked = !!agreement;
 
-      if (category === "microsoft") {
-        msLicensingRevenue += extPrice;
-        msLicensingCost += extCost;
-      } else if (category === "other") {
-        additionCost += extCost;
+      if (isAgreementLinked) {
+        const category = classifyAddition(itemDesc);
+        const key = `${itemDesc}|||${agreement}`;
+        const existing = additionMap.get(key) || { cost: 0, revenue: 0, qty: 0, agreement };
+        existing.cost += extCost;
+        existing.revenue += extPrice;
+        existing.qty += qty;
+        additionMap.set(key, existing);
+
+        if (category === "microsoft") {
+          msLicensingRevenue += extPrice;
+          msLicensingCost += extCost;
+        } else if (category === "other") {
+          additionCost += extCost;
+        }
+      } else {
+        projectProductCost += extCost;
       }
     }
 
@@ -645,10 +653,11 @@ async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): P
 
     agreementAdditions.sort((a, b) => b.annualCost - a.annualCost);
 
-    log(`[financials] Company ${cwCompanyId}: invoiced additions from Product report: ${allRows.length} line items, additionCost=${additionCost.toFixed(2)}, msRev=${msLicensingRevenue.toFixed(2)}, msCost=${msLicensingCost.toFixed(2)}`);
+    log(`[financials] Company ${cwCompanyId}: invoiced products from Product report: ${allRows.length} line items, additionCost=${additionCost.toFixed(2)}, projectProductCost=${projectProductCost.toFixed(2)}, msRev=${msLicensingRevenue.toFixed(2)}, msCost=${msLicensingCost.toFixed(2)}`);
 
     return {
       additionCost: Math.round(additionCost * 100) / 100,
+      projectProductCost: Math.round(projectProductCost * 100) / 100,
       msLicensingRevenue: Math.round(msLicensingRevenue * 100) / 100,
       msLicensingCost: Math.round(msLicensingCost * 100) / 100,
       agreementAdditions,
@@ -667,6 +676,7 @@ export interface CwCompanyFinancials {
   projectLaborCost: number;
   laborCost: number;
   additionCost: number;
+  projectProductCost: number;
   msLicensingRevenue: number;
   msLicensingCost: number;
   totalCost: number;
@@ -820,16 +830,18 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   const invoicedAdditions = await getInvoicedAdditionCosts(cwCompanyId, dateStr);
 
   let additionCost = 0;
+  let projectProductCost = 0;
   let msLicensingRevenue = 0;
   let msLicensingCost = 0;
   let agreementAdditions: AgreementAdditionEntry[] = [];
 
   if (invoicedAdditions) {
     additionCost = invoicedAdditions.additionCost;
+    projectProductCost = invoicedAdditions.projectProductCost;
     msLicensingRevenue = invoicedAdditions.msLicensingRevenue;
     msLicensingCost = invoicedAdditions.msLicensingCost;
     agreementAdditions = invoicedAdditions.agreementAdditions;
-    log(`[financials] Company ${cwCompanyId}: using INVOICED addition costs (Product report)`);
+    log(`[financials] Company ${cwCompanyId}: using INVOICED costs (Product report), projProductCost=${projectProductCost.toFixed(2)}`);
   } else {
     log(`[financials] Company ${cwCompanyId}: no invoiced addition data, falling back to PROJECTED addition costs`);
     for (const agr of agreementIds) {
@@ -922,7 +934,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
   const labor = await getCompanyLaborCosts(cwCompanyId);
   const totalRev = agreementRevenue + projectRevenue;
   const actionableAgrRev = agreementRevenue - msLicensingRevenue;
-  const totalCostVal = Math.round((labor.laborCost + additionCost + msLicensingCost) * 100) / 100;
+  const totalCostVal = Math.round((labor.laborCost + additionCost + projectProductCost + msLicensingCost) * 100) / 100;
 
   let serviceMarginPercent: number | null = null;
   if (actionableAgrRev > 0) {
@@ -931,11 +943,11 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
 
   let projectMarginPercent: number | null = null;
   if (projectRevenue > 0) {
-    projectMarginPercent = Math.round(((projectRevenue - labor.projectLaborCost) / projectRevenue) * 1000) / 10;
+    projectMarginPercent = Math.round(((projectRevenue - labor.projectLaborCost - projectProductCost) / projectRevenue) * 1000) / 10;
   }
 
   const actionableTotalRev = totalRev - msLicensingRevenue;
-  const actionableTotalCost = labor.laborCost + additionCost;
+  const actionableTotalCost = labor.laborCost + additionCost + projectProductCost;
   let grossMarginPercent: number | null = null;
   if (actionableTotalRev > 0) {
     grossMarginPercent = Math.round(((actionableTotalRev - actionableTotalCost) / actionableTotalRev) * 1000) / 10;
@@ -949,6 +961,7 @@ export async function getCompanyFinancials(cwCompanyId: number): Promise<CwCompa
     projectLaborCost: labor.projectLaborCost,
     laborCost: labor.laborCost,
     additionCost,
+    projectProductCost,
     msLicensingRevenue,
     msLicensingCost,
     totalCost: totalCostVal,

@@ -60,6 +60,7 @@ export const clientAccounts = pgTable("client_accounts", {
   serviceLaborCost: real("service_labor_cost"),
   projectLaborCost: real("project_labor_cost"),
   additionCost: real("addition_cost"),
+  projectProductCost: real("project_product_cost"),
   msLicensingRevenue: real("ms_licensing_revenue"),
   msLicensingCost: real("ms_licensing_cost"),
   totalCost: real("total_cost"),

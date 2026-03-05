@@ -40,10 +40,11 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 
 ## Margin Calculation (Separated Service vs Project)
 - **Service Margin** = (Agreement Rev − MS Rev − Service Labor − Product Costs) / (Agreement Rev − MS Rev). Only agreement labor (service tickets) and third-party product costs count against agreement revenue.
-- **Project Margin** = (Project Rev − Project Labor) / Project Rev. Only project ticket labor counts against project revenue.
-- **Overall Margin** = (Total Rev − MS Rev − All Labor − Product Costs) / (Total Rev − MS Rev). Combined view.
+- **Project Margin** = (Project Rev − Project Labor − Project Product Costs) / Project Rev. Project ticket labor AND non-agreement product costs count against project revenue.
+- **Overall Margin** = (Total Rev − MS Rev − All Labor − Product Costs − Project Product Costs) / (Total Rev − MS Rev). Combined view.
 - **Labor Cost Separation**: `serviceLaborCost` from service ticket time entries, `projectLaborCost` from project ticket time entries. Both from `/time/entries` with `chargeToType` field.
 - **Addition Cost**: Uses actual invoiced costs from CW Reports API `Product` report (primary) — sums `Extended_Cost` for agreement-linked products invoiced in trailing 12 months. Falls back to projected `/finance/agreements/{id}/additions` costs × 12 only if no invoiced product data found.
+- **Project Product Cost**: Non-agreement product costs from the Product report — products on Standard/Progress/Misc invoices that aren't tied to an agreement. These are standalone hardware, software, or project-related product sales. Previously missing, which inflated margins.
 - **Addition Categories**: "labor" (managed services with labor-backed cost), "microsoft" (fixed ~16% margin, pass-through, excluded from margin calc), or "other" (third-party products included in margin).
 - **Microsoft Licensing Toggle**: "Include MS Licensing" switch on Accounts page. OFF (default) = MS excluded from both revenue and cost in margin calc. ON = MS revenue and cost both included. Toggle applies to summary cards, table margin column, and detail dialog. Backend analysis insights always use the "excluded" baseline.
 - **Margin Thresholds**: green ≥70%, yellow ≥55%, orange <55%.
@@ -59,7 +60,7 @@ Rule-based analysis generates concise, plain-English insights stored in `marginA
 - Overall Margin warnings (<55%) and suggestions (<70%)
 
 ## Schema Columns (clientAccounts)
-`laborCost`, `serviceLaborCost`, `projectLaborCost`, `additionCost`, `msLicensingRevenue`, `msLicensingCost`, `totalCost`, `serviceMarginPercent`, `projectMarginPercent`, `grossMarginPercent`, `serviceHours`, `projectHours`, `totalHours`, `engineerBreakdown` (jsonb), `agreementAdditions` (jsonb with category field), `marginAnalysis` (jsonb)
+`laborCost`, `serviceLaborCost`, `projectLaborCost`, `additionCost`, `projectProductCost`, `msLicensingRevenue`, `msLicensingCost`, `totalCost`, `serviceMarginPercent`, `projectMarginPercent`, `grossMarginPercent`, `serviceHours`, `projectHours`, `totalHours`, `engineerBreakdown` (jsonb), `agreementAdditions` (jsonb with category field), `marginAnalysis` (jsonb)
 
 ## Auto-Sync
 - ConnectWise financial data syncs automatically every 6 hours (first run 30s after startup)
