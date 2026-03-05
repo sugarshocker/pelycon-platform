@@ -220,6 +220,12 @@ export async function registerRoutes(
         invoiceHeaderReport: { ihAgrAmount, ihTimeAmount, ihMiscAmount, ihExpenseAmount, ihInvoiceAmount, count: (invoiceHeaders.row_values || []).length },
         timeReport: { timeRevenue, timeCost, timeBilledRevenue, timeAgrCovered, totalHoursActual, rowCount: allTimeRows.length },
         productReport: { prodRevenue, prodCost, agrProdRevenue, agrProdCost, nonAgrProdRevenue, nonAgrProdCost, rowCount: allProdRows.length },
+        derivedTotals: {
+          revenueFromLineItems: timeBilledRevenue + prodRevenue,
+          revenueFromLineItemsNet: timeBilledRevenue + prodRevenue,
+          costFromLineItems: timeCost + prodCost,
+          noteAboutTimeCost: "Time report Hourly_Cost is often inaccurate; use member hourlyCost method instead",
+        },
         invoiceBreakdown: invoiceBreakdown.slice(0, 5),
         ihBreakdown: ihBreakdown.slice(0, 5),
       });
