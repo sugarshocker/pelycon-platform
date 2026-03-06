@@ -425,6 +425,7 @@ export const users = pgTable("users", {
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").default("viewer").notNull(),
+  pageAccess: jsonb("page_access"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

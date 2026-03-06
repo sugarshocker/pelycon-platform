@@ -8,6 +8,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   role: string;
+  pageAccess: Record<string, boolean> | null;
 }
 
 export function getToken(): string | null {

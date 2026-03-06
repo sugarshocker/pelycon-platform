@@ -7,7 +7,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Frontend**: React + Vite + Tailwind CSS + shadcn/ui components
 - **Backend**: Express.js API routes
 - **Database**: PostgreSQL (Neon-backed) for TBR snapshot history
-- **Auth**: Individual user accounts with email/password login (bcrypt hashed), role-based access (admin/editor/viewer), bearer token sessions
+- **Auth**: Individual user accounts with email/password login (bcrypt hashed), role-based access (admin/editor/viewer), per-user page access control (jsonb `pageAccess` on users table), bearer token sessions
 - **AI**: Anthropic Claude via Replit AI Integrations for roadmap generation
 - **Brand**: Pelycon Technologies (Orange #E77125, Storm Gray #394442, Poppins font)
 

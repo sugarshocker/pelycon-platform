@@ -19,9 +19,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Users, Shield, Eye, UserCog } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Shield, Eye, UserCog, Lock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useCurrentUser } from "@/App";
+import { useCurrentUser, ALL_PAGE_KEYS } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 
 interface UserRecord {
@@ -29,6 +29,7 @@ interface UserRecord {
   email: string;
   displayName: string;
   role: string;
+  pageAccess: Record<string, boolean> | null;
   createdAt: string;
 }
 
@@ -37,6 +38,66 @@ const ROLE_LABELS: Record<string, { label: string; icon: typeof Shield }> = {
   editor: { label: "Editor", icon: UserCog },
   viewer: { label: "Viewer", icon: Eye },
 };
+
+function PageAccessToggles({
+  pageAccess,
+  onChange,
+  disabled,
+}: {
+  pageAccess: Record<string, boolean>;
+  onChange: (updated: Record<string, boolean>) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-2">
+        <Lock className="h-3.5 w-3.5" />
+        Page Access
+      </Label>
+      <div className="grid grid-cols-2 gap-2">
+        {ALL_PAGE_KEYS.map(({ key, label }) => {
+          const enabled = pageAccess[key] !== false;
+          return (
+            <button
+              key={key}
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ ...pageAccess, [key]: !enabled })}
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                enabled
+                  ? "border-primary bg-primary/10 text-primary font-medium"
+                  : "border-muted bg-muted/30 text-muted-foreground"
+              } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-primary/60"}`}
+              data-testid={`toggle-page-${key}`}
+            >
+              <div
+                className={`h-3 w-3 rounded-sm border ${
+                  enabled ? "bg-primary border-primary" : "border-muted-foreground/40"
+                }`}
+              />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function getDefaultPageAccess(): Record<string, boolean> {
+  const access: Record<string, boolean> = {};
+  ALL_PAGE_KEYS.forEach(({ key }) => { access[key] = true; });
+  return access;
+}
+
+function getPageAccessSummary(user: UserRecord): string {
+  if (user.role === "admin") return "All pages";
+  if (!user.pageAccess) return "All pages";
+  const denied = ALL_PAGE_KEYS.filter(({ key }) => user.pageAccess?.[key] === false);
+  if (denied.length === 0) return "All pages";
+  const allowed = ALL_PAGE_KEYS.filter(({ key }) => user.pageAccess?.[key] !== false);
+  return `${allowed.length}/${ALL_PAGE_KEYS.length} pages`;
+}
 
 export default function UserManagement() {
   const { user: currentUser } = useCurrentUser();
@@ -49,13 +110,14 @@ export default function UserManagement() {
   const [formName, setFormName] = useState("");
   const [formPassword, setFormPassword] = useState("");
   const [formRole, setFormRole] = useState("viewer");
+  const [formPageAccess, setFormPageAccess] = useState<Record<string, boolean>>(getDefaultPageAccess());
 
   const { data: usersList = [], isLoading } = useQuery<UserRecord[]>({
     queryKey: ["/api/users"],
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { email: string; displayName: string; password: string; role: string }) => {
+    mutationFn: async (data: { email: string; displayName: string; password: string; role: string; pageAccess: Record<string, boolean> }) => {
       const res = await apiRequest("POST", "/api/users", data);
       return res.json();
     },
@@ -71,7 +133,7 @@ export default function UserManagement() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, ...data }: { id: number; email?: string; displayName?: string; password?: string; role?: string }) => {
+    mutationFn: async ({ id, ...data }: { id: number; email?: string; displayName?: string; password?: string; role?: string; pageAccess?: Record<string, boolean> }) => {
       const res = await apiRequest("PATCH", `/api/users/${id}`, data);
       return res.json();
     },
@@ -105,6 +167,7 @@ export default function UserManagement() {
     setFormName("");
     setFormPassword("");
     setFormRole("viewer");
+    setFormPageAccess(getDefaultPageAccess());
   }
 
   function openCreate() {
@@ -117,18 +180,31 @@ export default function UserManagement() {
     setFormName(user.displayName);
     setFormPassword("");
     setFormRole(user.role);
+    setFormPageAccess(user.pageAccess || getDefaultPageAccess());
     setEditingUser(user);
   }
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    createMutation.mutate({ email: formEmail, displayName: formName, password: formPassword, role: formRole });
+    createMutation.mutate({
+      email: formEmail,
+      displayName: formName,
+      password: formPassword,
+      role: formRole,
+      pageAccess: formRole === "admin" ? getDefaultPageAccess() : formPageAccess,
+    });
   }
 
   function handleUpdate(e: React.FormEvent) {
     e.preventDefault();
     if (!editingUser) return;
-    const data: any = { id: editingUser.id, email: formEmail, displayName: formName, role: formRole };
+    const data: any = {
+      id: editingUser.id,
+      email: formEmail,
+      displayName: formName,
+      role: formRole,
+      pageAccess: formRole === "admin" ? getDefaultPageAccess() : formPageAccess,
+    };
     if (formPassword) data.password = formPassword;
     updateMutation.mutate(data);
   }
@@ -186,6 +262,9 @@ export default function UserManagement() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="text-xs" data-testid={`badge-page-access-${u.id}`}>
+                    {getPageAccessSummary(u)}
+                  </Badge>
                   <Badge variant={roleBadgeVariant(u.role)} data-testid={`badge-user-role-${u.id}`}>
                     {ROLE_LABELS[u.role]?.label || u.role}
                   </Badge>
@@ -247,6 +326,15 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+            {formRole !== "admin" && (
+              <PageAccessToggles
+                pageAccess={formPageAccess}
+                onChange={setFormPageAccess}
+              />
+            )}
+            {formRole === "admin" && (
+              <p className="text-xs text-muted-foreground italic">Admins automatically have access to all pages.</p>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
               <Button
@@ -292,6 +380,15 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+            {formRole !== "admin" && (
+              <PageAccessToggles
+                pageAccess={formPageAccess}
+                onChange={setFormPageAccess}
+              />
+            )}
+            {formRole === "admin" && (
+              <p className="text-xs text-muted-foreground italic">Admins automatically have access to all pages.</p>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
               <Button

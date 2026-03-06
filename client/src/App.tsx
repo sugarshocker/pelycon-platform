@@ -49,20 +49,28 @@ const UserContext = createContext<UserContextType>({ user: null });
 export function useCurrentUser() { return useContext(UserContext); }
 
 const NAV_ITEMS = [
-  { title: "Dashboard", path: "/", icon: LayoutDashboard },
-  { title: "TBR Reviews", path: "/reviews", icon: FilePen },
-  { title: "Staging", path: "/staging", icon: ClipboardList },
-  { title: "Accounts", path: "/accounts", icon: Building2 },
-  { title: "Receivables", path: "/receivables", icon: Receipt },
+  { title: "Dashboard", path: "/", icon: LayoutDashboard, accessKey: "dashboard" },
+  { title: "TBR Reviews", path: "/reviews", icon: FilePen, accessKey: "reviews" },
+  { title: "Staging", path: "/staging", icon: ClipboardList, accessKey: "staging" },
+  { title: "Accounts", path: "/accounts", icon: Building2, accessKey: "accounts" },
+  { title: "Receivables", path: "/receivables", icon: Receipt, accessKey: "receivables" },
 ];
+
+export const ALL_PAGE_KEYS = NAV_ITEMS.map(i => ({ key: i.accessKey, label: i.title }));
+
+function hasPageAccess(user: AuthUser, accessKey: string): boolean {
+  if (user.role === "admin") return true;
+  if (!user.pageAccess) return true;
+  return user.pageAccess[accessKey] !== false;
+}
 
 function AppSidebar({ onLogout, user }: { onLogout: () => void; user: AuthUser }) {
   const [location, setLocation] = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  const navItems = [...NAV_ITEMS];
+  const navItems = NAV_ITEMS.filter(item => hasPageAccess(user, item.accessKey));
   if (user.role === "admin") {
-    navItems.push({ title: "Users", path: "/users", icon: Users });
+    navItems.push({ title: "Users", path: "/users", icon: Users, accessKey: "users" });
   }
 
   return (
@@ -163,15 +171,15 @@ function AuthenticatedApp({ onLogout, user }: { onLogout: () => void; user: Auth
             </header>
             <main className="flex-1 overflow-auto">
               <Switch>
-                <Route path="/" component={Tracker} />
-                <Route path="/reviews" component={Dashboard} />
-                <Route path="/staging" component={Staging} />
-                <Route path="/accounts" component={Accounts} />
-                <Route path="/receivables" component={Receivables} />
+                {hasPageAccess(user, "dashboard") && <Route path="/" component={Tracker} />}
+                {hasPageAccess(user, "reviews") && <Route path="/reviews" component={Dashboard} />}
+                {hasPageAccess(user, "staging") && <Route path="/staging" component={Staging} />}
+                {hasPageAccess(user, "accounts") && <Route path="/accounts" component={Accounts} />}
+                {hasPageAccess(user, "receivables") && <Route path="/receivables" component={Receivables} />}
                 {user.role === "admin" && <Route path="/users" component={UserManagement} />}
                 <Route>
                   <div className="flex items-center justify-center h-full">
-                    <p className="text-muted-foreground">Page not found</p>
+                    <p className="text-muted-foreground">You do not have access to this page.</p>
                   </div>
                 </Route>
               </Switch>
