@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DollarSign,
   AlertTriangle,
   Clock,
   TrendingUp,
+  TrendingDown,
   Search,
   ChevronDown,
   ChevronUp,
@@ -21,6 +23,9 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
+  X,
+  Activity,
+  BarChart3,
 } from "lucide-react";
 import type { ClientAccount } from "@shared/schema";
 
@@ -43,6 +48,7 @@ interface ARInvoiceEntry {
   type: string;
   daysToPay: number | null;
   daysOverdue: number;
+  paidDate: string | null;
 }
 
 interface ARSummary {
@@ -305,6 +311,368 @@ function ClientARDetail({ account, ar, open, onOpenChange }: { account: ClientWi
   );
 }
 
+type AccountWithAR = ClientWithAR & { ar: ARSummary };
+
+const CLIENT_COLORS = [
+  { line: "#f97316", fill: "rgba(249,115,22,0.15)", label: "text-orange-600 dark:text-orange-400" },
+  { line: "#3b82f6", fill: "rgba(59,130,246,0.15)", label: "text-blue-600 dark:text-blue-400" },
+  { line: "#8b5cf6", fill: "rgba(139,92,246,0.15)", label: "text-violet-600 dark:text-violet-400" },
+  { line: "#10b981", fill: "rgba(16,185,129,0.15)", label: "text-emerald-600 dark:text-emerald-400" },
+  { line: "#ec4899", fill: "rgba(236,72,153,0.15)", label: "text-pink-600 dark:text-pink-400" },
+  { line: "#f59e0b", fill: "rgba(245,158,11,0.15)", label: "text-amber-600 dark:text-amber-400" },
+];
+
+interface PaymentEvent {
+  date: string;
+  amount: number;
+  invoiceNumber: string;
+  invoiceTotal: number;
+  clientName: string;
+  clientId: number;
+  dueDate: string;
+  daysToPay: number | null;
+}
+
+interface MonthlyPaymentSummary {
+  month: string;
+  paymentCount: number;
+  paymentTotal: number;
+  invoicedTotal: number;
+  cumulativeBalance: number;
+}
+
+function buildCatchUpData(clients: AccountWithAR[]) {
+  const allPayments: PaymentEvent[] = [];
+  const clientMonthlyData = new Map<number, MonthlyPaymentSummary[]>();
+
+  for (const client of clients) {
+    const invoices = client.ar.recentInvoices;
+    const monthMap = new Map<string, { paid: number; paidCount: number; invoiced: number }>();
+
+    for (const inv of invoices) {
+      const invMonthKey = inv.date.substring(0, 7);
+      const existing = monthMap.get(invMonthKey) || { paid: 0, paidCount: 0, invoiced: 0 };
+      existing.invoiced += inv.total;
+
+      if (inv.paidDate && inv.balance === 0) {
+        allPayments.push({
+          date: inv.paidDate,
+          amount: inv.payments,
+          invoiceNumber: inv.invoiceNumber,
+          invoiceTotal: inv.total,
+          clientName: client.companyName,
+          clientId: client.id,
+          dueDate: inv.dueDate,
+          daysToPay: inv.daysToPay,
+        });
+        const paidMonthKey = inv.paidDate.substring(0, 7);
+        const paidBucket = monthMap.get(paidMonthKey) || { paid: 0, paidCount: 0, invoiced: 0 };
+        paidBucket.paid += inv.payments;
+        paidBucket.paidCount++;
+        monthMap.set(paidMonthKey, paidBucket);
+      }
+
+      monthMap.set(invMonthKey, existing);
+    }
+
+    const now = new Date();
+    const continuousMonths: string[] = [];
+    for (let i = 17; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      continuousMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+
+    let cumBalance = 0;
+    const monthlySummaries: MonthlyPaymentSummary[] = continuousMonths.map(m => {
+      const d = monthMap.get(m) || { paid: 0, paidCount: 0, invoiced: 0 };
+      cumBalance += d.invoiced - d.paid;
+      return {
+        month: m,
+        paymentCount: d.paidCount,
+        paymentTotal: d.paid,
+        invoicedTotal: d.invoiced,
+        cumulativeBalance: Math.max(0, cumBalance),
+      };
+    });
+    clientMonthlyData.set(client.id, monthlySummaries);
+  }
+
+  allPayments.sort((a, b) => a.date.localeCompare(b.date));
+  return { allPayments, clientMonthlyData };
+}
+
+function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClose: () => void }) {
+  const { allPayments, clientMonthlyData } = useMemo(() => buildCatchUpData(clients), [clients]);
+
+  const allMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    clientMonthlyData.forEach(summaries => summaries.forEach(s => monthSet.add(s.month)));
+    return Array.from(monthSet).sort();
+  }, [clientMonthlyData]);
+
+  const recentMonths = allMonths.slice(-12);
+
+  const velocityAnalysis = useMemo(() => {
+    return clients.map((client, idx) => {
+      const monthly = clientMonthlyData.get(client.id) || [];
+      const last6 = monthly.slice(-6);
+      const prior6 = monthly.slice(-12, -6);
+
+      const recentPayments = last6.reduce((s, m) => s + m.paymentCount, 0);
+      const recentPaid = last6.reduce((s, m) => s + m.paymentTotal, 0);
+      const priorPayments = prior6.reduce((s, m) => s + m.paymentCount, 0);
+      const priorPaid = prior6.reduce((s, m) => s + m.paymentTotal, 0);
+
+      const recentAvgPerMonth = last6.length > 0 ? recentPayments / last6.length : 0;
+      const priorAvgPerMonth = prior6.length > 0 ? priorPayments / prior6.length : 0;
+
+      const frequencyChange = priorAvgPerMonth > 0
+        ? ((recentAvgPerMonth - priorAvgPerMonth) / priorAvgPerMonth) * 100
+        : recentAvgPerMonth > 0 ? 100 : 0;
+
+      const recentAvgAmount = recentPayments > 0 ? recentPaid / recentPayments : 0;
+      const priorAvgAmount = priorPayments > 0 ? priorPaid / priorPayments : 0;
+
+      const balanceStart = monthly.length >= 6 ? monthly[monthly.length - 6]?.cumulativeBalance ?? 0 : 0;
+      const balanceEnd = monthly.length > 0 ? monthly[monthly.length - 1]?.cumulativeBalance ?? 0 : 0;
+      const balanceTrend = balanceStart > 0 ? ((balanceEnd - balanceStart) / balanceStart) * 100 : 0;
+
+      const isCatchingUp = frequencyChange > 10 || balanceTrend < -10;
+      const isFallingBehind = frequencyChange < -20 && balanceTrend > 10;
+
+      return {
+        client,
+        colorIdx: idx % CLIENT_COLORS.length,
+        recentPayments,
+        recentPaid,
+        priorPayments,
+        priorPaid,
+        recentAvgPerMonth: Math.round(recentAvgPerMonth * 10) / 10,
+        priorAvgPerMonth: Math.round(priorAvgPerMonth * 10) / 10,
+        frequencyChange: Math.round(frequencyChange),
+        recentAvgAmount,
+        priorAvgAmount,
+        balanceStart,
+        balanceEnd,
+        balanceTrend: Math.round(balanceTrend),
+        isCatchingUp,
+        isFallingBehind,
+      };
+    });
+  }, [clients, clientMonthlyData]);
+
+  const chartMaxBalance = useMemo(() => {
+    let max = 0;
+    clientMonthlyData.forEach(summaries => {
+      summaries.forEach(s => { if (s.cumulativeBalance > max) max = s.cumulativeBalance; });
+    });
+    return max || 1;
+  }, [clientMonthlyData]);
+
+  const chartMaxPayments = useMemo(() => {
+    let max = 0;
+    clientMonthlyData.forEach(summaries => {
+      summaries.forEach(s => { if (s.paymentTotal > max) max = s.paymentTotal; });
+    });
+    return max || 1;
+  }, [clientMonthlyData]);
+
+  return (
+    <Card className="p-4 space-y-5 border-2 border-orange-200 dark:border-orange-900/50">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-orange-500" />
+          <h2 className="text-lg font-semibold" data-testid="text-catchup-title">Catch-Up Analysis</h2>
+          <span className="text-xs text-muted-foreground">
+            {clients.length} client{clients.length !== 1 ? "s" : ""} selected
+          </span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-catchup">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-2">
+        {clients.map((c, i) => (
+          <span
+            key={c.id}
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border"
+            style={{ borderColor: CLIENT_COLORS[i % CLIENT_COLORS.length].line }}
+            data-testid={`badge-catchup-client-${c.id}`}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: CLIENT_COLORS[i % CLIENT_COLORS.length].line }} />
+            {c.companyName}
+            <PaymentScoreBadge score={c.ar.paymentScore} />
+          </span>
+        ))}
+      </div>
+
+      {velocityAnalysis.map((v) => (
+        <Card key={v.client.id} className="p-3 space-y-3" data-testid={`card-velocity-${v.client.id}`}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: CLIENT_COLORS[v.colorIdx].line }} />
+              <span className="font-medium text-sm">{v.client.companyName}</span>
+              {v.isCatchingUp && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" data-testid={`badge-catching-up-${v.client.id}`}>
+                  <TrendingUp className="h-3 w-3" /> Catching Up
+                </span>
+              )}
+              {v.isFallingBehind && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" data-testid={`badge-falling-behind-${v.client.id}`}>
+                  <TrendingDown className="h-3 w-3" /> Falling Behind
+                </span>
+              )}
+              {!v.isCatchingUp && !v.isFallingBehind && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                  Steady
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Outstanding: <span className="font-medium text-foreground">{formatCurrency(v.client.ar.outstandingBalance)}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="border rounded-md p-2">
+              <div className="text-[10px] text-muted-foreground uppercase">Payment Freq (recent 6mo)</div>
+              <div className="text-sm font-semibold">{v.recentAvgPerMonth}/mo</div>
+              <div className={`text-[10px] ${v.frequencyChange > 0 ? "text-green-600 dark:text-green-400" : v.frequencyChange < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                {v.frequencyChange > 0 ? "+" : ""}{v.frequencyChange}% vs prior
+              </div>
+            </div>
+            <div className="border rounded-md p-2">
+              <div className="text-[10px] text-muted-foreground uppercase">Recent 6mo Paid</div>
+              <div className="text-sm font-semibold">{formatCurrency(v.recentPaid)}</div>
+              <div className="text-[10px] text-muted-foreground">{v.recentPayments} payments</div>
+            </div>
+            <div className="border rounded-md p-2">
+              <div className="text-[10px] text-muted-foreground uppercase">Prior 6mo Paid</div>
+              <div className="text-sm font-semibold">{formatCurrency(v.priorPaid)}</div>
+              <div className="text-[10px] text-muted-foreground">{v.priorPayments} payments</div>
+            </div>
+            <div className="border rounded-md p-2">
+              <div className="text-[10px] text-muted-foreground uppercase">Balance Trend</div>
+              <div className={`text-sm font-semibold ${v.balanceTrend < 0 ? "text-green-600 dark:text-green-400" : v.balanceTrend > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                {v.balanceTrend > 0 ? "+" : ""}{v.balanceTrend}%
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {formatCurrency(v.balanceStart)} → {formatCurrency(v.balanceEnd)}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[10px] text-muted-foreground uppercase font-medium">Monthly Payments vs Running Balance</div>
+            <div className="flex items-end gap-0.5 h-24 border-b border-l relative pl-8">
+              <div className="absolute left-0 top-0 text-[8px] text-muted-foreground">{formatCurrency(chartMaxBalance)}</div>
+              <div className="absolute left-0 bottom-0 text-[8px] text-muted-foreground">$0</div>
+              {recentMonths.map((month) => {
+                const data = (clientMonthlyData.get(v.client.id) || []).find(s => s.month === month);
+                const balH = data ? (data.cumulativeBalance / chartMaxBalance) * 100 : 0;
+                const payH = data ? (data.paymentTotal / chartMaxPayments) * 100 : 0;
+                return (
+                  <Tooltip key={month}>
+                    <TooltipTrigger asChild>
+                      <div className="flex-1 flex flex-col items-center justify-end h-full relative">
+                        <div className="absolute bottom-0 w-full rounded-t-sm opacity-20" style={{ height: `${balH}%`, backgroundColor: CLIENT_COLORS[v.colorIdx].line }} />
+                        <div className="relative w-3/4 rounded-t-sm" style={{ height: `${Math.max(payH, data?.paymentTotal ? 3 : 0)}%`, backgroundColor: CLIENT_COLORS[v.colorIdx].line }} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-xs space-y-0.5">
+                        <div className="font-medium">{formatMonth(month)}</div>
+                        {data ? (
+                          <>
+                            <div>Payments: {formatCurrency(data.paymentTotal)} ({data.paymentCount}x)</div>
+                            <div>Invoiced: {formatCurrency(data.invoicedTotal)}</div>
+                            <div>Running Balance: {formatCurrency(data.cumulativeBalance)}</div>
+                          </>
+                        ) : <div>No activity</div>}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+            <div className="flex gap-0.5 pl-8">
+              {recentMonths.map(m => (
+                <div key={m} className="flex-1 text-center text-[7px] text-muted-foreground">{formatMonth(m).split(" ")[0]}</div>
+              ))}
+            </div>
+            <div className="flex gap-3 text-[10px] text-muted-foreground mt-1">
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-2 rounded-sm" style={{ backgroundColor: CLIENT_COLORS[v.colorIdx].line }} /> Payments
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-2 rounded-sm opacity-20" style={{ backgroundColor: CLIENT_COLORS[v.colorIdx].line }} /> Running Balance
+              </span>
+            </div>
+          </div>
+
+          {allPayments.filter(p => p.clientId === v.client.id).length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] text-muted-foreground uppercase font-medium">Recent Payment Activity</div>
+              <div className="max-h-32 overflow-y-auto border rounded-md">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-1 px-2 font-medium">Paid Date</th>
+                      <th className="text-left py-1 px-2 font-medium">Invoice</th>
+                      <th className="text-right py-1 px-2 font-medium">Amount</th>
+                      <th className="text-right py-1 px-2 font-medium">Days to Pay</th>
+                      <th className="text-left py-1 px-2 font-medium">Timing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allPayments
+                      .filter(p => p.clientId === v.client.id)
+                      .slice(-15)
+                      .reverse()
+                      .map((p, i) => {
+                        const onTime = p.daysToPay != null && p.daysToPay <= 35;
+                        return (
+                          <tr key={`${p.invoiceNumber}-${i}`} className="border-b last:border-0" data-testid={`row-payment-${p.invoiceNumber}`}>
+                            <td className="py-1 px-2">{formatDate(p.date)}</td>
+                            <td className="py-1 px-2 font-mono">#{p.invoiceNumber}</td>
+                            <td className="py-1 px-2 text-right tabular-nums font-medium">{formatCurrencyExact(p.amount)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums">
+                              {p.daysToPay != null ? `${p.daysToPay}d` : "—"}
+                            </td>
+                            <td className="py-1 px-2">
+                              {p.daysToPay != null ? (
+                                onTime ? (
+                                  <span className="text-green-600 dark:text-green-400 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" />On time</span>
+                                ) : (
+                                  <span className="text-red-600 dark:text-red-400 flex items-center gap-0.5"><XCircle className="h-3 w-3" />Late</span>
+                                )
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Card>
+      ))}
+
+      {allPayments.length === 0 && (
+        <div className="text-center text-sm text-muted-foreground py-6">
+          No payment history available for the selected client{clients.length > 1 ? "s" : ""}.
+        </div>
+      )}
+
+      <div className="text-[10px] text-muted-foreground italic">
+        Payment dates are approximated from invoice last-updated timestamps. Velocity comparisons use continuous 6-month windows. Data covers trailing 18 months.
+      </div>
+    </Card>
+  );
+}
+
 export default function Receivables() {
   const { data: accounts, isLoading } = useQuery<ClientWithAR[]>({ queryKey: ["/api/accounts"] });
   const [search, setSearch] = useState("");
@@ -312,6 +680,16 @@ export default function Receivables() {
   const [sortField, setSortField] = useState<SortField>("outstandingBalance");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedAccount, setSelectedAccount] = useState<ClientWithAR | null>(null);
+  const [catchUpIds, setCatchUpIds] = useState<Set<number>>(new Set());
+
+  const toggleCatchUp = useCallback((id: number) => {
+    setCatchUpIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 6) next.add(id);
+      return next;
+    });
+  }, []);
 
   const accountsWithAR = useMemo(() => {
     if (!accounts) return [];
@@ -319,6 +697,10 @@ export default function Receivables() {
       .filter(a => a.arSummary)
       .map(a => ({ ...a, ar: a.arSummary as ARSummary }));
   }, [accounts]);
+
+  const catchUpClients = useMemo(() => {
+    return accountsWithAR.filter(a => catchUpIds.has(a.id));
+  }, [accountsWithAR, catchUpIds]);
 
   const filtered = useMemo(() => {
     let list = accountsWithAR;
@@ -485,12 +867,43 @@ export default function Receivables() {
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">{filtered.length} clients</span>
+        {catchUpIds.size > 0 && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-muted-foreground">{catchUpIds.size} selected</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setCatchUpIds(new Set())}
+              data-testid="button-clear-selection"
+            >
+              Clear
+            </Button>
+          </div>
+        )}
       </div>
+
+      {catchUpClients.length > 0 && (
+        <CatchUpAnalysis
+          clients={catchUpClients}
+          onClose={() => setCatchUpIds(new Set())}
+        />
+      )}
 
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="py-2 px-2 w-8">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-center">
+                      <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Select clients to analyze catch-up trends (max 6)</TooltipContent>
+                </Tooltip>
+              </TableHead>
               <SortHeader field="companyName">Company</SortHeader>
               <SortHeader field="paymentScore">Score</SortHeader>
               <SortHeader field="outstandingBalance">Outstanding</SortHeader>
@@ -504,16 +917,33 @@ export default function Receivables() {
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
+              <TableRow><TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
                 {accountsWithAR.length === 0 ? "No AR data yet — run a sync to populate." : "No clients match your filters."}
               </TableCell></TableRow>
             ) : filtered.map((a) => (
               <TableRow
                 key={a.id}
-                className="cursor-pointer hover:bg-muted/50"
+                className={`cursor-pointer hover:bg-muted/50 ${catchUpIds.has(a.id) ? "bg-orange-50 dark:bg-orange-950/20" : ""}`}
                 onClick={() => setSelectedAccount(a)}
                 data-testid={`row-ar-${a.id}`}
               >
+                <TableCell className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <Checkbox
+                          checked={catchUpIds.has(a.id)}
+                          onCheckedChange={() => toggleCatchUp(a.id)}
+                          disabled={!catchUpIds.has(a.id) && catchUpIds.size >= 6}
+                          data-testid={`checkbox-catchup-${a.id}`}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    {!catchUpIds.has(a.id) && catchUpIds.size >= 6 && (
+                      <TooltipContent>Max 6 clients — deselect one first</TooltipContent>
+                    )}
+                  </Tooltip>
+                </TableCell>
                 <TableCell className="py-2 px-2 text-xs font-medium max-w-[200px] truncate" data-testid={`text-ar-company-${a.id}`}>
                   {a.companyName}
                 </TableCell>

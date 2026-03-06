@@ -69,6 +69,8 @@ Rule-based analysis generates concise, plain-English insights stored in `marginA
 - **Monthly Trend**: On-time percentage by invoice month, last 12 months
 - **Stored in**: `arSummary` jsonb column on `clientAccounts`, synced during 6-hour auto-sync
 - **Frontend**: `/receivables` page — portfolio summary cards, aging bar, sortable client table with drill-down dialog showing aging breakdown, payment trend chart, and invoice-level detail
+- **Catch-Up Analysis**: Checkbox multi-select (up to 6 clients) opens a catch-up panel showing per-client payment velocity (recent 6mo vs prior 6mo), running balance trend, monthly payment chart overlaid with cumulative balance, and recent payment activity table. Auto-labels "Catching Up" (freq +10% or balance -10%), "Falling Behind" (freq -20% and balance +10%), or "Steady".
+- **Invoice paidDate**: `ARInvoiceEntry.paidDate` derived from CW `_info.lastUpdated` for paid invoices, enables payment timeline analysis.
 - **On-demand refresh**: `GET /api/accounts/:id/ar-refresh` for single-account AR update
 
 ## Schema Columns (clientAccounts)

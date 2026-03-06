@@ -687,6 +687,7 @@ export interface ARInvoiceEntry {
   type: string;
   daysToPay: number | null;
   daysOverdue: number;
+  paidDate: string | null;
 }
 
 export interface ARSummary {
@@ -811,6 +812,10 @@ export async function getCompanyARSummary(cwCompanyId: number): Promise<ARSummar
         }
       }
 
+      const paidDate = (invBalance === 0 && invPayments > 0 && inv._info?.lastUpdated)
+        ? new Date(inv._info.lastUpdated).toISOString().split("T")[0]
+        : null;
+
       invoiceEntries.push({
         invoiceNumber: inv.invoiceNumber || String(inv.id),
         date: inv.date?.split("T")[0] || "",
@@ -822,6 +827,7 @@ export async function getCompanyARSummary(cwCompanyId: number): Promise<ARSummar
         type: invType,
         daysToPay,
         daysOverdue,
+        paidDate,
       });
     }
 
