@@ -90,6 +90,27 @@ export const insertClientAccountSchema = createInsertSchema(clientAccounts).omit
 export type InsertClientAccount = z.infer<typeof insertClientAccountSchema>;
 export type ClientAccount = typeof clientAccounts.$inferSelect;
 
+export const arOnlyClients = pgTable("ar_only_clients", {
+  id: serial("id").primaryKey(),
+  cwCompanyId: integer("cw_company_id").notNull().unique(),
+  companyName: text("company_name").notNull(),
+  agreementTypes: text("agreement_types"),
+  agreementMonthlyRevenue: real("agreement_monthly_revenue"),
+  arSummary: jsonb("ar_summary"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertArOnlyClientSchema = createInsertSchema(arOnlyClients).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertArOnlyClient = z.infer<typeof insertArOnlyClientSchema>;
+export type ArOnlyClient = typeof arOnlyClients.$inferSelect;
+
 export interface ClientAccountWithStatus extends ClientAccount {
   lastTbrDate: string | null;
   nextTbrDate: string | null;

@@ -1846,6 +1846,36 @@ export async function registerRoutes(
     return results;
   }
 
+  async function syncArOnlyClients(): Promise<number> {
+    const allAgreementClients = await connectwise.getAllAgreementClients();
+    const managedAccounts = await storage.getAllClientAccounts();
+    const managedCwIds = new Set(managedAccounts.map(a => a.cwCompanyId));
+
+    const arOnlyCompanies = allAgreementClients.filter(c => !managedCwIds.has(c.cwCompanyId));
+    log(`[ar-sync] Found ${arOnlyCompanies.length} additional agreement clients (non-managed-services)`);
+
+    let synced = 0;
+    for (const client of arOnlyCompanies) {
+      let arSummary = null;
+      try {
+        arSummary = await connectwise.getCompanyARSummary(client.cwCompanyId);
+      } catch (e: any) {
+        log(`[ar-sync] Skipping AR for ${client.companyName}: ${e.message}`);
+      }
+
+      await storage.upsertArOnlyClient({
+        cwCompanyId: client.cwCompanyId,
+        companyName: client.companyName,
+        agreementTypes: client.agreementTypes.join(", "),
+        agreementMonthlyRevenue: client.agreementMonthlyRevenue,
+        arSummary: arSummary,
+        lastSyncedAt: new Date(),
+      });
+      synced++;
+    }
+    return synced;
+  }
+
   const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
   let autoSyncRunning = false;
 
@@ -1857,6 +1887,8 @@ export async function registerRoutes(
       log("[accounts-sync] Starting automatic sync...");
       const results = await syncAccountsFromConnectWise();
       log(`[accounts-sync] Auto-sync complete: ${results.length} accounts updated`);
+      const arOnlyCount = await syncArOnlyClients();
+      log(`[ar-sync] AR-only sync complete: ${arOnlyCount} additional clients updated`);
     } catch (err: any) {
       log(`[accounts-sync] Auto-sync error: ${err.message}`);
     } finally {
@@ -1875,9 +1907,60 @@ export async function registerRoutes(
       }
 
       const results = await syncAccountsFromConnectWise();
-      res.json({ synced: results.length, accounts: results });
+      const arOnlyCount = await syncArOnlyClients();
+      res.json({ synced: results.length, arOnlySynced: arOnlyCount, accounts: results });
     } catch (err: any) {
       log(`[accounts-sync] Manual sync error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/receivables/clients", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const managedAccounts = await storage.getAllClientAccounts();
+      const arOnlyAccounts = await storage.getAllArOnlyClients();
+
+      const combined = [
+        ...managedAccounts.map(a => ({
+          id: a.id,
+          cwCompanyId: a.cwCompanyId,
+          companyName: a.companyName,
+          agreementTypes: a.agreementTypes,
+          arSummary: a.arSummary,
+          lastSyncedAt: a.lastSyncedAt,
+          tier: (a as any).tierOverride || a.tier,
+          totalRevenue: a.totalRevenue,
+          source: "managed" as const,
+        })),
+        ...arOnlyAccounts.map(a => ({
+          id: a.id + 100000,
+          cwCompanyId: a.cwCompanyId,
+          companyName: a.companyName,
+          agreementTypes: a.agreementTypes,
+          arSummary: a.arSummary,
+          lastSyncedAt: a.lastSyncedAt,
+          tier: null,
+          totalRevenue: (a.agreementMonthlyRevenue || 0) * 12,
+          source: "agreement-only" as const,
+        })),
+      ];
+
+      res.json(combined);
+    } catch (err: any) {
+      log(`[receivables] Error fetching clients: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/receivables/sync", requireAuth, requireEditor, async (_req: Request, res: Response) => {
+    try {
+      if (!connectwise.isConfigured()) {
+        return res.status(503).json({ message: "ConnectWise is not configured" });
+      }
+      const arOnlyCount = await syncArOnlyClients();
+      res.json({ synced: arOnlyCount });
+    } catch (err: any) {
+      log(`[ar-sync] Manual AR sync error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

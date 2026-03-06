@@ -4,6 +4,7 @@ import {
   type TbrSchedule, type InsertTbrSchedule, tbrSchedules,
   type TbrStaging, type InsertTbrStaging, tbrStaging,
   type ClientAccount, type InsertClientAccount, clientAccounts,
+  type ArOnlyClient, type InsertArOnlyClient, arOnlyClients,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lte, gte, isNull, isNotNull } from "drizzle-orm";
@@ -43,6 +44,9 @@ export interface IStorage {
   upsertClientAccount(account: InsertClientAccount): Promise<ClientAccount>;
   updateClientAccountTier(id: number, tier: string): Promise<ClientAccount>;
   deleteClientAccount(id: number): Promise<void>;
+  getAllArOnlyClients(): Promise<ArOnlyClient[]>;
+  upsertArOnlyClient(client: InsertArOnlyClient): Promise<ArOnlyClient>;
+  deleteArOnlyClient(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -267,6 +271,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteClientAccount(id: number): Promise<void> {
     await db.delete(clientAccounts).where(eq(clientAccounts.id, id));
+  }
+
+  async getAllArOnlyClients(): Promise<ArOnlyClient[]> {
+    return db.select().from(arOnlyClients);
+  }
+
+  async upsertArOnlyClient(client: InsertArOnlyClient): Promise<ArOnlyClient> {
+    const existing = await db.select().from(arOnlyClients).where(eq(arOnlyClients.cwCompanyId, client.cwCompanyId)).limit(1);
+    if (existing[0]) {
+      const [result] = await db.update(arOnlyClients)
+        .set({ ...client, updatedAt: new Date() })
+        .where(eq(arOnlyClients.id, existing[0].id))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(arOnlyClients).values(client).returning();
+    return result;
+  }
+
+  async deleteArOnlyClient(id: number): Promise<void> {
+    await db.delete(arOnlyClients).where(eq(arOnlyClients.id, id));
   }
 }
 

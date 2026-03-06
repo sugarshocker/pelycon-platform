@@ -12,7 +12,7 @@ A client-facing TBR dashboard for MSP owners to screen-share during 30-minute se
 - **Brand**: Pelycon Technologies (Orange #E77125, Storm Gray #394442, Poppins font)
 
 ## Key Files
-- `shared/schema.ts` - TypeScript interfaces + Drizzle table definitions (tbrSnapshots, tbrSchedules, tbrStaging, clientAccounts)
+- `shared/schema.ts` - TypeScript interfaces + Drizzle table definitions (tbrSnapshots, tbrSchedules, tbrStaging, clientAccounts, arOnlyClients)
 - `server/db.ts` - PostgreSQL database connection (drizzle-orm/node-postgres)
 - `server/storage.ts` - Storage interface for TBR snapshot, schedule, staging, and client account CRUD operations
 - `server/routes.ts` - All API routes (auth, proxy to MSP APIs, CSV parsing, AI, export, TBR finalization, schedules, staging, accounts sync, margin analysis)
@@ -67,8 +67,10 @@ Rule-based analysis generates concise, plain-English insights stored in `marginA
 - **On-Time Calculation**: Payment is "on-time" if days-to-pay ≤ (due days + 5 day grace period)
 - **Payment Score**: A (avg ≤30d, ≥80% on-time, no 61+ aging), B (avg ≤45d, ≥60% on-time, no 91+ aging), C (avg ≤60d or ≥40% on-time), D (worse or no data)
 - **Monthly Trend**: On-time percentage by invoice month, last 12 months
-- **Stored in**: `arSummary` jsonb column on `clientAccounts`, synced during 6-hour auto-sync
-- **Frontend**: `/receivables` page — portfolio summary cards, aging bar, sortable client table with drill-down dialog showing aging breakdown, payment trend chart, and invoice-level detail
+- **Stored in**: `arSummary` jsonb column on `clientAccounts` (managed services) and `arOnlyClients` table (agreement-only). Both synced during 6-hour auto-sync.
+- **arOnlyClients table**: Stores companies with active CW agreements that are NOT in the managed services roster (not one of the 3 MS agreement types). Fields: `cwCompanyId`, `companyName`, `agreementTypes`, `agreementMonthlyRevenue`, `arSummary` (jsonb), `lastSyncedAt`.
+- **Receivables endpoint**: `GET /api/receivables/clients` merges `clientAccounts` + `arOnlyClients` into a unified list with `source` field ("managed" or "agreement-only"). AR-only client IDs are offset by +100000 to avoid collision.
+- **Frontend**: `/receivables` page — portfolio summary cards, aging bar, sortable client table with drill-down dialog showing aging breakdown, payment trend chart, and invoice-level detail. Source filter (All/Managed/Agreement Only) and "AGR" badge on agreement-only rows.
 - **Catch-Up Analysis**: Checkbox multi-select (up to 6 clients) opens a catch-up panel showing per-client payment velocity (recent 6mo vs prior 6mo), running balance trend, monthly payment chart overlaid with cumulative balance, and recent payment activity table. Auto-labels "Catching Up" (freq +10% or balance -10%), "Falling Behind" (freq -20% and balance +10%), or "Steady".
 - **Invoice paidDate**: `ARInvoiceEntry.paidDate` derived from CW `_info.lastUpdated` for paid invoices, enables payment timeline analysis.
 - **On-demand refresh**: `GET /api/accounts/:id/ar-refresh` for single-account AR update
@@ -78,8 +80,10 @@ Rule-based analysis generates concise, plain-English insights stored in `marginA
 
 ## Auto-Sync
 - ConnectWise financial data syncs automatically every 6 hours (first run 30s after startup)
-- Manual "Sync from ConnectWise" button still available
-- Sync only updates financial data (`client_accounts`); TBR schedules and snapshots are stored separately and never overwritten by sync
+- Sync includes: 48 managed services clients (financials + AR) + ~67 agreement-only clients (AR only)
+- Manual "Sync from ConnectWise" button still available (syncs both sets)
+- `GET /api/receivables/sync` triggers AR-only client sync independently
+- Sync only updates financial data (`client_accounts`) and AR data (`ar_only_clients`); TBR schedules and snapshots are stored separately and never overwritten by sync
 - TBR status (green/yellow/red) is computed live on each Accounts page load by matching schedule `orgName` to account `companyName` (case-insensitive)
 
 ## TBR Status

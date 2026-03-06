@@ -482,6 +482,58 @@ export async function getManagedServicesClients(): Promise<CwAgreementCompany[]>
   return Array.from(companyMap.values());
 }
 
+export async function getAllAgreementClients(): Promise<CwAgreementCompany[]> {
+  const companyMap = new Map<number, CwAgreementCompany>();
+  let page = 1;
+  const pageSize = 250;
+
+  while (true) {
+    try {
+      const agreements = await apiGet("/finance/agreements", {
+        conditions: `agreementStatus = "Active"`,
+        pageSize: String(pageSize),
+        page: String(page),
+        orderBy: "company/name asc",
+      });
+
+      if (!agreements || agreements.length === 0) break;
+
+      for (const agr of agreements) {
+        const companyId = agr.company?.id;
+        const companyName = agr.company?.name;
+        if (!companyId || !companyName) continue;
+
+        const existing = companyMap.get(companyId);
+        const agrTypeName = agr.type?.name || "Unknown";
+        const monthlyAmount = agr.billAmount || 0;
+
+        if (existing) {
+          if (!existing.agreementTypes.includes(agrTypeName)) {
+            existing.agreementTypes.push(agrTypeName);
+          }
+          existing.agreementMonthlyRevenue += monthlyAmount;
+        } else {
+          companyMap.set(companyId, {
+            cwCompanyId: companyId,
+            companyName,
+            agreementTypes: [agrTypeName],
+            agreementMonthlyRevenue: monthlyAmount,
+          });
+        }
+      }
+
+      if (agreements.length < pageSize) break;
+      page++;
+    } catch (e: any) {
+      log(`ConnectWise all-agreements error (page ${page}): ${e.message}`);
+      break;
+    }
+  }
+
+  log(`Found ${companyMap.size} total clients with any active agreement`);
+  return Array.from(companyMap.values());
+}
+
 export interface EngineerCostEntry {
   memberId: number;
   memberName: string;

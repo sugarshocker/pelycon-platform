@@ -27,7 +27,17 @@ import {
   Activity,
   BarChart3,
 } from "lucide-react";
-import type { ClientAccount } from "@shared/schema";
+interface ReceivablesClient {
+  id: number;
+  cwCompanyId: number;
+  companyName: string;
+  agreementTypes: string | null;
+  arSummary: any;
+  lastSyncedAt: string | null;
+  tier: string | null;
+  totalRevenue: number | null;
+  source: "managed" | "agreement-only";
+}
 
 interface ARAgingBuckets {
   current: number;
@@ -72,7 +82,7 @@ interface ARSummary {
   fetchedAt: string;
 }
 
-type ClientWithAR = ClientAccount & { arSummary?: ARSummary | null; effectiveTier?: string };
+type ClientWithAR = ReceivablesClient & { ar?: ARSummary };
 
 function formatCurrency(val: number | null | undefined): string {
   if (val == null) return "$0";
@@ -674,9 +684,10 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
 }
 
 export default function Receivables() {
-  const { data: accounts, isLoading } = useQuery<ClientWithAR[]>({ queryKey: ["/api/accounts"] });
+  const { data: accounts, isLoading } = useQuery<ReceivablesClient[]>({ queryKey: ["/api/receivables/clients"] });
   const [search, setSearch] = useState("");
   const [filterScore, setFilterScore] = useState("all");
+  const [filterSource, setFilterSource] = useState<"all" | "managed" | "agreement-only">("all");
   const [sortField, setSortField] = useState<SortField>("outstandingBalance");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedAccount, setSelectedAccount] = useState<ClientWithAR | null>(null);
@@ -691,7 +702,7 @@ export default function Receivables() {
     });
   }, []);
 
-  const accountsWithAR = useMemo(() => {
+  const accountsWithAR: (ReceivablesClient & { ar: ARSummary })[] = useMemo(() => {
     if (!accounts) return [];
     return accounts
       .filter(a => a.arSummary)
@@ -711,6 +722,9 @@ export default function Receivables() {
     if (filterScore !== "all") {
       list = list.filter(a => a.ar.paymentScore === filterScore);
     }
+    if (filterSource !== "all") {
+      list = list.filter(a => a.source === filterSource);
+    }
     return list.sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
@@ -724,7 +738,7 @@ export default function Receivables() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [accountsWithAR, search, filterScore, sortField, sortDir]);
+  }, [accountsWithAR, search, filterScore, filterSource, sortField, sortDir]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -745,6 +759,8 @@ export default function Receivables() {
       scoreC: all.filter(a => a.ar.paymentScore === "C").length,
       scoreD: all.filter(a => a.ar.paymentScore === "D").length,
       totalClients: all.length,
+      managedCount: all.filter(a => a.source === "managed").length,
+      agreementOnlyCount: all.filter(a => a.source === "agreement-only").length,
       portfolioAging: {
         current: all.reduce((s, a) => s + a.ar.aging.current, 0),
         days1to30: all.reduce((s, a) => s + a.ar.aging.days1to30, 0),
@@ -787,7 +803,12 @@ export default function Receivables() {
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-4">
-      <h1 className="text-2xl font-bold" data-testid="text-page-title">Accounts Receivable</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold" data-testid="text-page-title">Accounts Receivable</h1>
+        <span className="text-xs text-muted-foreground">
+          {portfolio.totalClients} clients ({portfolio.managedCount} managed, {portfolio.agreementOnlyCount} agreement-only)
+        </span>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-3">
@@ -864,6 +885,16 @@ export default function Receivables() {
             <SelectItem value="B">B — Good</SelectItem>
             <SelectItem value="C">C — Slow</SelectItem>
             <SelectItem value="D">D — At Risk</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterSource} onValueChange={(v) => setFilterSource(v as any)}>
+          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-source-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Clients</SelectItem>
+            <SelectItem value="managed">Managed Services</SelectItem>
+            <SelectItem value="agreement-only">Agreement Only</SelectItem>
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">{filtered.length} clients</span>
@@ -944,8 +975,13 @@ export default function Receivables() {
                     )}
                   </Tooltip>
                 </TableCell>
-                <TableCell className="py-2 px-2 text-xs font-medium max-w-[200px] truncate" data-testid={`text-ar-company-${a.id}`}>
-                  {a.companyName}
+                <TableCell className="py-2 px-2 text-xs font-medium max-w-[240px]" data-testid={`text-ar-company-${a.id}`}>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="truncate">{a.companyName}</span>
+                    {a.source === "agreement-only" && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400">AGR</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="py-2 px-2">
                   <PaymentScoreBadge score={a.ar.paymentScore} label={a.ar.paymentScoreLabel} />
