@@ -411,7 +411,13 @@ function buildCatchUpData(clients: AccountWithAR[]) {
   return { allPayments, clientMonthlyData };
 }
 
+const PERIOD_OPTIONS = [3, 6, 9, 12] as const;
+type PeriodMonths = typeof PERIOD_OPTIONS[number];
+
 function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClose: () => void }) {
+  const [period, setPeriod] = useState<PeriodMonths>(6);
+  const [showLegend, setShowLegend] = useState(false);
+
   const { allPayments, clientMonthlyData } = useMemo(() => buildCatchUpData(clients), [clients]);
 
   const allMonths = useMemo(() => {
@@ -420,21 +426,21 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
     return Array.from(monthSet).sort();
   }, [clientMonthlyData]);
 
-  const recentMonths = allMonths.slice(-12);
+  const recentMonths = allMonths.slice(-(period * 2));
 
   const velocityAnalysis = useMemo(() => {
     return clients.map((client, idx) => {
       const monthly = clientMonthlyData.get(client.id) || [];
-      const last6 = monthly.slice(-6);
-      const prior6 = monthly.slice(-12, -6);
+      const last = monthly.slice(-period);
+      const prior = monthly.slice(-(period * 2), -period);
 
-      const recentPayments = last6.reduce((s, m) => s + m.paymentCount, 0);
-      const recentPaid = last6.reduce((s, m) => s + m.paymentTotal, 0);
-      const priorPayments = prior6.reduce((s, m) => s + m.paymentCount, 0);
-      const priorPaid = prior6.reduce((s, m) => s + m.paymentTotal, 0);
+      const recentPayments = last.reduce((s, m) => s + m.paymentCount, 0);
+      const recentPaid = last.reduce((s, m) => s + m.paymentTotal, 0);
+      const priorPayments = prior.reduce((s, m) => s + m.paymentCount, 0);
+      const priorPaid = prior.reduce((s, m) => s + m.paymentTotal, 0);
 
-      const recentAvgPerMonth = last6.length > 0 ? recentPayments / last6.length : 0;
-      const priorAvgPerMonth = prior6.length > 0 ? priorPayments / prior6.length : 0;
+      const recentAvgPerMonth = last.length > 0 ? recentPayments / last.length : 0;
+      const priorAvgPerMonth = prior.length > 0 ? priorPayments / prior.length : 0;
 
       const frequencyChange = priorAvgPerMonth > 0
         ? ((recentAvgPerMonth - priorAvgPerMonth) / priorAvgPerMonth) * 100
@@ -443,7 +449,7 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
       const recentAvgAmount = recentPayments > 0 ? recentPaid / recentPayments : 0;
       const priorAvgAmount = priorPayments > 0 ? priorPaid / priorPayments : 0;
 
-      const balanceStart = monthly.length >= 6 ? monthly[monthly.length - 6]?.cumulativeBalance ?? 0 : 0;
+      const balanceStart = monthly.length >= period ? monthly[monthly.length - period]?.cumulativeBalance ?? 0 : 0;
       const balanceEnd = monthly.length > 0 ? monthly[monthly.length - 1]?.cumulativeBalance ?? 0 : 0;
       const balanceTrend = balanceStart > 0 ? ((balanceEnd - balanceStart) / balanceStart) * 100 : 0;
 
@@ -469,7 +475,7 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
         isFallingBehind,
       };
     });
-  }, [clients, clientMonthlyData]);
+  }, [clients, clientMonthlyData, period]);
 
   const chartMaxBalance = useMemo(() => {
     let max = 0;
@@ -489,7 +495,7 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
 
   return (
     <Card className="p-4 space-y-5 border-2 border-orange-200 dark:border-orange-900/50">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-orange-500" />
           <h2 className="text-lg font-semibold" data-testid="text-catchup-title">Catch-Up Analysis</h2>
@@ -497,10 +503,67 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
             {clients.length} client{clients.length !== 1 ? "s" : ""} selected
           </span>
         </div>
-        <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-catchup">
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border rounded-md overflow-hidden" data-testid="toggle-period">
+            {PERIOD_OPTIONS.map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${period === p ? "bg-orange-500 text-white" : "bg-background hover:bg-muted text-muted-foreground"}`}
+                data-testid={`button-period-${p}`}
+              >
+                {p}mo
+              </button>
+            ))}
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setShowLegend(!showLegend)}
+                data-testid="button-toggle-legend"
+              >
+                <FileText className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>How status labels are determined</TooltipContent>
+          </Tooltip>
+          <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-catchup">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      {showLegend && (
+        <div className="border rounded-lg p-3 bg-muted/30 space-y-2 text-xs" data-testid="legend-panel">
+          <div className="font-medium text-sm">How are status labels determined?</div>
+          <div className="text-muted-foreground">
+            Compares the <span className="font-medium text-foreground">recent {period} months</span> against the <span className="font-medium text-foreground">prior {period} months</span> on two measures:
+          </div>
+          <div className="grid gap-1.5">
+            <div className="flex items-start gap-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shrink-0">
+                <TrendingUp className="h-3 w-3" /> Catching Up
+              </span>
+              <span className="text-muted-foreground">Payment frequency increased by 10%+ <span className="font-medium text-foreground">or</span> outstanding balance decreased by 10%+</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 shrink-0">
+                <TrendingDown className="h-3 w-3" /> Falling Behind
+              </span>
+              <span className="text-muted-foreground">Payment frequency dropped by 20%+ <span className="font-medium text-foreground">and</span> balance grew by 10%+</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 shrink-0">
+                <MinusCircle className="h-3 w-3" /> Steady
+              </span>
+              <span className="text-muted-foreground">No significant change in either direction</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-2">
         {clients.map((c, i) => (
@@ -546,24 +609,24 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="border rounded-md p-2">
-              <div className="text-[10px] text-muted-foreground uppercase">Payment Freq (recent 6mo)</div>
+              <div className="text-[10px] text-muted-foreground uppercase">Payment Freq (recent {period}mo)</div>
               <div className="text-sm font-semibold">{v.recentAvgPerMonth}/mo</div>
               <div className={`text-[10px] ${v.frequencyChange > 0 ? "text-green-600 dark:text-green-400" : v.frequencyChange < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
                 {v.frequencyChange > 0 ? "+" : ""}{v.frequencyChange}% vs prior
               </div>
             </div>
             <div className="border rounded-md p-2">
-              <div className="text-[10px] text-muted-foreground uppercase">Recent 6mo Paid</div>
+              <div className="text-[10px] text-muted-foreground uppercase">Recent {period}mo Paid</div>
               <div className="text-sm font-semibold">{formatCurrency(v.recentPaid)}</div>
               <div className="text-[10px] text-muted-foreground">{v.recentPayments} payments</div>
             </div>
             <div className="border rounded-md p-2">
-              <div className="text-[10px] text-muted-foreground uppercase">Prior 6mo Paid</div>
+              <div className="text-[10px] text-muted-foreground uppercase">Prior {period}mo Paid</div>
               <div className="text-sm font-semibold">{formatCurrency(v.priorPaid)}</div>
               <div className="text-[10px] text-muted-foreground">{v.priorPayments} payments</div>
             </div>
             <div className="border rounded-md p-2">
-              <div className="text-[10px] text-muted-foreground uppercase">Balance Trend</div>
+              <div className="text-[10px] text-muted-foreground uppercase">Balance Trend ({period}mo)</div>
               <div className={`text-sm font-semibold ${v.balanceTrend < 0 ? "text-green-600 dark:text-green-400" : v.balanceTrend > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                 {v.balanceTrend > 0 ? "+" : ""}{v.balanceTrend}%
               </div>
@@ -677,7 +740,7 @@ function CatchUpAnalysis({ clients, onClose }: { clients: AccountWithAR[]; onClo
       )}
 
       <div className="text-[10px] text-muted-foreground italic">
-        Payment dates are approximated from invoice last-updated timestamps. Velocity comparisons use continuous 6-month windows. Data covers trailing 18 months.
+        Payment dates are approximated from invoice last-updated timestamps. Velocity comparisons use continuous {period}-month windows. Data covers trailing 18 months.
       </div>
     </Card>
   );
