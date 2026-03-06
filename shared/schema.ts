@@ -74,6 +74,7 @@ export const clientAccounts = pgTable("client_accounts", {
   engineerBreakdown: jsonb("engineer_breakdown"),
   agreementAdditions: jsonb("agreement_additions"),
   marginAnalysis: jsonb("margin_analysis"),
+  arSummary: jsonb("ar_summary"),
   agreementTypes: text("agreement_types"),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

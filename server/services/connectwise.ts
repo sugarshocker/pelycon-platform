@@ -668,6 +668,255 @@ async function getInvoicedAdditionCosts(cwCompanyId: number, dateStr: string): P
   }
 }
 
+export interface ARAgingBuckets {
+  current: number;
+  days1to30: number;
+  days31to60: number;
+  days61to90: number;
+  days91plus: number;
+}
+
+export interface ARInvoiceEntry {
+  invoiceNumber: string;
+  date: string;
+  dueDate: string;
+  total: number;
+  payments: number;
+  balance: number;
+  status: string;
+  type: string;
+  daysToPay: number | null;
+  daysOverdue: number;
+}
+
+export interface ARSummary {
+  outstandingBalance: number;
+  overdueBalance: number;
+  totalInvoiced18mo: number;
+  totalPaid18mo: number;
+  aging: ARAgingBuckets;
+  agingCounts: ARAgingBuckets;
+  avgDaysToPay: number | null;
+  medianDaysToPay: number | null;
+  onTimePercent: number | null;
+  paymentScore: "A" | "B" | "C" | "D";
+  paymentScoreLabel: string;
+  invoiceCount: number;
+  paidInvoiceCount: number;
+  openInvoiceCount: number;
+  recentInvoices: ARInvoiceEntry[];
+  monthlyTrend: { month: string; onTimeCount: number; lateCount: number; onTimePercent: number }[];
+  lastPaymentDate: string | null;
+  fetchedAt: string;
+}
+
+export async function getCompanyARSummary(cwCompanyId: number): Promise<ARSummary | null> {
+  try {
+    const now = new Date();
+    const eighteenMonthsAgo = new Date(now);
+    eighteenMonthsAgo.setMonth(eighteenMonthsAgo.getMonth() - 18);
+    const dateStr = eighteenMonthsAgo.toISOString().split("T")[0];
+
+    let allInvoices: any[] = [];
+    let page = 1;
+    const pageSize = 250;
+
+    while (true) {
+      const invoices = await apiGet("/finance/invoices", {
+        conditions: `company/id = ${cwCompanyId} AND date > [${dateStr}]`,
+        pageSize: String(pageSize),
+        page: String(page),
+        orderBy: "date desc",
+      });
+      if (!invoices || invoices.length === 0) break;
+      allInvoices = allInvoices.concat(invoices);
+      if (invoices.length < pageSize) break;
+      page++;
+    }
+
+    if (allInvoices.length === 0) return null;
+
+    const aging: ARAgingBuckets = { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days91plus: 0 };
+    const agingCounts: ARAgingBuckets = { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days91plus: 0 };
+    let outstandingBalance = 0;
+    let overdueBalance = 0;
+    let totalInvoiced = 0;
+    let totalPaid = 0;
+    const daysToPayList: number[] = [];
+    const monthlyBuckets = new Map<string, { onTime: number; late: number }>();
+    let lastPaymentDate: string | null = null;
+
+    const invoiceEntries: ARInvoiceEntry[] = [];
+
+    for (const inv of allInvoices) {
+      const invTotal = inv.total || 0;
+      const invPayments = inv.payments || 0;
+      const invBalance = inv.balance || 0;
+      const invDate = new Date(inv.date);
+      const dueDate = inv.dueDate ? new Date(inv.dueDate) : invDate;
+      const status = inv.status?.name || "Unknown";
+      const invType = inv.type || "Unknown";
+
+      if (invTotal <= 0 || isNaN(invDate.getTime())) continue;
+      if (isNaN(dueDate.getTime())) continue;
+
+      totalInvoiced += invTotal;
+      totalPaid += invPayments;
+
+      let daysToPay: number | null = null;
+      let daysOverdue = 0;
+
+      if (invBalance > 0) {
+        outstandingBalance += invBalance;
+        const daysOver = Math.round((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+        daysOverdue = Math.max(0, daysOver);
+
+        if (daysOver <= 0) {
+          aging.current += invBalance;
+          agingCounts.current++;
+        } else if (daysOver <= 30) {
+          aging.days1to30 += invBalance;
+          agingCounts.days1to30++;
+          overdueBalance += invBalance;
+        } else if (daysOver <= 60) {
+          aging.days31to60 += invBalance;
+          agingCounts.days31to60++;
+          overdueBalance += invBalance;
+        } else if (daysOver <= 90) {
+          aging.days61to90 += invBalance;
+          agingCounts.days61to90++;
+          overdueBalance += invBalance;
+        } else {
+          aging.days91plus += invBalance;
+          agingCounts.days91plus++;
+          overdueBalance += invBalance;
+        }
+      } else if (invPayments > 0) {
+        const payDate = inv._info?.lastUpdated ? new Date(inv._info.lastUpdated) : null;
+        if (payDate) {
+          daysToPay = Math.round((payDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysToPay < 0) daysToPay = 0;
+          daysToPayList.push(daysToPay);
+
+          const payDateStr = payDate.toISOString().split("T")[0];
+          if (!lastPaymentDate || payDateStr > lastPaymentDate) lastPaymentDate = payDateStr;
+
+          const monthKey = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, "0")}`;
+          const dueDays = Math.round((dueDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24));
+          const isOnTime = daysToPay <= dueDays + 5;
+          const bucket = monthlyBuckets.get(monthKey) || { onTime: 0, late: 0 };
+          if (isOnTime) bucket.onTime++;
+          else bucket.late++;
+          monthlyBuckets.set(monthKey, bucket);
+        }
+      }
+
+      invoiceEntries.push({
+        invoiceNumber: inv.invoiceNumber || String(inv.id),
+        date: inv.date?.split("T")[0] || "",
+        dueDate: inv.dueDate?.split("T")[0] || "",
+        total: invTotal,
+        payments: invPayments,
+        balance: invBalance,
+        status,
+        type: invType,
+        daysToPay,
+        daysOverdue,
+      });
+    }
+
+    const avgDaysToPay = daysToPayList.length > 0
+      ? Math.round(daysToPayList.reduce((a, b) => a + b, 0) / daysToPayList.length)
+      : null;
+
+    const sortedDays = [...daysToPayList].sort((a, b) => a - b);
+    const medianDaysToPay = sortedDays.length > 0
+      ? sortedDays[Math.floor(sortedDays.length / 2)]
+      : null;
+
+    const onTimePaid = daysToPayList.filter((d, i) => {
+      const inv = allInvoices.find(inv2 => {
+        const invDate2 = new Date(inv2.date);
+        const dueDate2 = inv2.dueDate ? new Date(inv2.dueDate) : invDate2;
+        if (isNaN(dueDate2.getTime())) return false;
+        const dueDays2 = Math.round((dueDate2.getTime() - invDate2.getTime()) / (1000 * 60 * 60 * 24));
+        return d <= dueDays2 + 5;
+      });
+      return inv != null;
+    });
+    const totalOnTime = monthlyBuckets.size > 0
+      ? Array.from(monthlyBuckets.values()).reduce((s, b) => s + b.onTime, 0)
+      : 0;
+    const totalLate = monthlyBuckets.size > 0
+      ? Array.from(monthlyBuckets.values()).reduce((s, b) => s + b.late, 0)
+      : 0;
+    const onTimePercent = (totalOnTime + totalLate) > 0
+      ? Math.round((totalOnTime / (totalOnTime + totalLate)) * 100)
+      : null;
+
+    let paymentScore: "A" | "B" | "C" | "D";
+    let paymentScoreLabel: string;
+    if (avgDaysToPay === null) {
+      paymentScore = "D";
+      paymentScoreLabel = "No payment data";
+    } else if (avgDaysToPay <= 30 && (onTimePercent ?? 0) >= 80 && aging.days61to90 === 0 && aging.days91plus === 0) {
+      paymentScore = "A";
+      paymentScoreLabel = "Excellent payer";
+    } else if (avgDaysToPay <= 45 && (onTimePercent ?? 0) >= 60 && aging.days91plus === 0) {
+      paymentScore = "B";
+      paymentScoreLabel = "Good payer";
+    } else if (avgDaysToPay <= 60 || (onTimePercent ?? 0) >= 40) {
+      paymentScore = "C";
+      paymentScoreLabel = "Slow payer";
+    } else {
+      paymentScore = "D";
+      paymentScoreLabel = "At risk";
+    }
+
+    const monthlyTrend = Array.from(monthlyBuckets.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-12)
+      .map(([month, data]) => ({
+        month,
+        onTimeCount: data.onTime,
+        lateCount: data.late,
+        onTimePercent: (data.onTime + data.late) > 0 ? Math.round((data.onTime / (data.onTime + data.late)) * 100) : 0,
+      }));
+
+    log(`[ar] Company ${cwCompanyId}: ${allInvoices.length} invoices, outstanding=$${outstandingBalance.toFixed(2)}, avgDays=${avgDaysToPay}, score=${paymentScore}`);
+
+    return {
+      outstandingBalance: Math.round(outstandingBalance * 100) / 100,
+      overdueBalance: Math.round(overdueBalance * 100) / 100,
+      totalInvoiced18mo: Math.round(totalInvoiced * 100) / 100,
+      totalPaid18mo: Math.round(totalPaid * 100) / 100,
+      aging: {
+        current: Math.round(aging.current * 100) / 100,
+        days1to30: Math.round(aging.days1to30 * 100) / 100,
+        days31to60: Math.round(aging.days31to60 * 100) / 100,
+        days61to90: Math.round(aging.days61to90 * 100) / 100,
+        days91plus: Math.round(aging.days91plus * 100) / 100,
+      },
+      agingCounts,
+      avgDaysToPay,
+      medianDaysToPay,
+      onTimePercent,
+      paymentScore,
+      paymentScoreLabel,
+      invoiceCount: invoiceEntries.length,
+      paidInvoiceCount: daysToPayList.length,
+      openInvoiceCount: invoiceEntries.filter(i => i.balance > 0).length,
+      recentInvoices: invoiceEntries.slice(0, 25),
+      monthlyTrend,
+      lastPaymentDate,
+      fetchedAt: new Date().toISOString(),
+    };
+  } catch (e: any) {
+    log(`[ar] Error fetching AR for company ${cwCompanyId}: ${e.message}`);
+    return null;
+  }
+}
+
 async function getInvoicedExpenseCosts(cwCompanyId: number, dateStr: string): Promise<number> {
   try {
     let allRows: any[][] = [];

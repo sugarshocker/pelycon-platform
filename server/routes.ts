@@ -1804,6 +1804,13 @@ export async function registerRoutes(
 
       const marginInsights = generateMarginAnalysis(financials, financials.engineers || []);
 
+      let arSummary = null;
+      try {
+        arSummary = await connectwise.getCompanyARSummary(client.cwCompanyId);
+      } catch (e: any) {
+        log(`[accounts-sync] Skipping AR for ${client.companyName}: ${e.message}`);
+      }
+
       const account = await storage.upsertClientAccount({
         cwCompanyId: client.cwCompanyId,
         companyName: client.companyName,
@@ -1829,6 +1836,7 @@ export async function registerRoutes(
         engineerBreakdown: financials.engineers,
         agreementAdditions: financials.agreementAdditions || [],
         marginAnalysis: marginInsights,
+        arSummary: arSummary,
         agreementTypes: client.agreementTypes.join(", "),
         lastSyncedAt: new Date(),
       });
@@ -1870,6 +1878,24 @@ export async function registerRoutes(
       res.json({ synced: results.length, accounts: results });
     } catch (err: any) {
       log(`[accounts-sync] Manual sync error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/accounts/:id/ar-refresh", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const accounts = await storage.getAllClientAccounts();
+      const acct = accounts.find(a => a.id === id);
+      if (!acct) return res.status(404).json({ message: "Account not found" });
+
+      const arSummary = await connectwise.getCompanyARSummary(acct.cwCompanyId);
+      if (arSummary) {
+        await storage.upsertClientAccount({ ...acct, arSummary, lastSyncedAt: new Date() } as any);
+      }
+      res.json(arSummary || { error: "No AR data available" });
+    } catch (err: any) {
+      log(`[ar] Refresh error for account ${req.params.id}: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

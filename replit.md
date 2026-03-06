@@ -60,6 +60,17 @@ Rule-based analysis generates concise, plain-English insights stored in `marginA
 - Expensive Engineer Concentration (>40% of cost at $80+/hr)
 - Overall Margin warnings (<55%) and suggestions (<70%)
 
+## Accounts Receivable (AR) Tracking
+- **Data Source**: CW `/finance/invoices` API — fetches all invoices per company for trailing 18 months
+- **Payment Timing**: Uses `_info.lastUpdated` as payment date proxy for paid invoices. Compares against invoice date to compute days-to-pay.
+- **Aging Buckets**: Current (not yet due), 1–30 days overdue, 31–60, 61–90, 91+ days past due
+- **On-Time Calculation**: Payment is "on-time" if days-to-pay ≤ (due days + 5 day grace period)
+- **Payment Score**: A (avg ≤30d, ≥80% on-time, no 61+ aging), B (avg ≤45d, ≥60% on-time, no 91+ aging), C (avg ≤60d or ≥40% on-time), D (worse or no data)
+- **Monthly Trend**: On-time percentage by invoice month, last 12 months
+- **Stored in**: `arSummary` jsonb column on `clientAccounts`, synced during 6-hour auto-sync
+- **Frontend**: `/receivables` page — portfolio summary cards, aging bar, sortable client table with drill-down dialog showing aging breakdown, payment trend chart, and invoice-level detail
+- **On-demand refresh**: `GET /api/accounts/:id/ar-refresh` for single-account AR update
+
 ## Schema Columns (clientAccounts)
 `laborCost`, `serviceLaborCost`, `projectLaborCost`, `additionCost`, `projectProductCost`, `expenseCost`, `msLicensingRevenue`, `msLicensingCost`, `totalCost`, `serviceMarginPercent`, `projectMarginPercent`, `grossMarginPercent`, `serviceHours`, `projectHours`, `totalHours`, `engineerBreakdown` (jsonb), `agreementAdditions` (jsonb with category field), `marginAnalysis` (jsonb)
 
