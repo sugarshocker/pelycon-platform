@@ -54,7 +54,7 @@ export const clientMapping = pgTable("client_mapping", {
   ninjaOrgId: integer("ninja_org_id"),
   huntressOrgId: integer("huntress_org_id"),
   cippTenantId: text("cipp_tenant_id"),
-  dropsuiteUserId: integer("dropsuite_user_id"),
+  dropsuiteUserId: text("dropsuite_user_id"),
   notes: text("notes"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

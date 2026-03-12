@@ -494,7 +494,7 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
         ninjaOrgId: ninjaOrgId.trim() !== "" ? parseInt(ninjaOrgId, 10) : null,
         huntressOrgId: huntressOrgId.trim() !== "" ? parseInt(huntressOrgId, 10) : null,
         cippTenantId: cippTenantId.trim() !== "" ? cippTenantId.trim() : null,
-        dropsuiteUserId: dropsuiteUserId.trim() !== "" ? parseInt(dropsuiteUserId, 10) : null,
+        dropsuiteUserId: dropsuiteUserId.trim() !== "" ? dropsuiteUserId.trim() : null,
         notes: notes.trim() !== "" ? notes.trim() : null,
       });
     },
@@ -619,17 +619,21 @@ function DropSuiteCsvImport({ onClose }: { onClose: () => void }) {
 
   function parseAndImport() {
     const lines = csvText.trim().split("\n").filter(l => l.trim());
-    const rows: Array<{ companyName: string; dropsuiteUserId: number }> = [];
+    const rows: Array<{ companyName: string; dropsuiteUserId: string }> = [];
     for (const line of lines) {
-      const parts = line.split(",").map(p => p.trim().replace(/^"|"$/g, ""));
+      const isTab = line.includes("\t");
+      const parts = isTab
+        ? line.split("\t").map(p => p.trim().replace(/^"|"$/g, ""))
+        : line.split(",").map(p => p.trim().replace(/^"|"$/g, ""));
       if (parts.length < 2) continue;
-      const [nameOrId, idOrName] = parts;
-      const userId = parseInt(idOrName, 10);
-      const name = nameOrId;
-      if (!isNaN(userId) && name) rows.push({ companyName: name, dropsuiteUserId: userId });
+      const [col1, col2] = parts;
+      const col1IsId = /^\d[\d-]*$/.test(col1);
+      const userId = col1IsId ? col1 : col2;
+      const name = col1IsId ? col2 : col1;
+      if (userId && name) rows.push({ companyName: name, dropsuiteUserId: userId });
     }
     if (rows.length === 0) {
-      toast({ title: "No valid rows found", description: "Expected: CompanyName, UserID per line", variant: "destructive" });
+      toast({ title: "No valid rows found", description: "Expected: ID<tab>CompanyName or CompanyName,ID per line", variant: "destructive" });
       return;
     }
     mutation.mutate(rows);
@@ -640,11 +644,11 @@ function DropSuiteCsvImport({ onClose }: { onClose: () => void }) {
       <div>
         <p className="text-xs font-medium mb-1">Paste CSV (CompanyName, DropSuiteUserID)</p>
         <p className="text-[11px] text-muted-foreground mb-2">
-          Export from DropSuite portal → Customers list, then paste the rows here. Each row: <code className="bg-muted px-1 rounded">Company Name, 12345</code>
+          Paste rows directly from the DropSuite portal Customers export (tab-separated). Each row: <code className="bg-muted px-1 rounded">2296065-14{"        "}Company Name</code>
         </p>
         <textarea
           className="w-full h-36 text-xs font-mono border rounded-md p-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-          placeholder={"Acme Corp, 10234\nBeta LLC, 10235\nGamma Inc, 10236"}
+          placeholder={"2296065-14\tRevive Longevity Center\n2129946-14\tCathey & Cathey CPA PSC\n2006888-14\tBluegrass Home Care Services"}
           value={csvText}
           onChange={e => setCsvText(e.target.value)}
           data-testid="textarea-dropsuite-csv"

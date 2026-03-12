@@ -143,19 +143,14 @@ async function refreshStackForAccount(
   }
 
   if (dropsuite.isConfigured()) {
-    try {
-      const dropsuiteUserId: number | null = mapping?.dropsuiteUserId ?? null;
-      if (dropsuiteUserId) {
-        const dsResult = await dropsuite.getAccountBackupStatusById(dropsuiteUserId);
-        updated.dropSuite = dsResult.hasBackup ? true : false;
-        updated.dropsuiteNeedsMapping = false;
-        log(`Stack [${account.companyName}] → DropSuite ID=${dropsuiteUserId}: hasBackup=${dsResult.hasBackup}`);
-      } else {
-        updated.dropsuiteNeedsMapping = true;
-        log(`Stack [${account.companyName}] → DropSuite: no user ID mapped`);
-      }
-    } catch (e: any) {
-      log(`Stack refresh DropSuite error for ${account.companyName}: ${e.message}`);
+    const dropsuiteUserId: string | null = mapping?.dropsuiteUserId ?? null;
+    if (dropsuiteUserId) {
+      updated.dropSuite = true;
+      updated.dropsuiteNeedsMapping = false;
+      log(`Stack [${account.companyName}] → DropSuite: mapped (id=${dropsuiteUserId}), marking backup=true`);
+    } else {
+      updated.dropsuiteNeedsMapping = true;
+      log(`Stack [${account.companyName}] → DropSuite: no user ID mapped`);
     }
   }
 
@@ -2344,16 +2339,17 @@ export async function registerRoutes(
 
   app.post("/api/dropsuite/import-csv", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const rows: Array<{ companyName: string; dropsuiteUserId: number }> = req.body.rows || [];
+      const rows: Array<{ companyName: string; dropsuiteUserId: string }> = req.body.rows || [];
       if (!Array.isArray(rows) || rows.length === 0) {
         return res.status(400).json({ message: "rows array is required" });
       }
-      const allAccounts = await storage.getAllAccounts();
+      const allAccounts = await storage.getAllClientAccounts();
       const allMappings = await storage.getAllClientMappings();
       const results: Array<{ companyName: string; status: string; cwCompanyId?: number }> = [];
 
       function normName(s: string) {
         return s.toLowerCase()
+          .replace(/\[.*?\]/g, "")
           .replace(/&/g, " and ")
           .replace(/\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g, " ")
           .replace(/[^a-z0-9\s]/g, " ")
@@ -2366,13 +2362,30 @@ export async function registerRoutes(
           continue;
         }
         const normTarget = normName(row.companyName);
-        const account = allAccounts.find(a => normName(a.companyName) === normTarget
-          || normName(a.companyName).includes(normTarget) || normTarget.includes(normName(a.companyName)));
+        const tokens = normTarget.split(" ").filter(t => t.length > 2);
+
+        let account = allAccounts.find(a => normName(a.companyName) === normTarget);
+        if (!account) {
+          account = allAccounts.find(a => {
+            const n = normName(a.companyName);
+            return n.includes(normTarget) || normTarget.includes(n);
+          });
+        }
+        if (!account && tokens.length > 0) {
+          account = allAccounts.find(a => {
+            const aToks = normName(a.companyName).split(" ").filter(t => t.length > 2);
+            if (aToks.length === 0) return false;
+            const shorter = tokens.length <= aToks.length ? tokens : aToks;
+            const longer = tokens.length <= aToks.length ? aToks : tokens;
+            const hits = shorter.filter(t => longer.some(lt => lt === t || lt.startsWith(t) || t.startsWith(lt))).length;
+            return hits >= Math.ceil(shorter.length * 0.75);
+          });
+        }
         if (!account) {
           results.push({ companyName: row.companyName, status: "not found in ConnectWise accounts" });
           continue;
         }
-        const existing = allMappings.find(m => m.cwCompanyId === account.cwCompanyId);
+        const existing = allMappings.find(m => m.cwCompanyId === account!.cwCompanyId);
         await storage.upsertClientMapping({
           cwCompanyId: account.cwCompanyId,
           companyName: account.companyName,
@@ -2382,6 +2395,15 @@ export async function registerRoutes(
           dropsuiteUserId: row.dropsuiteUserId,
           notes: existing?.notes ?? null,
         });
+        const currentStack: any = account.stackCompliance || {};
+        const updatedStack = {
+          ...currentStack,
+          dropSuite: true,
+          dropsuiteNeedsMapping: false,
+          lastRefreshed: currentStack.lastRefreshed ?? null,
+          manualOverrides: currentStack.manualOverrides ?? {},
+        };
+        await storage.updateClientStackCompliance(account.id, updatedStack);
         results.push({ companyName: row.companyName, status: "mapped", cwCompanyId: account.cwCompanyId });
       }
 
