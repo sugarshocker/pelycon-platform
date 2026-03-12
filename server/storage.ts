@@ -5,6 +5,7 @@ import {
   type TbrStaging, type InsertTbrStaging, tbrStaging,
   type ClientAccount, type InsertClientAccount, clientAccounts,
   type ArOnlyClient, type InsertArOnlyClient, arOnlyClients,
+  type ClientMapping, type InsertClientMapping, clientMapping,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lte, gte, isNull, isNotNull } from "drizzle-orm";
@@ -47,6 +48,10 @@ export interface IStorage {
   getAllArOnlyClients(): Promise<ArOnlyClient[]>;
   upsertArOnlyClient(client: InsertArOnlyClient): Promise<ArOnlyClient>;
   deleteArOnlyClient(id: number): Promise<void>;
+  updateClientStackCompliance(id: number, stackCompliance: any): Promise<ClientAccount>;
+  getAllClientMappings(): Promise<ClientMapping[]>;
+  getClientMappingByCwId(cwCompanyId: number): Promise<ClientMapping | undefined>;
+  upsertClientMapping(data: InsertClientMapping): Promise<ClientMapping>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -292,6 +297,36 @@ export class DatabaseStorage implements IStorage {
 
   async deleteArOnlyClient(id: number): Promise<void> {
     await db.delete(arOnlyClients).where(eq(arOnlyClients.id, id));
+  }
+
+  async updateClientStackCompliance(id: number, stackCompliance: any): Promise<ClientAccount> {
+    const [result] = await db.update(clientAccounts)
+      .set({ stackCompliance, updatedAt: new Date() })
+      .where(eq(clientAccounts.id, id))
+      .returning();
+    return result;
+  }
+
+  async getAllClientMappings(): Promise<ClientMapping[]> {
+    return db.select().from(clientMapping).orderBy(clientMapping.companyName);
+  }
+
+  async getClientMappingByCwId(cwCompanyId: number): Promise<ClientMapping | undefined> {
+    const results = await db.select().from(clientMapping).where(eq(clientMapping.cwCompanyId, cwCompanyId)).limit(1);
+    return results[0];
+  }
+
+  async upsertClientMapping(data: InsertClientMapping): Promise<ClientMapping> {
+    const existing = await this.getClientMappingByCwId(data.cwCompanyId);
+    if (existing) {
+      const [result] = await db.update(clientMapping)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(clientMapping.id, existing.id))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(clientMapping).values(data).returning();
+    return result;
   }
 }
 

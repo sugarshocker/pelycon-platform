@@ -1604,7 +1604,7 @@ export async function registerRoutes(
 
   app.post("/api/staging/save", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const { orgId, orgName, engineerNotes, serviceManagerNotes } = req.body;
+      const { orgId, orgName, engineerNotes, serviceManagerNotes, warrantyData } = req.body;
       if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
       const existing = await storage.getStagingByOrg(orgId);
       const staging = await storage.upsertStaging({
@@ -1616,6 +1616,7 @@ export async function registerRoutes(
         licenseReportData: (existing as any)?.licenseReportData ?? null,
         mfaFileName: (existing as any)?.mfaFileName ?? null,
         licenseFileName: (existing as any)?.licenseFileName ?? null,
+        warrantyData: warrantyData ?? (existing as any)?.warrantyData ?? null,
       });
       log(`Staging notes saved for ${orgName} (orgId: ${orgId})`);
       res.json(staging);
@@ -2107,6 +2108,122 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       log(`Account tier update error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/clients/:id/stack", requireAuth, requireEditor, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid account ID" });
+      const accounts = await storage.getAllClientAccounts();
+      const account = accounts.find(a => a.id === id);
+      if (!account) return res.status(404).json({ message: "Account not found" });
+      const current: any = account.stackCompliance || {};
+      const updates = req.body || {};
+      const merged = { ...current, ...updates, lastRefreshed: new Date().toISOString() };
+      const result = await storage.updateClientStackCompliance(id, merged);
+      res.json(result);
+    } catch (err: any) {
+      log(`Stack compliance update error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/clients/:id/stack/refresh", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid account ID" });
+
+      const accounts = await storage.getAllClientAccounts();
+      const account = accounts.find(a => a.id === id);
+      if (!account) return res.status(404).json({ message: "Account not found" });
+
+      const mappings = await storage.getAllClientMappings();
+      const mapping = mappings.find(m => m.cwCompanyId === account.cwCompanyId);
+
+      const current: any = account.stackCompliance || {
+        ninjaRmm: null, huntressEdr: null, huntressItdr: null, huntressSat: null,
+        dropSuite: null, zorusDns: null, connectSecure: null, huntressSiem: null,
+        msBizPremium: null, secureScore: null, lastRefreshed: null, manualOverrides: {},
+      };
+
+      let updated = { ...current };
+
+      const normalizedName = account.companyName.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      try {
+        const ninjaOrgs = await ninjaone.getOrganizations();
+        const ninjaOrgId = mapping?.ninjaOrgId ?? null;
+        const ninjaOrg = ninjaOrgId
+          ? ninjaOrgs.find(o => o.id === ninjaOrgId)
+          : ninjaOrgs.find(o => {
+              const n = o.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+              return n.includes(normalizedName) || normalizedName.includes(n);
+            });
+        updated.ninjaRmm = ninjaOrg ? true : false;
+      } catch (e: any) {
+        log(`Stack refresh Ninja error for ${account.companyName}: ${e.message}`);
+      }
+
+      try {
+        const huntressOrgs = await huntress.getOrganizations();
+        const huntressOrgId = mapping?.huntressOrgId ?? null;
+        const huntressOrg = huntressOrgId
+          ? huntressOrgs.find((a: any) => a.id === huntressOrgId)
+          : huntressOrgs.find((a: any) => {
+              const n = (a.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              return n.includes(normalizedName) || normalizedName.includes(n);
+            });
+        updated.huntressEdr = huntressOrg ? true : false;
+      } catch (e: any) {
+        log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
+      }
+
+      const { isConfigured: cippConfigured, getClientData: cippGetClientData } = await import("./services/cipp.js");
+      if (cippConfigured() && mapping?.cippTenantId) {
+        try {
+          const cippData = await cippGetClientData(mapping.cippTenantId);
+          updated.msBizPremium = cippData.msBizPremium;
+          updated.secureScore = cippData.secureScore;
+        } catch (e: any) {
+          log(`Stack refresh CIPP error for ${account.companyName}: ${e.message}`);
+        }
+      }
+
+      const manualOverrides = current.manualOverrides || {};
+      Object.keys(manualOverrides).forEach(key => {
+        if (manualOverrides[key] !== undefined) {
+          (updated as any)[key] = manualOverrides[key];
+        }
+      });
+      updated.lastRefreshed = new Date().toISOString();
+
+      const result = await storage.updateClientStackCompliance(id, updated);
+      res.json(result);
+    } catch (err: any) {
+      log(`Stack refresh error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/client-mappings", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const mappings = await storage.getAllClientMappings();
+      res.json(mappings);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/client-mappings/:cwCompanyId", requireAuth, requireEditor, async (req: Request, res: Response) => {
+    try {
+      const cwCompanyId = parseInt(req.params.cwCompanyId as string);
+      if (isNaN(cwCompanyId)) return res.status(400).json({ message: "Invalid company ID" });
+      const data = { ...req.body, cwCompanyId };
+      const result = await storage.upsertClientMapping(data);
+      res.json(result);
+    } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
   });

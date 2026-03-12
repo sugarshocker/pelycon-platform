@@ -47,6 +47,21 @@ export const insertTbrSnapshotSchema = createInsertSchema(tbrSnapshots).omit({
 export type InsertTbrSnapshot = z.infer<typeof insertTbrSnapshotSchema>;
 export type TbrSnapshot = typeof tbrSnapshots.$inferSelect;
 
+export const clientMapping = pgTable("client_mapping", {
+  id: serial("id").primaryKey(),
+  cwCompanyId: integer("cw_company_id").notNull().unique(),
+  companyName: text("company_name").notNull(),
+  ninjaOrgId: integer("ninja_org_id"),
+  huntressOrgId: integer("huntress_org_id"),
+  cippTenantId: text("cipp_tenant_id"),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertClientMappingSchema = createInsertSchema(clientMapping).omit({ id: true, updatedAt: true });
+export type InsertClientMapping = z.infer<typeof insertClientMappingSchema>;
+export type ClientMapping = typeof clientMapping.$inferSelect;
+
 export const clientAccounts = pgTable("client_accounts", {
   id: serial("id").primaryKey(),
   cwCompanyId: integer("cw_company_id").notNull().unique(),
@@ -75,6 +90,7 @@ export const clientAccounts = pgTable("client_accounts", {
   agreementAdditions: jsonb("agreement_additions"),
   marginAnalysis: jsonb("margin_analysis"),
   arSummary: jsonb("ar_summary"),
+  stackCompliance: jsonb("stack_compliance"),
   agreementTypes: text("agreement_types"),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -149,6 +165,21 @@ export interface MarginInsight {
   title: string;
   detail: string;
   impact?: string;
+}
+
+export interface StackComplianceData {
+  ninjaRmm: boolean | null;
+  huntressEdr: boolean | null;
+  huntressItdr: boolean | null;
+  huntressSat: boolean | null;
+  dropSuite: boolean | null;
+  zorusDns: boolean | null;
+  connectSecure: boolean | null;
+  huntressSiem: boolean | null;
+  msBizPremium: boolean | null;
+  secureScore: number | null;
+  lastRefreshed: string | null;
+  manualOverrides: Record<string, boolean | null>;
 }
 
 export const loginSchema = z.object({
@@ -396,6 +427,21 @@ export const insertTbrScheduleSchema = createInsertSchema(tbrSchedules).omit({
 export type InsertTbrSchedule = z.infer<typeof insertTbrScheduleSchema>;
 export type TbrSchedule = typeof tbrSchedules.$inferSelect;
 
+export interface WarrantyItem {
+  id: string;
+  description: string;
+  vendor?: string;
+  expirationDate: string | null;
+  notes?: string;
+  coverageType?: string;
+}
+
+export interface WarrantyData {
+  serverHardware: WarrantyItem[];
+  merakiLicensing: WarrantyItem[];
+  lobApplications: WarrantyItem[];
+}
+
 export const tbrStaging = pgTable("tbr_staging", {
   id: serial("id").primaryKey(),
   orgId: integer("org_id").notNull().unique(),
@@ -406,6 +452,7 @@ export const tbrStaging = pgTable("tbr_staging", {
   licenseReportData: jsonb("license_report_data"),
   mfaFileName: text("mfa_file_name"),
   licenseFileName: text("license_file_name"),
+  warrantyData: jsonb("warranty_data"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
