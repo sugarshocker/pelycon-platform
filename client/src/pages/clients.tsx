@@ -910,14 +910,21 @@ export default function Clients() {
                     <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground sticky left-0 bg-background z-20 border-r min-w-[180px]">
                       Company
                     </th>
-                    {STACK_TOOLS.map(tool => (
-                      <th key={tool.key} className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span>{tool.abbr}</span>
-                          <span className="text-primary/60 font-semibold">{stackSummary.tools[tool.key]}/{stackSummary.total}</span>
-                        </div>
-                      </th>
-                    ))}
+                    {STACK_TOOLS.map(tool => {
+                      const count = stackSummary.tools[tool.key];
+                      const total = stackSummary.total;
+                      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                      return (
+                        <th key={tool.key} className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center whitespace-nowrap" title={`${count} of ${total} clients have ${tool.label}`}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>{tool.abbr}</span>
+                            <span className={cn("font-semibold tabular-nums", pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 40 ? "text-yellow-600 dark:text-yellow-400" : "text-muted-foreground")}>
+                              {count}/{total}
+                            </span>
+                          </div>
+                        </th>
+                      );
+                    })}
                     <th className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center">Sec Score</th>
                     <th className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center">Coverage</th>
                   </tr>

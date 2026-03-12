@@ -56,6 +56,94 @@ function requireEditor(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function fuzzyNameMatch(cwName: string, platformName: string): boolean {
+  const SUFFIXES = /\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g;
+  function norm(s: string): string {
+    return s.toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(SUFFIXES, " ")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ").trim();
+  }
+  const a = norm(cwName);
+  const b = norm(platformName);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const tokA = a.split(" ").filter(t => t.length > 2);
+  const tokB = b.split(" ").filter(t => t.length > 2);
+  if (tokA.length === 0 || tokB.length === 0) return false;
+  const shorter = tokA.length <= tokB.length ? tokA : tokB;
+  const longer  = tokA.length <= tokB.length ? tokB : tokA;
+  const hits = shorter.filter(t => longer.some(lt => lt === t || lt.includes(t) || t.includes(lt))).length;
+  return hits >= Math.ceil(shorter.length * 0.8);
+}
+
+async function refreshStackForAccount(
+  account: any,
+  mapping: any,
+  prefetched: { ninjaOrgs?: any[], huntressOrgs?: any[], cippTenants?: any[] } = {}
+): Promise<any> {
+  const current: any = account.stackCompliance || {
+    ninjaRmm: null, huntressEdr: null, huntressItdr: null, huntressSat: null,
+    dropSuite: null, zorusDns: null, connectSecure: null, huntressSiem: null,
+    msBizPremium: null, secureScore: null, lastRefreshed: null, manualOverrides: {},
+  };
+  const updated = { ...current };
+
+  try {
+    const ninjaOrgs = prefetched.ninjaOrgs ?? await ninjaone.getOrganizations();
+    const ninjaOrgId = mapping?.ninjaOrgId ?? null;
+    const ninjaOrg = ninjaOrgId
+      ? ninjaOrgs.find((o: any) => o.id === ninjaOrgId)
+      : ninjaOrgs.find((o: any) => fuzzyNameMatch(account.companyName, o.name || ""));
+    updated.ninjaRmm = ninjaOrg ? true : false;
+    if (ninjaOrg) log(`Stack [${account.companyName}] → Ninja matched: ${ninjaOrg.name}`);
+    else log(`Stack [${account.companyName}] → Ninja: no match`);
+  } catch (e: any) {
+    log(`Stack refresh Ninja error for ${account.companyName}: ${e.message}`);
+  }
+
+  try {
+    const huntressOrgs = prefetched.huntressOrgs ?? await huntress.getOrganizations();
+    const huntressOrgId = mapping?.huntressOrgId ?? null;
+    const huntressOrg = huntressOrgId
+      ? huntressOrgs.find((o: any) => o.id === huntressOrgId)
+      : huntressOrgs.find((o: any) => fuzzyNameMatch(account.companyName, o.name || ""));
+    updated.huntressEdr = huntressOrg ? true : false;
+    if (huntressOrg) log(`Stack [${account.companyName}] → Huntress matched: ${huntressOrg.name}`);
+    else log(`Stack [${account.companyName}] → Huntress: no match`);
+  } catch (e: any) {
+    log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
+  }
+
+  const { isConfigured: cippConfigured, getClientData: cippGetClientData, getTenants: cippGetTenants } = await import("./services/cipp.js");
+  if (cippConfigured()) {
+    try {
+      let cippTenantFilter: string | null = mapping?.cippTenantId ?? null;
+      if (!cippTenantFilter) {
+        const cippTenants = prefetched.cippTenants ?? await cippGetTenants();
+        const matched = cippTenants.find((t: any) => fuzzyNameMatch(account.companyName, t.displayName || ""));
+        if (matched) cippTenantFilter = matched.defaultDomainName || matched.id;
+      }
+      if (cippTenantFilter) {
+        const cippData = await cippGetClientData(cippTenantFilter);
+        updated.msBizPremium = cippData.msBizPremium;
+        updated.secureScore = cippData.secureScore;
+      }
+    } catch (e: any) {
+      log(`Stack refresh CIPP error for ${account.companyName}: ${e.message}`);
+    }
+  }
+
+  const manualOverrides = current.manualOverrides || {};
+  Object.keys(manualOverrides).forEach(key => {
+    if (manualOverrides[key] !== undefined) (updated as any)[key] = manualOverrides[key];
+  });
+  updated.lastRefreshed = new Date().toISOString();
+  return updated;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -2134,22 +2222,36 @@ export async function registerRoutes(
     try {
       const accounts = await storage.getAllClientAccounts();
       const managed = accounts.filter(a => a.tier && ["A", "B", "C"].includes(a.tier));
+      const mappings = await storage.getAllClientMappings();
       res.json({ started: true, count: managed.length });
       (async () => {
+        log(`Bulk stack refresh: pre-fetching org lists...`);
+        let ninjaOrgs: any[] = [];
+        let huntressOrgs: any[] = [];
+        let cippTenants: any[] = [];
+        try { ninjaOrgs = await ninjaone.getOrganizations(); log(`Bulk: got ${ninjaOrgs.length} Ninja orgs`); }
+        catch (e: any) { log(`Bulk: Ninja fetch failed: ${e.message}`); }
+        try { huntressOrgs = await huntress.getOrganizations(); log(`Bulk: got ${huntressOrgs.length} Huntress orgs`); }
+        catch (e: any) { log(`Bulk: Huntress fetch failed: ${e.message}`); }
+        const { isConfigured: cippConfigured, getTenants: cippGetTenants } = await import("./services/cipp.js");
+        if (cippConfigured()) {
+          try { cippTenants = await cippGetTenants(); log(`Bulk: got ${cippTenants.length} CIPP tenants`); }
+          catch (e: any) { log(`Bulk: CIPP fetch failed: ${e.message}`); }
+        }
+        const prefetched = { ninjaOrgs, huntressOrgs, cippTenants };
+        let ok = 0;
         for (const account of managed) {
           try {
-            const response = await fetch(`http://localhost:${process.env.PORT || 5000}/api/clients/${account.id}/stack/refresh`, {
-              method: "POST",
-              headers: { Cookie: req.headers.cookie || "" },
-            });
-            if (!response.ok) log(`Bulk refresh failed for ${account.companyName}: ${response.status}`);
-            else log(`Bulk refresh ok: ${account.companyName}`);
+            const mapping = mappings.find(m => m.cwCompanyId === account.cwCompanyId);
+            const updated = await refreshStackForAccount(account, mapping, prefetched);
+            await storage.updateClientStackCompliance(account.id, updated);
+            ok++;
           } catch (e: any) {
             log(`Bulk refresh error for ${account.companyName}: ${e.message}`);
           }
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 100));
         }
-        log(`Bulk stack refresh complete for ${managed.length} accounts`);
+        log(`Bulk stack refresh complete: ${ok}/${managed.length} accounts updated`);
       })().catch(e => log(`Bulk refresh fatal: ${e.message}`));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -2168,86 +2270,7 @@ export async function registerRoutes(
       const mappings = await storage.getAllClientMappings();
       const mapping = mappings.find(m => m.cwCompanyId === account.cwCompanyId);
 
-      const current: any = account.stackCompliance || {
-        ninjaRmm: null, huntressEdr: null, huntressItdr: null, huntressSat: null,
-        dropSuite: null, zorusDns: null, connectSecure: null, huntressSiem: null,
-        msBizPremium: null, secureScore: null, lastRefreshed: null, manualOverrides: {},
-      };
-
-      let updated = { ...current };
-
-      function fuzzyNameMatch(cwName: string, platformName: string): boolean {
-        const SUFFIXES = /\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g;
-        function norm(s: string): string {
-          return s.toLowerCase()
-            .replace(/&/g, " and ")
-            .replace(SUFFIXES, " ")
-            .replace(/[^a-z0-9\s]/g, " ")
-            .replace(/\s+/g, " ").trim();
-        }
-        const a = norm(cwName);
-        const b = norm(platformName);
-        if (!a || !b) return false;
-        if (a === b) return true;
-        if (a.includes(b) || b.includes(a)) return true;
-        const tokA = a.split(" ").filter(t => t.length > 2);
-        const tokB = b.split(" ").filter(t => t.length > 2);
-        if (tokA.length === 0 || tokB.length === 0) return false;
-        const shorter = tokA.length <= tokB.length ? tokA : tokB;
-        const longer  = tokA.length <= tokB.length ? tokB : tokA;
-        const hits = shorter.filter(t => longer.some(lt => lt === t || lt.includes(t) || t.includes(lt))).length;
-        return hits >= Math.ceil(shorter.length * 0.8);
-      }
-
-      try {
-        const ninjaOrgs = await ninjaone.getOrganizations();
-        const ninjaOrgId = mapping?.ninjaOrgId ?? null;
-        const ninjaOrg = ninjaOrgId
-          ? ninjaOrgs.find(o => o.id === ninjaOrgId)
-          : ninjaOrgs.find(o => fuzzyNameMatch(account.companyName, o.name || ""));
-        updated.ninjaRmm = ninjaOrg ? true : false;
-      } catch (e: any) {
-        log(`Stack refresh Ninja error for ${account.companyName}: ${e.message}`);
-      }
-
-      try {
-        const huntressOrgs = await huntress.getOrganizations();
-        const huntressOrgId = mapping?.huntressOrgId ?? null;
-        const huntressOrg = huntressOrgId
-          ? huntressOrgs.find((a: any) => a.id === huntressOrgId)
-          : huntressOrgs.find((a: any) => fuzzyNameMatch(account.companyName, a.name || ""));
-        updated.huntressEdr = huntressOrg ? true : false;
-      } catch (e: any) {
-        log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
-      }
-
-      const { isConfigured: cippConfigured, getClientData: cippGetClientData, getTenants: cippGetTenants } = await import("./services/cipp.js");
-      if (cippConfigured()) {
-        try {
-          let cippTenantFilter: string | null = mapping?.cippTenantId ?? null;
-          if (!cippTenantFilter) {
-            const cippTenants = await cippGetTenants();
-            const matched = cippTenants.find((t) => fuzzyNameMatch(account.companyName, t.displayName || ""));
-            if (matched) cippTenantFilter = matched.defaultDomainName || matched.id;
-          }
-          if (cippTenantFilter) {
-            const cippData = await cippGetClientData(cippTenantFilter);
-            updated.msBizPremium = cippData.msBizPremium;
-            updated.secureScore = cippData.secureScore;
-          }
-        } catch (e: any) {
-          log(`Stack refresh CIPP error for ${account.companyName}: ${e.message}`);
-        }
-      }
-
-      const manualOverrides = current.manualOverrides || {};
-      Object.keys(manualOverrides).forEach(key => {
-        if (manualOverrides[key] !== undefined) {
-          (updated as any)[key] = manualOverrides[key];
-        }
-      });
-      updated.lastRefreshed = new Date().toISOString();
-
+      const updated = await refreshStackForAccount(account, mapping);
       const result = await storage.updateClientStackCompliance(id, updated);
       res.json(result);
     } catch (err: any) {
