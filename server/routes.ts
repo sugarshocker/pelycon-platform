@@ -98,8 +98,20 @@ async function refreshStackForAccount(
       ? ninjaOrgs.find((o: any) => o.id === ninjaOrgId)
       : ninjaOrgs.find((o: any) => fuzzyNameMatch(account.companyName, o.name || ""));
     updated.ninjaRmm = ninjaOrg ? true : false;
-    if (ninjaOrg) log(`Stack [${account.companyName}] → Ninja matched: ${ninjaOrg.name}`);
-    else log(`Stack [${account.companyName}] → Ninja: no match`);
+    if (ninjaOrg) {
+      log(`Stack [${account.companyName}] → Ninja matched: ${ninjaOrg.name}`);
+      try {
+        const swFlags = await ninjaone.getInstalledSoftwareFlags(ninjaOrg.id);
+        updated.zorusDns = swFlags.hasZorus ? true : false;
+        updated.dropSuite = swFlags.hasDropSuite ? true : false;
+        updated.connectSecure = swFlags.hasConnectSecure ? true : false;
+        log(`Stack [${account.companyName}] → Software: Zorus=${swFlags.hasZorus}, DropSuite=${swFlags.hasDropSuite}, ConnectSecure=${swFlags.hasConnectSecure}`);
+      } catch (se: any) {
+        log(`Stack [${account.companyName}] → Software scan error: ${se.message}`);
+      }
+    } else {
+      log(`Stack [${account.companyName}] → Ninja: no match`);
+    }
   } catch (e: any) {
     log(`Stack refresh Ninja error for ${account.companyName}: ${e.message}`);
   }
@@ -111,8 +123,20 @@ async function refreshStackForAccount(
       ? huntressOrgs.find((o: any) => o.id === huntressOrgId)
       : huntressOrgs.find((o: any) => fuzzyNameMatch(account.companyName, o.name || ""));
     updated.huntressEdr = huntressOrg ? true : false;
-    if (huntressOrg) log(`Stack [${account.companyName}] → Huntress matched: ${huntressOrg.name}`);
-    else log(`Stack [${account.companyName}] → Huntress: no match`);
+    if (huntressOrg) {
+      log(`Stack [${account.companyName}] → Huntress matched: ${huntressOrg.name}`);
+      try {
+        const orgFlags = await huntress.getOrgStackFlags(huntressOrg.id);
+        updated.huntressItdr = orgFlags.hasItdr ? true : false;
+        updated.huntressSat = orgFlags.hasSat ? true : false;
+        updated.huntressSiem = orgFlags.hasSiem ? true : false;
+        log(`Stack [${account.companyName}] → Huntress flags: ITDR=${orgFlags.hasItdr}, SAT=${orgFlags.hasSat}, SIEM=${orgFlags.hasSiem}`);
+      } catch (he: any) {
+        log(`Stack [${account.companyName}] → Huntress org detail error: ${he.message}`);
+      }
+    } else {
+      log(`Stack [${account.companyName}] → Huntress: no match`);
+    }
   } catch (e: any) {
     log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
   }

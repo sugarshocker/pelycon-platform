@@ -707,11 +707,13 @@ export default function Clients() {
     },
     onSuccess: (data: any) => {
       setBulkRefreshing(true);
-      toast({ title: `Refreshing ${data?.count ?? "all"} clients`, description: "Stack data is updating in the background. Results will appear as each client completes." });
+      const count = data?.count ?? 0;
+      toast({ title: `Refreshing ${count} clients`, description: "Stack data is updating in the background — this may take several minutes. Results will appear as each client completes." });
       const poll = setInterval(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      }, 3000);
-      setTimeout(() => { clearInterval(poll); setBulkRefreshing(false); }, 60000);
+      }, 5000);
+      const maxWait = count > 20 ? 15 * 60 * 1000 : 5 * 60 * 1000;
+      setTimeout(() => { clearInterval(poll); setBulkRefreshing(false); }, maxWait);
     },
     onError: () => {
       toast({ title: "Bulk refresh failed", variant: "destructive" });

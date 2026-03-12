@@ -649,3 +649,39 @@ export async function getDeviceUserMapping(orgId: number): Promise<DeviceUserEnt
   log(`NinjaOne: device-user mapping for org ${orgId}: ${entries.length} devices, ${entries.filter(e => e.lastLoggedInUser).length} with logged-in users`);
   return entries;
 }
+
+export interface SoftwareStackFlags {
+  hasZorus: boolean;
+  hasDropSuite: boolean;
+  hasConnectSecure: boolean;
+}
+
+const softwareFlagsCache = new Map<number, { flags: SoftwareStackFlags; expires: number }>();
+
+export async function getInstalledSoftwareFlags(orgId: number): Promise<SoftwareStackFlags> {
+  const cached = softwareFlagsCache.get(orgId);
+  if (cached && Date.now() < cached.expires) return cached.flags;
+
+  const flags: SoftwareStackFlags = { hasZorus: false, hasDropSuite: false, hasConnectSecure: false };
+  try {
+    const data = await apiGet(`/v2/queries/software?df=org = ${orgId}&pageSize=1000`);
+    const results: any[] = data.results || [];
+    for (const app of results) {
+      const name = (app.name || app.displayName || app.productName || "").toLowerCase();
+      if (!flags.hasZorus && (name.includes("zorus") || name.includes("zorus filterd") || name.includes("zorustunnel"))) {
+        flags.hasZorus = true;
+      }
+      if (!flags.hasDropSuite && (name.includes("dropsuite") || name.includes("drop suite"))) {
+        flags.hasDropSuite = true;
+      }
+      if (!flags.hasConnectSecure && (name.includes("connectsecure") || name.includes("connect secure") || name.includes("cybercns") || name.includes("cyber cns"))) {
+        flags.hasConnectSecure = true;
+      }
+    }
+    log(`NinjaOne org ${orgId} software flags: Zorus=${flags.hasZorus}, DropSuite=${flags.hasDropSuite}, ConnectSecure=${flags.hasConnectSecure} (${results.length} apps scanned)`);
+  } catch (e: any) {
+    log(`NinjaOne getInstalledSoftwareFlags error for org ${orgId}: ${e.message}`);
+  }
+  softwareFlagsCache.set(orgId, { flags, expires: Date.now() + 10 * 60 * 1000 });
+  return flags;
+}

@@ -147,6 +147,45 @@ export async function getOrganizations(): Promise<Array<{ id: number; name: stri
   return allOrgs;
 }
 
+export interface OrgStackFlags {
+  hasItdr: boolean;
+  hasSat: boolean;
+  hasSiem: boolean;
+}
+
+const orgDetailCache = new Map<number, { flags: OrgStackFlags; expires: number }>();
+
+export async function getOrgStackFlags(orgId: number): Promise<OrgStackFlags> {
+  const cached = orgDetailCache.get(orgId);
+  if (cached && Date.now() < cached.expires) return cached.flags;
+
+  try {
+    const orgDetail = await apiGet(`/organizations/${orgId}`);
+    const org = orgDetail.organization || orgDetail || {};
+
+    const m365Users = org.microsoft_365_users_count ?? org.billable_identity_count ?? 0;
+    const satLearners = org.sat_learner_count ?? 0;
+    const hasSiem = !!(
+      org.siem_agent_count > 0 ||
+      org.siem_enabled === true ||
+      org.has_siem === true ||
+      org.siem_event_count > 0
+    );
+
+    const flags: OrgStackFlags = {
+      hasItdr: m365Users > 0,
+      hasSat: satLearners > 0,
+      hasSiem,
+    };
+    log(`Huntress org ${orgId} stack flags: ITDR=${flags.hasItdr}(${m365Users} M365), SAT=${flags.hasSat}(${satLearners} learners), SIEM=${flags.hasSiem}`);
+    orgDetailCache.set(orgId, { flags, expires: Date.now() + 10 * 60 * 1000 });
+    return flags;
+  } catch (e: any) {
+    log(`Huntress getOrgStackFlags error for org ${orgId}: ${e.message}`);
+    return { hasItdr: false, hasSat: false, hasSiem: false };
+  }
+}
+
 function normalize(s: string): string {
   return s
     .toLowerCase()
