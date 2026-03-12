@@ -6,6 +6,7 @@ import Papa from "papaparse";
 import bcrypt from "bcryptjs";
 import * as ninjaone from "./services/ninjaone";
 import * as huntress from "./services/huntress";
+import * as dropsuite from "./services/dropsuite";
 import * as connectwise from "./services/connectwise";
 import * as roadmap from "./services/roadmap";
 import { generateSummaryHtml } from "./services/export";
@@ -139,6 +140,21 @@ async function refreshStackForAccount(
     }
   } catch (e: any) {
     log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
+  }
+
+  if (dropsuite.isConfigured()) {
+    try {
+      const dsResult = await dropsuite.getAccountBackupStatus(account.companyName);
+      if (dsResult.hasBackup) {
+        updated.dropSuite = true;
+        log(`Stack [${account.companyName}] → DropSuite: has backup (org="${dsResult.orgName}", users=${dsResult.userCount ?? "?"}) `);
+      } else if (dropsuite.isResellerConfigured()) {
+        updated.dropSuite = false;
+        log(`Stack [${account.companyName}] → DropSuite: no backup found`);
+      }
+    } catch (e: any) {
+      log(`Stack refresh DropSuite error for ${account.companyName}: ${e.message}`);
+    }
   }
 
   const { isConfigured: cippConfigured, getClientData: cippGetClientData, getTenants: cippGetTenants } = await import("./services/cipp.js");

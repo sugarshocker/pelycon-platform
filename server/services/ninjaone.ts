@@ -668,7 +668,7 @@ export async function getInstalledSoftwareFlags(orgId: number): Promise<Software
     const results: any[] = data.results || [];
     for (const app of results) {
       const name = (app.name || app.displayName || app.productName || "").toLowerCase();
-      if (!flags.hasZorus && (name.includes("zorus") || name.includes("zorus filterd") || name.includes("zorustunnel"))) {
+      if (!flags.hasZorus && (name.includes("zorus") || name.includes("archon agent") || name.includes("zorustunnel") || name.includes("archon"))) {
         flags.hasZorus = true;
       }
       if (!flags.hasDropSuite && (name.includes("dropsuite") || name.includes("drop suite"))) {
