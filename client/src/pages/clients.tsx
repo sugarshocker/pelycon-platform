@@ -247,8 +247,8 @@ function FinancialsTab({ account }: { account: Account }) {
             {Object.entries(eb).map(([name, data]) => (
               <div key={name} className="grid grid-cols-3 px-3 py-1.5 border-t">
                 <span className="truncate">{name}</span>
-                <span className="text-right tabular-nums">{data.hours.toFixed(1)}</span>
-                <span className="text-right tabular-nums">{fmtRevenue(data.cost)}</span>
+                <span className="text-right tabular-nums">{(data as any)?.hours?.toFixed(1) ?? "—"}</span>
+                <span className="text-right tabular-nums">{fmtRevenue((data as any)?.cost)}</span>
               </div>
             ))}
           </div>
