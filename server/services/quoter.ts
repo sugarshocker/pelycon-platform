@@ -95,6 +95,7 @@ export interface QuoterQuote {
   id: string;
   name: string;
   status: string;
+  stage: string;
   draft: boolean;
   total: number | null;
   oneTimeTotal: number | null;
@@ -116,12 +117,37 @@ function parseDecimal(val: string | null | undefined): number | null {
   return isNaN(n) ? null : n;
 }
 
+function computeStage(status: string, draft: boolean, emailStatus: string | null): string {
+  if (draft) return "Draft";
+  switch (status) {
+    case "expired": return "Expired";
+    case "accepted": return "Won - Accepted";
+    case "ordered": return "Won - Ordered";
+    case "fulfilled": return "Won - Fulfilled";
+    case "lost": case "declined": return "Lost";
+    default:
+      switch (emailStatus) {
+        case "undeliverable": return "Sent - Undeliverable";
+        case "pending": case "queued": return "Sent - Pending";
+        case "delivered": return "Sent - Delivered";
+        case "opened": return "Sent - Opened";
+        case "clicked": return "Sent - Clicked";
+        case "sent": return "Sent - Delivered";
+        default: return "Published";
+      }
+  }
+}
+
 function mapQuote(q: any): QuoterQuote {
+  const status = q.status || "pending";
+  const draft = !!q.draft;
+  const emailStatus = q.email_status || null;
   return {
     id: q.id,
     name: q.name || "",
-    status: q.status || "pending",
-    draft: !!q.draft,
+    status,
+    stage: computeStage(status, draft, emailStatus),
+    draft,
     total: parseDecimal(q.one_time_total_decimal ?? q.monthly_total_decimal ?? q.annual_total_decimal),
     oneTimeTotal: parseDecimal(q.one_time_total_decimal),
     monthlyTotal: parseDecimal(q.monthly_total_decimal),
@@ -131,7 +157,7 @@ function mapQuote(q: any): QuoterQuote {
     createdAt: q.created_at || "",
     modifiedAt: q.modified_at || "",
     expiredAt: q.expired_at || null,
-    emailStatus: q.email_status || null,
+    emailStatus,
     connectwiseOpportunityId: q.connectwise_opportunity_id || null,
     number: q.number || "",
   };
@@ -162,13 +188,16 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
   const cutoff = twelveMonthsAgo.toISOString();
 
-  const allActive = quotes.filter(q => !q.draft && q.status === "pending");
+  const TERMINAL = new Set(["expired", "lost", "declined", "accepted", "ordered", "fulfilled"]);
+  const WON = new Set(["accepted", "ordered", "fulfilled"]);
+
+  const allActive = quotes.filter(q => !q.draft && !TERMINAL.has(q.status));
   const active = allActive.filter(q => q.createdAt >= cutoff);
   const olderActiveCount = allActive.length - active.length;
   const activeValue = active.reduce((sum, q) => sum + (q.total || 0), 0);
 
   const thisMonth = quotes.filter(q => q.createdAt >= startOfMonth);
-  const wonThisMonth = quotes.filter(q => q.status === "accepted" && q.modifiedAt >= startOfMonth);
+  const wonThisMonth = quotes.filter(q => WON.has(q.status) && q.modifiedAt >= startOfMonth);
   const wonThisMonthValue = wonThisMonth.reduce((sum, q) => sum + (q.total || 0), 0);
 
   const recentQuotes = [...quotes]

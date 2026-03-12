@@ -10,6 +10,7 @@ interface QuoterQuote {
   id: string;
   name: string;
   status: string;
+  stage: string;
   draft: boolean;
   total: number | null;
   oneTimeTotal: number | null;
@@ -46,20 +47,22 @@ function fmtDate(s: string | null): string {
   try { return format(parseISO(s), "MMM d, yyyy"); } catch { return s; }
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === "accepted") return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0 text-xs">Won</Badge>;
-  if (status === "pending") return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 text-xs">Pending</Badge>;
-  if (status === "declined") return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 text-xs">Declined</Badge>;
-  if (status === "expired") return <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 text-xs">Expired</Badge>;
-  return <Badge variant="secondary" className="text-xs">{status}</Badge>;
-}
-
-function EmailBadge({ status }: { status: string | null }) {
-  if (!status) return null;
-  if (status === "clicked") return <span className="text-xs text-green-600 dark:text-green-400">Clicked</span>;
-  if (status === "opened") return <span className="text-xs text-blue-600 dark:text-blue-400">Opened</span>;
-  if (status === "sent") return <span className="text-xs text-muted-foreground">Sent</span>;
-  return <span className="text-xs text-muted-foreground">{status}</span>;
+function StageBadge({ stage }: { stage: string }) {
+  if (stage === "Won - Accepted" || stage === "Won - Ordered" || stage === "Won - Fulfilled")
+    return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Sent - Clicked")
+    return <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Sent - Opened")
+    return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Sent - Delivered" || stage === "Sent - Pending")
+    return <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Sent - Undeliverable")
+    return <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Published")
+    return <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Expired" || stage === "Lost")
+    return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  return <Badge variant="secondary" className="text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
 }
 
 function QuoteRow({ q }: { q: QuoterQuote }) {
@@ -73,9 +76,8 @@ function QuoteRow({ q }: { q: QuoterQuote }) {
         <div className="font-semibold">{fmt$(q.total)}</div>
         <div className="text-xs text-muted-foreground">{fmtDate(q.createdAt)}</div>
       </div>
-      <div className="shrink-0 w-20 text-right">
-        <StatusBadge status={q.status} />
-        <div className="mt-0.5"><EmailBadge status={q.emailStatus} /></div>
+      <div className="shrink-0 w-32 text-right">
+        <StageBadge stage={q.stage} />
       </div>
     </div>
   );
