@@ -87,7 +87,7 @@ async function refreshStackForAccount(
 ): Promise<any> {
   const current: any = account.stackCompliance || {
     ninjaRmm: null, huntressEdr: null, huntressItdr: null, huntressSat: null,
-    dropSuite: null, zorusDns: null, connectSecure: null, huntressSiem: null,
+    dropSuite: null, dropsuiteNeedsMapping: null, zorusDns: null, connectSecure: null, huntressSiem: null,
     msBizPremium: null, secureScore: null, lastRefreshed: null, manualOverrides: {},
   };
   const updated = { ...current };
@@ -144,13 +144,15 @@ async function refreshStackForAccount(
 
   if (dropsuite.isConfigured()) {
     try {
-      const dsResult = await dropsuite.getAccountBackupStatus(account.companyName);
-      if (dsResult.hasBackup) {
-        updated.dropSuite = true;
-        log(`Stack [${account.companyName}] → DropSuite: has backup (org="${dsResult.orgName}", users=${dsResult.userCount ?? "?"}) `);
-      } else if (dropsuite.isResellerConfigured()) {
-        updated.dropSuite = false;
-        log(`Stack [${account.companyName}] → DropSuite: no backup found`);
+      const dropsuiteUserId: number | null = mapping?.dropsuiteUserId ?? null;
+      if (dropsuiteUserId) {
+        const dsResult = await dropsuite.getAccountBackupStatusById(dropsuiteUserId);
+        updated.dropSuite = dsResult.hasBackup ? true : false;
+        updated.dropsuiteNeedsMapping = false;
+        log(`Stack [${account.companyName}] → DropSuite ID=${dropsuiteUserId}: hasBackup=${dsResult.hasBackup}`);
+      } else {
+        updated.dropsuiteNeedsMapping = true;
+        log(`Stack [${account.companyName}] → DropSuite: no user ID mapped`);
       }
     } catch (e: any) {
       log(`Stack refresh DropSuite error for ${account.companyName}: ${e.message}`);
@@ -2336,6 +2338,56 @@ export async function registerRoutes(
       const result = await storage.upsertClientMapping(data);
       res.json(result);
     } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/dropsuite/import-csv", requireAuth, requireEditor, async (req: Request, res: Response) => {
+    try {
+      const rows: Array<{ companyName: string; dropsuiteUserId: number }> = req.body.rows || [];
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ message: "rows array is required" });
+      }
+      const allAccounts = await storage.getAllAccounts();
+      const allMappings = await storage.getAllClientMappings();
+      const results: Array<{ companyName: string; status: string; cwCompanyId?: number }> = [];
+
+      function normName(s: string) {
+        return s.toLowerCase()
+          .replace(/&/g, " and ")
+          .replace(/\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g, " ")
+          .replace(/[^a-z0-9\s]/g, " ")
+          .replace(/\s+/g, " ").trim();
+      }
+
+      for (const row of rows) {
+        if (!row.companyName || !row.dropsuiteUserId) {
+          results.push({ companyName: row.companyName || "(missing)", status: "skipped: missing name or user ID" });
+          continue;
+        }
+        const normTarget = normName(row.companyName);
+        const account = allAccounts.find(a => normName(a.companyName) === normTarget
+          || normName(a.companyName).includes(normTarget) || normTarget.includes(normName(a.companyName)));
+        if (!account) {
+          results.push({ companyName: row.companyName, status: "not found in ConnectWise accounts" });
+          continue;
+        }
+        const existing = allMappings.find(m => m.cwCompanyId === account.cwCompanyId);
+        await storage.upsertClientMapping({
+          cwCompanyId: account.cwCompanyId,
+          companyName: account.companyName,
+          ninjaOrgId: existing?.ninjaOrgId ?? null,
+          huntressOrgId: existing?.huntressOrgId ?? null,
+          cippTenantId: existing?.cippTenantId ?? null,
+          dropsuiteUserId: row.dropsuiteUserId,
+          notes: existing?.notes ?? null,
+        });
+        results.push({ companyName: row.companyName, status: "mapped", cwCompanyId: account.cwCompanyId });
+      }
+
+      res.json({ results, total: rows.length, mapped: results.filter(r => r.status === "mapped").length });
+    } catch (err: any) {
+      log(`DropSuite CSV import error: ${err.message}`);
       res.status(500).json({ message: err.message });
     }
   });

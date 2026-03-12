@@ -85,6 +85,30 @@ export interface DropSuiteAccountInfo {
 
 const accountCache = new Map<string, { info: DropSuiteAccountInfo; expires: number }>();
 
+export async function getAccountBackupStatusById(userId: number): Promise<DropSuiteAccountInfo> {
+  const cacheKey = `id:${userId}`;
+  const cached = accountCache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) return cached.info;
+
+  if (!isConfigured()) return { hasBackup: false };
+
+  try {
+    const data = await apiGet(`/accounts?user_ids[]=${userId}`, false);
+    const accounts: any[] = data.accounts || (Array.isArray(data) ? data : []);
+    const found = accounts.find((a: any) => Number(a.user_id ?? a.id) === userId);
+    const info: DropSuiteAccountInfo = {
+      hasBackup: !!found,
+      userCount: found ? 1 : 0,
+      orgName: found?.name || found?.email,
+    };
+    accountCache.set(cacheKey, { info, expires: Date.now() + 10 * 60 * 1000 });
+    return info;
+  } catch (e: any) {
+    log(`DropSuite getAccountBackupStatusById(${userId}) error: ${e.message}`);
+    return { hasBackup: false };
+  }
+}
+
 export async function getAccountBackupStatus(companyName: string): Promise<DropSuiteAccountInfo> {
   const cacheKey = companyName.toLowerCase();
   const cached = accountCache.get(cacheKey);
@@ -138,22 +162,9 @@ export async function getAccountBackupStatus(companyName: string): Promise<DropS
 
     log(`DropSuite: matched "${companyName}" → "${matched.name}" (id=${matched.id})`);
 
-    let userCount: number | undefined;
-    if (matched.user_ids && matched.user_ids.length > 0) {
-      userCount = matched.user_ids.length;
-      try {
-        const accountData = await apiGet(`/accounts?user_ids[]=${matched.user_ids.join("&user_ids[]=")}`, false);
-        const accounts = accountData.accounts || accountData || [];
-        userCount = Array.isArray(accounts) ? accounts.length : matched.user_ids.length;
-      } catch (e: any) {
-        log(`DropSuite account detail fetch error for "${matched.name}": ${e.message}`);
-        userCount = matched.user_ids.length;
-      }
-    }
-
     const info: DropSuiteAccountInfo = {
       hasBackup: true,
-      userCount,
+      userCount: matched.user_ids?.length,
       orgName: matched.name,
     };
     accountCache.set(cacheKey, { info, expires: Date.now() + 10 * 60 * 1000 });

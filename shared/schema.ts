@@ -54,6 +54,7 @@ export const clientMapping = pgTable("client_mapping", {
   ninjaOrgId: integer("ninja_org_id"),
   huntressOrgId: integer("huntress_org_id"),
   cippTenantId: text("cipp_tenant_id"),
+  dropsuiteUserId: integer("dropsuite_user_id"),
   notes: text("notes"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -173,6 +174,7 @@ export interface StackComplianceData {
   huntressItdr: boolean | null;
   huntressSat: boolean | null;
   dropSuite: boolean | null;
+  dropsuiteNeedsMapping: boolean | null;
   zorusDns: boolean | null;
   connectSecure: boolean | null;
   huntressSiem: boolean | null;

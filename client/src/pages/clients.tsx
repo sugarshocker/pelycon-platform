@@ -31,6 +31,7 @@ import {
   CalendarDays,
   ArrowRight,
   Link2,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
@@ -54,7 +55,12 @@ const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string
   { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP" },
 ];
 
-function StackDot({ value }: { value: boolean | null | undefined }) {
+function StackDot({ value, needsMapping }: { value: boolean | null | undefined; needsMapping?: boolean }) {
+  if (needsMapping) return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-1 py-0.5 leading-none whitespace-nowrap mx-auto">
+      Map
+    </span>
+  );
   if (value === true) return <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />;
   if (value === false) return <XCircle className="h-4 w-4 text-red-500 mx-auto" />;
   return <MinusCircle className="h-4 w-4 text-muted-foreground/30 mx-auto" />;
@@ -433,12 +439,14 @@ function StackManualOverridePanel({ account, onClose }: { account: Account; onCl
       {STACK_TOOLS.map(tool => {
         const val = stack[tool.key];
         const isManual = stack.manualOverrides?.[tool.key] !== undefined;
+        const dsNeedsMapping = tool.key === "dropSuite" && stack.dropsuiteNeedsMapping === true;
         return (
           <div key={tool.key} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <StackDot value={val} />
+              <StackDot value={val} needsMapping={dsNeedsMapping} />
               <span className="text-sm">{tool.label}</span>
-              {isManual && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
+              {dsNeedsMapping && <Badge variant="outline" className="text-[10px] h-4 px-1 text-amber-600 border-amber-300">needs mapping</Badge>}
+              {isManual && !dsNeedsMapping && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -463,6 +471,7 @@ interface ClientMappingData {
   ninjaOrgId: number | null;
   huntressOrgId: number | null;
   cippTenantId: string | null;
+  dropsuiteUserId: number | null;
   notes: string | null;
 }
 
@@ -474,6 +483,7 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
   const [ninjaOrgId, setNinjaOrgId] = useState(existing?.ninjaOrgId != null ? String(existing.ninjaOrgId) : "");
   const [huntressOrgId, setHuntressOrgId] = useState(existing?.huntressOrgId != null ? String(existing.huntressOrgId) : "");
   const [cippTenantId, setCippTenantId] = useState(existing?.cippTenantId ?? "");
+  const [dropsuiteUserId, setDropsuiteUserId] = useState(existing?.dropsuiteUserId != null ? String(existing.dropsuiteUserId) : "");
   const [notes, setNotes] = useState(existing?.notes ?? "");
 
   const mutation = useMutation({
@@ -484,6 +494,7 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
         ninjaOrgId: ninjaOrgId.trim() !== "" ? parseInt(ninjaOrgId, 10) : null,
         huntressOrgId: huntressOrgId.trim() !== "" ? parseInt(huntressOrgId, 10) : null,
         cippTenantId: cippTenantId.trim() !== "" ? cippTenantId.trim() : null,
+        dropsuiteUserId: dropsuiteUserId.trim() !== "" ? parseInt(dropsuiteUserId, 10) : null,
         notes: notes.trim() !== "" ? notes.trim() : null,
       });
     },
@@ -497,6 +508,8 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
       toast({ title: "Save failed", variant: "destructive" });
     },
   });
+
+  const needsDs = account.stackCompliance?.dropsuiteNeedsMapping === true && !dropsuiteUserId;
 
   return (
     <div className="p-4 space-y-4">
@@ -538,6 +551,24 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
           <p className="text-[11px] text-muted-foreground">Default domain name from Entra / CIPP</p>
         </div>
         <div className="space-y-1">
+          <label className="text-xs font-medium flex items-center gap-1.5">
+            DropSuite User ID
+            {needsDs && (
+              <span className="text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-1.5 py-0.5">
+                needs mapping
+              </span>
+            )}
+          </label>
+          <Input
+            value={dropsuiteUserId}
+            onChange={e => setDropsuiteUserId(e.target.value)}
+            placeholder="Numeric user ID from DropSuite portal"
+            className={`h-8 text-sm ${needsDs ? "border-amber-400 focus-visible:ring-amber-400" : ""}`}
+            data-testid="input-dropsuite-user-id"
+          />
+          <p className="text-[11px] text-muted-foreground">Found in DropSuite portal → Customers list (export CSV to get IDs)</p>
+        </div>
+        <div className="space-y-1">
           <label className="text-xs font-medium">Notes</label>
           <Input
             value={notes}
@@ -560,6 +591,82 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
         </Button>
         <Button size="sm" variant="outline" onClick={onClose} data-testid="button-cancel-mapping">
           Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DropSuiteCsvImport({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast();
+  const [csvText, setCsvText] = useState("");
+  const [results, setResults] = useState<Array<{ companyName: string; status: string }> | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: async (rows: Array<{ companyName: string; dropsuiteUserId: number }>) => {
+      const res = await apiRequest("POST", "/api/dropsuite/import-csv", { rows });
+      return res as any;
+    },
+    onSuccess: (data: any) => {
+      setResults(data.results || []);
+      queryClient.invalidateQueries({ queryKey: ["/api/client-mappings"] });
+      toast({ title: `DropSuite import complete`, description: `${data.mapped} of ${data.total} clients mapped.` });
+    },
+    onError: () => {
+      toast({ title: "Import failed", variant: "destructive" });
+    },
+  });
+
+  function parseAndImport() {
+    const lines = csvText.trim().split("\n").filter(l => l.trim());
+    const rows: Array<{ companyName: string; dropsuiteUserId: number }> = [];
+    for (const line of lines) {
+      const parts = line.split(",").map(p => p.trim().replace(/^"|"$/g, ""));
+      if (parts.length < 2) continue;
+      const [nameOrId, idOrName] = parts;
+      const userId = parseInt(idOrName, 10);
+      const name = nameOrId;
+      if (!isNaN(userId) && name) rows.push({ companyName: name, dropsuiteUserId: userId });
+    }
+    if (rows.length === 0) {
+      toast({ title: "No valid rows found", description: "Expected: CompanyName, UserID per line", variant: "destructive" });
+      return;
+    }
+    mutation.mutate(rows);
+  }
+
+  return (
+    <div className="p-4 space-y-3">
+      <div>
+        <p className="text-xs font-medium mb-1">Paste CSV (CompanyName, DropSuiteUserID)</p>
+        <p className="text-[11px] text-muted-foreground mb-2">
+          Export from DropSuite portal → Customers list, then paste the rows here. Each row: <code className="bg-muted px-1 rounded">Company Name, 12345</code>
+        </p>
+        <textarea
+          className="w-full h-36 text-xs font-mono border rounded-md p-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder={"Acme Corp, 10234\nBeta LLC, 10235\nGamma Inc, 10236"}
+          value={csvText}
+          onChange={e => setCsvText(e.target.value)}
+          data-testid="textarea-dropsuite-csv"
+        />
+      </div>
+      {results && (
+        <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
+          {results.map((r, i) => (
+            <div key={i} className="flex items-center justify-between text-[11px]">
+              <span className="truncate font-medium">{r.companyName}</span>
+              <span className={r.status === "mapped" ? "text-green-600" : "text-muted-foreground"}>{r.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Button size="sm" className="flex-1" onClick={parseAndImport} disabled={mutation.isPending || !csvText.trim()} data-testid="button-import-dropsuite-csv">
+          <Upload className="h-3.5 w-3.5 mr-1.5" />
+          {mutation.isPending ? "Importing…" : "Import"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onClose} data-testid="button-cancel-dropsuite-import">
+          Close
         </Button>
       </div>
     </div>
@@ -679,6 +786,7 @@ export default function Clients() {
   const [sortKey, setSortKey] = useState<SortKey>("companyName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [showDsImport, setShowDsImport] = useState(false);
   const { toast } = useToast();
 
   const { data: accounts = [], isLoading } = useQuery<Account[]>({
@@ -808,16 +916,27 @@ export default function Clients() {
                 Stack Compliance
               </Button>
               {view === "stack" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => refreshAllMutation.mutate()}
-                  disabled={refreshAllMutation.isPending || bulkRefreshing}
-                  data-testid="button-refresh-all-stack"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${bulkRefreshing ? "animate-spin" : ""}`} />
-                  {bulkRefreshing ? "Refreshing…" : "Refresh All"}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowDsImport(v => !v)}
+                    data-testid="button-dropsuite-import"
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />
+                    DropSuite IDs
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => refreshAllMutation.mutate()}
+                    disabled={refreshAllMutation.isPending || bulkRefreshing}
+                    data-testid="button-refresh-all-stack"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${bulkRefreshing ? "animate-spin" : ""}`} />
+                    {bulkRefreshing ? "Refreshing…" : "Refresh All"}
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -850,6 +969,18 @@ export default function Clients() {
             <span className="text-xs text-muted-foreground ml-auto">{filtered.length} shown</span>
           </div>
         </div>
+
+        {showDsImport && view === "stack" && (
+          <div className="mx-4 mt-0 mb-3 border rounded-lg bg-muted/30 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b bg-background">
+              <div className="flex items-center gap-2">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-semibold">Import DropSuite Customer IDs</span>
+              </div>
+            </div>
+            <DropSuiteCsvImport onClose={() => setShowDsImport(false)} />
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto">
           {isLoading ? (
@@ -951,7 +1082,10 @@ export default function Clients() {
                         </td>
                         {STACK_TOOLS.map(tool => (
                           <td key={tool.key} className="px-3 py-2 text-center">
-                            <StackDot value={stack?.[tool.key]} />
+                            <StackDot
+                              value={stack?.[tool.key]}
+                              needsMapping={tool.key === "dropSuite" && stack?.dropsuiteNeedsMapping === true}
+                            />
                           </td>
                         ))}
                         <td className="px-3 py-2 text-center text-xs font-semibold">
