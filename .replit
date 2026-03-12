@@ -46,3 +46,4 @@ integrations = ["javascript_anthropic_ai_integrations:2.0.0"]
 
 [userenv.shared]
 CIPP_BASE_URL = "https://cippy2myc.azurewebsites.net"
+CIPP_TENANT = "pelycon.com"
