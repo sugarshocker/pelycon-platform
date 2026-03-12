@@ -2180,12 +2180,23 @@ export async function registerRoutes(
         log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
       }
 
-      const { isConfigured: cippConfigured, getClientData: cippGetClientData } = await import("./services/cipp.js");
-      if (cippConfigured() && mapping?.cippTenantId) {
+      const { isConfigured: cippConfigured, getClientData: cippGetClientData, getTenants: cippGetTenants } = await import("./services/cipp.js");
+      if (cippConfigured()) {
         try {
-          const cippData = await cippGetClientData(mapping.cippTenantId);
-          updated.msBizPremium = cippData.msBizPremium;
-          updated.secureScore = cippData.secureScore;
+          let cippTenantFilter: string | null = mapping?.cippTenantId ?? null;
+          if (!cippTenantFilter) {
+            const cippTenants = await cippGetTenants();
+            const matched = cippTenants.find((t) => {
+              const tn = (t.displayName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              return tn.includes(normalizedName) || normalizedName.includes(tn);
+            });
+            if (matched) cippTenantFilter = matched.defaultDomainName || matched.id;
+          }
+          if (cippTenantFilter) {
+            const cippData = await cippGetClientData(cippTenantFilter);
+            updated.msBizPremium = cippData.msBizPremium;
+            updated.secureScore = cippData.secureScore;
+          }
         } catch (e: any) {
           log(`Stack refresh CIPP error for ${account.companyName}: ${e.message}`);
         }
