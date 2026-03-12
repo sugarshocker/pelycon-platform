@@ -2130,6 +2130,32 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/clients/stack/refresh-all", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const accounts = await storage.getAllClientAccounts();
+      const managed = accounts.filter(a => a.tier && ["A", "B", "C"].includes(a.tier));
+      res.json({ started: true, count: managed.length });
+      (async () => {
+        for (const account of managed) {
+          try {
+            const response = await fetch(`http://localhost:${process.env.PORT || 5000}/api/clients/${account.id}/stack/refresh`, {
+              method: "POST",
+              headers: { Cookie: req.headers.cookie || "" },
+            });
+            if (!response.ok) log(`Bulk refresh failed for ${account.companyName}: ${response.status}`);
+            else log(`Bulk refresh ok: ${account.companyName}`);
+          } catch (e: any) {
+            log(`Bulk refresh error for ${account.companyName}: ${e.message}`);
+          }
+          await new Promise(r => setTimeout(r, 200));
+        }
+        log(`Bulk stack refresh complete for ${managed.length} accounts`);
+      })().catch(e => log(`Bulk refresh fatal: ${e.message}`));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/clients/:id/stack/refresh", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);

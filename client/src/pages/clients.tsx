@@ -700,6 +700,24 @@ export default function Clients() {
     },
   });
 
+  const [bulkRefreshing, setBulkRefreshing] = useState(false);
+  const refreshAllMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/clients/stack/refresh-all`);
+    },
+    onSuccess: (data: any) => {
+      setBulkRefreshing(true);
+      toast({ title: `Refreshing ${data?.count ?? "all"} clients`, description: "Stack data is updating in the background. Results will appear as each client completes." });
+      const poll = setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      }, 3000);
+      setTimeout(() => { clearInterval(poll); setBulkRefreshing(false); }, 60000);
+    },
+    onError: () => {
+      toast({ title: "Bulk refresh failed", variant: "destructive" });
+    },
+  });
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("asc"); }
@@ -787,6 +805,18 @@ export default function Clients() {
                 <Shield className="h-3.5 w-3.5 mr-1.5" />
                 Stack Compliance
               </Button>
+              {view === "stack" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refreshAllMutation.mutate()}
+                  disabled={refreshAllMutation.isPending || bulkRefreshing}
+                  data-testid="button-refresh-all-stack"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${bulkRefreshing ? "animate-spin" : ""}`} />
+                  {bulkRefreshing ? "Refreshing…" : "Refresh All"}
+                </Button>
+              )}
             </div>
           </div>
 

@@ -191,7 +191,9 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
   const TERMINAL = new Set(["expired", "lost", "declined", "accepted", "ordered", "fulfilled"]);
   const WON = new Set(["accepted", "ordered", "fulfilled"]);
 
-  const allActive = quotes.filter(q => !q.draft && !TERMINAL.has(q.status));
+  const allActive = quotes
+    .filter(q => !q.draft && !TERMINAL.has(q.status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const active = allActive.filter(q => q.createdAt >= cutoff);
   const olderActiveCount = allActive.length - active.length;
   const activeValue = active.reduce((sum, q) => sum + (q.total || 0), 0);
