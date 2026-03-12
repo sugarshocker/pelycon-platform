@@ -29,6 +29,7 @@ interface QuoterSummary {
   activeQuotes: QuoterQuote[];
   activeCount: number;
   activeValue: number;
+  olderActiveCount: number;
   quotesThisMonth: number;
   wonThisMonth: number;
   wonThisMonthValue: number;
@@ -190,6 +191,9 @@ export default function Sales() {
                   <Badge variant="secondary" className="text-xs font-normal">{data.activeCount}</Badge>
                 )}
               </CardTitle>
+              {!isLoading && data && (
+                <p className="text-xs text-muted-foreground">Last 12 months{data.olderActiveCount > 0 ? ` · ${data.olderActiveCount} older quote${data.olderActiveCount === 1 ? "" : "s"} not shown` : ""}</p>
+              )}
             </div>
           </CardHeader>
           <CardContent>

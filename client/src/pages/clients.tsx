@@ -30,6 +30,7 @@ import {
   BarChart3,
   CalendarDays,
   ArrowRight,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
@@ -455,9 +456,120 @@ function StackManualOverridePanel({ account, onClose }: { account: Account; onCl
   );
 }
 
+interface ClientMappingData {
+  id?: number;
+  cwCompanyId: number;
+  companyName: string;
+  ninjaOrgId: number | null;
+  huntressOrgId: number | null;
+  cippTenantId: string | null;
+  notes: string | null;
+}
+
+function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose: () => void }) {
+  const { toast } = useToast();
+  const { data: allMappings = [] } = useQuery<ClientMappingData[]>({ queryKey: ["/api/client-mappings"] });
+  const existing = allMappings.find(m => m.cwCompanyId === account.cwCompanyId);
+
+  const [ninjaOrgId, setNinjaOrgId] = useState(existing?.ninjaOrgId != null ? String(existing.ninjaOrgId) : "");
+  const [huntressOrgId, setHuntressOrgId] = useState(existing?.huntressOrgId != null ? String(existing.huntressOrgId) : "");
+  const [cippTenantId, setCippTenantId] = useState(existing?.cippTenantId ?? "");
+  const [notes, setNotes] = useState(existing?.notes ?? "");
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PUT", `/api/client-mappings/${account.cwCompanyId}`, {
+        cwCompanyId: account.cwCompanyId,
+        companyName: account.companyName,
+        ninjaOrgId: ninjaOrgId.trim() !== "" ? parseInt(ninjaOrgId, 10) : null,
+        huntressOrgId: huntressOrgId.trim() !== "" ? parseInt(huntressOrgId, 10) : null,
+        cippTenantId: cippTenantId.trim() !== "" ? cippTenantId.trim() : null,
+        notes: notes.trim() !== "" ? notes.trim() : null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/client-mappings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      toast({ title: "Platform mappings saved", description: "Run a stack refresh to apply changes." });
+      onClose();
+    },
+    onError: () => {
+      toast({ title: "Save failed", variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="p-4 space-y-4">
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Override the platform IDs used when matching this client across integrations. Leave blank to let the system auto-detect by name.
+      </p>
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium">NinjaOne Org ID</label>
+          <Input
+            value={ninjaOrgId}
+            onChange={e => setNinjaOrgId(e.target.value)}
+            placeholder="Auto-detect by name"
+            className="h-8 text-sm"
+            data-testid="input-ninja-org-id"
+          />
+          <p className="text-[11px] text-muted-foreground">Numeric ID from NinjaOne</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Huntress Org ID</label>
+          <Input
+            value={huntressOrgId}
+            onChange={e => setHuntressOrgId(e.target.value)}
+            placeholder="Auto-detect by name"
+            className="h-8 text-sm"
+            data-testid="input-huntress-org-id"
+          />
+          <p className="text-[11px] text-muted-foreground">Numeric ID from Huntress</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">CIPP Tenant Domain</label>
+          <Input
+            value={cippTenantId}
+            onChange={e => setCippTenantId(e.target.value)}
+            placeholder="e.g. contoso.onmicrosoft.com"
+            className="h-8 text-sm"
+            data-testid="input-cipp-tenant-id"
+          />
+          <p className="text-[11px] text-muted-foreground">Default domain name from Entra / CIPP</p>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Notes</label>
+          <Input
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Optional notes"
+            className="h-8 text-sm"
+            data-testid="input-mapping-notes"
+          />
+        </div>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+          data-testid="button-save-mapping"
+        >
+          {mutation.isPending ? "Saving…" : "Save Mapping"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onClose} data-testid="button-cancel-mapping">
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ClientSidePanel({ account, onClose }: { account: Account; onClose: () => void }) {
   const [, setLocation] = useLocation();
   const [showStackEdit, setShowStackEdit] = useState(false);
+  const [showMapping, setShowMapping] = useState(false);
 
   return (
     <div className="flex flex-col h-full border-l bg-background" style={{ width: 420 }} data-testid="client-side-panel">
@@ -483,6 +595,14 @@ function ClientSidePanel({ account, onClose }: { account: Account; onClose: () =
               <Button size="sm" variant="ghost" onClick={() => setShowStackEdit(false)}>← Back</Button>
             </div>
             <StackManualOverridePanel account={account} onClose={() => setShowStackEdit(false)} />
+          </div>
+        ) : showMapping ? (
+          <div>
+            <div className="flex items-center justify-between px-4 py-2 border-b">
+              <p className="text-xs font-medium">Platform Mappings — {account.companyName}</p>
+              <Button size="sm" variant="ghost" onClick={() => setShowMapping(false)}>← Back</Button>
+            </div>
+            <PlatformMappingsPanel account={account} onClose={() => setShowMapping(false)} />
           </div>
         ) : (
           <Tabs defaultValue="overview" className="h-full flex flex-col">
@@ -515,11 +635,21 @@ function ClientSidePanel({ account, onClose }: { account: Account; onClose: () =
           size="sm"
           variant="outline"
           className="flex-1 text-xs"
-          onClick={() => setShowStackEdit(!showStackEdit)}
+          onClick={() => { setShowStackEdit(!showStackEdit); setShowMapping(false); }}
           data-testid="button-edit-stack"
         >
           <Shield className="h-3.5 w-3.5 mr-1.5" />
           {showStackEdit ? "Back" : "Edit Stack"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1 text-xs"
+          onClick={() => { setShowMapping(!showMapping); setShowStackEdit(false); }}
+          data-testid="button-map-platforms"
+        >
+          <Link2 className="h-3.5 w-3.5 mr-1.5" />
+          {showMapping ? "Back" : "Map Platforms"}
         </Button>
       </div>
     </div>

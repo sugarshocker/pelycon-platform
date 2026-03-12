@@ -141,6 +141,7 @@ export interface QuoterSummary {
   activeQuotes: QuoterQuote[];
   activeCount: number;
   activeValue: number;
+  olderActiveCount: number;
   quotesThisMonth: number;
   wonThisMonth: number;
   wonThisMonthValue: number;
@@ -157,8 +158,13 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const twelveMonthsAgo = new Date(now);
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+  const cutoff = twelveMonthsAgo.toISOString();
 
-  const active = quotes.filter(q => !q.draft && q.status === "pending");
+  const allActive = quotes.filter(q => !q.draft && q.status === "pending");
+  const active = allActive.filter(q => q.createdAt >= cutoff);
+  const olderActiveCount = allActive.length - active.length;
   const activeValue = active.reduce((sum, q) => sum + (q.total || 0), 0);
 
   const thisMonth = quotes.filter(q => q.createdAt >= startOfMonth);
@@ -173,6 +179,7 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
     activeQuotes: active,
     activeCount: active.length,
     activeValue,
+    olderActiveCount,
     quotesThisMonth: thisMonth.length,
     wonThisMonth: wonThisMonth.length,
     wonThisMonthValue,

@@ -2150,17 +2150,35 @@ export async function registerRoutes(
 
       let updated = { ...current };
 
-      const normalizedName = account.companyName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      function fuzzyNameMatch(cwName: string, platformName: string): boolean {
+        const SUFFIXES = /\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g;
+        function norm(s: string): string {
+          return s.toLowerCase()
+            .replace(/&/g, " and ")
+            .replace(SUFFIXES, " ")
+            .replace(/[^a-z0-9\s]/g, " ")
+            .replace(/\s+/g, " ").trim();
+        }
+        const a = norm(cwName);
+        const b = norm(platformName);
+        if (!a || !b) return false;
+        if (a === b) return true;
+        if (a.includes(b) || b.includes(a)) return true;
+        const tokA = a.split(" ").filter(t => t.length > 2);
+        const tokB = b.split(" ").filter(t => t.length > 2);
+        if (tokA.length === 0 || tokB.length === 0) return false;
+        const shorter = tokA.length <= tokB.length ? tokA : tokB;
+        const longer  = tokA.length <= tokB.length ? tokB : tokA;
+        const hits = shorter.filter(t => longer.some(lt => lt === t || lt.includes(t) || t.includes(lt))).length;
+        return hits >= Math.ceil(shorter.length * 0.8);
+      }
 
       try {
         const ninjaOrgs = await ninjaone.getOrganizations();
         const ninjaOrgId = mapping?.ninjaOrgId ?? null;
         const ninjaOrg = ninjaOrgId
           ? ninjaOrgs.find(o => o.id === ninjaOrgId)
-          : ninjaOrgs.find(o => {
-              const n = o.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-              return n.includes(normalizedName) || normalizedName.includes(n);
-            });
+          : ninjaOrgs.find(o => fuzzyNameMatch(account.companyName, o.name || ""));
         updated.ninjaRmm = ninjaOrg ? true : false;
       } catch (e: any) {
         log(`Stack refresh Ninja error for ${account.companyName}: ${e.message}`);
@@ -2171,10 +2189,7 @@ export async function registerRoutes(
         const huntressOrgId = mapping?.huntressOrgId ?? null;
         const huntressOrg = huntressOrgId
           ? huntressOrgs.find((a: any) => a.id === huntressOrgId)
-          : huntressOrgs.find((a: any) => {
-              const n = (a.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-              return n.includes(normalizedName) || normalizedName.includes(n);
-            });
+          : huntressOrgs.find((a: any) => fuzzyNameMatch(account.companyName, a.name || ""));
         updated.huntressEdr = huntressOrg ? true : false;
       } catch (e: any) {
         log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
@@ -2186,10 +2201,7 @@ export async function registerRoutes(
           let cippTenantFilter: string | null = mapping?.cippTenantId ?? null;
           if (!cippTenantFilter) {
             const cippTenants = await cippGetTenants();
-            const matched = cippTenants.find((t) => {
-              const tn = (t.displayName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-              return tn.includes(normalizedName) || normalizedName.includes(tn);
-            });
+            const matched = cippTenants.find((t) => fuzzyNameMatch(account.companyName, t.displayName || ""));
             if (matched) cippTenantFilter = matched.defaultDomainName || matched.id;
           }
           if (cippTenantFilter) {
