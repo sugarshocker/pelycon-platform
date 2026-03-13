@@ -306,7 +306,7 @@ function TBRTab({ account, onNavigate }: { account: Account; onNavigate: (path: 
     mutationFn: (invited: boolean) =>
       apiRequest("PATCH", `/api/clients/${account.id}/tbr-invite`, { invited }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
       toast({ title: isInvited ? "Invite cleared" : "Marked as invited" });
     },
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
