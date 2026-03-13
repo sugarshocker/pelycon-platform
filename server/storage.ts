@@ -49,6 +49,7 @@ export interface IStorage {
   upsertArOnlyClient(client: InsertArOnlyClient): Promise<ArOnlyClient>;
   deleteArOnlyClient(id: number): Promise<void>;
   updateClientStackCompliance(id: number, stackCompliance: any): Promise<ClientAccount>;
+  updateClientTbrInvite(id: number, invitedAt: Date | null): Promise<ClientAccount>;
   getAllClientMappings(): Promise<ClientMapping[]>;
   getClientMappingByCwId(cwCompanyId: number): Promise<ClientMapping | undefined>;
   upsertClientMapping(data: InsertClientMapping): Promise<ClientMapping>;
@@ -302,6 +303,14 @@ export class DatabaseStorage implements IStorage {
   async updateClientStackCompliance(id: number, stackCompliance: any): Promise<ClientAccount> {
     const [result] = await db.update(clientAccounts)
       .set({ stackCompliance, updatedAt: new Date() })
+      .where(eq(clientAccounts.id, id))
+      .returning();
+    return result;
+  }
+
+  async updateClientTbrInvite(id: number, invitedAt: Date | null): Promise<ClientAccount> {
+    const [result] = await db.update(clientAccounts)
+      .set({ tbrInvitedAt: invitedAt, updatedAt: new Date() })
       .where(eq(clientAccounts.id, id))
       .returning();
     return result;

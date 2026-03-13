@@ -93,6 +93,7 @@ export const clientAccounts = pgTable("client_accounts", {
   arSummary: jsonb("ar_summary"),
   stackCompliance: jsonb("stack_compliance"),
   agreementTypes: text("agreement_types"),
+  tbrInvitedAt: timestamp("tbr_invited_at"),
   lastSyncedAt: timestamp("last_synced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

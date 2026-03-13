@@ -131,6 +131,7 @@ function ComplianceScore({ stack }: { stack: StackComplianceData | null | undefi
 
 type Account = ClientAccount & {
   tbrStatus?: string;
+  tbrInvitedAt?: string | null;
   lastTbrDate?: string | null;
   nextTbrDate?: string | null;
   scheduledFrequencyMonths?: number | null;
@@ -298,6 +299,19 @@ function FinancialsTab({ account }: { account: Account }) {
 }
 
 function TBRTab({ account, onNavigate }: { account: Account; onNavigate: (path: string) => void }) {
+  const { toast } = useToast();
+  const isInvited = !!account.tbrInvitedAt;
+
+  const inviteMutation = useMutation({
+    mutationFn: (invited: boolean) =>
+      apiRequest("PATCH", `/api/clients/${account.id}/tbr-invite`, { invited }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      toast({ title: isInvited ? "Invite cleared" : "Marked as invited" });
+    },
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+
   return (
     <div className="space-y-4 p-4">
       <div className="grid grid-cols-2 gap-3">
@@ -323,6 +337,31 @@ function TBRTab({ account, onNavigate }: { account: Account; onNavigate: (path: 
         </div>
         <TBRStatusBadge status={account.tbrStatus} />
       </div>
+
+      <div className={cn(
+        "rounded-lg border p-3 flex items-center justify-between transition-colors",
+        isInvited ? "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800" : "bg-muted/30"
+      )}>
+        <div>
+          <p className="text-xs text-muted-foreground">TBR Invite</p>
+          <p className="text-sm font-semibold mt-0.5">
+            {isInvited
+              ? `Invited ${new Date(account.tbrInvitedAt!).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+              : "Not yet invited"}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant={isInvited ? "outline" : "default"}
+          className={isInvited ? "text-xs border-purple-300 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/50" : "text-xs bg-purple-600 hover:bg-purple-700 text-white"}
+          onClick={() => inviteMutation.mutate(!isInvited)}
+          disabled={inviteMutation.isPending}
+          data-testid="button-tbr-invite-toggle"
+        >
+          {inviteMutation.isPending ? "..." : isInvited ? "Clear Invite" : "Mark as Invited"}
+        </Button>
+      </div>
+
       <div className="space-y-2 pt-1">
         <Button
           variant="default"
@@ -1022,7 +1061,16 @@ export default function Clients() {
                     <td className="px-3 py-2.5 tabular-nums text-sm">{fmtRevenue(account.totalRevenue)}</td>
                     <td className="px-3 py-2.5"><MarginPct pct={(account.marginAnalysis as any)?.agrMarginPercent} /></td>
                     <td className="px-3 py-2.5"><ARBadge score={(account.arSummary as any)?.paymentScore} /></td>
-                    <td className="px-3 py-2.5"><TBRStatusBadge status={account.tbrStatus} /></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <TBRStatusBadge status={account.tbrStatus} />
+                        {account.tbrInvitedAt && (
+                          <Badge className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200 dark:border-purple-700 hover:bg-purple-100" variant="outline">
+                            Invited
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5"><ComplianceScore stack={account.stackCompliance} /></td>
                     <td className="px-3 py-2.5">
                       <Button

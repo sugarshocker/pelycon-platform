@@ -2255,6 +2255,20 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/clients/:id/tbr-invite", requireAuth, requireEditor, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid account ID" });
+      const { invited } = req.body as { invited: boolean };
+      const invitedAt = invited ? new Date() : null;
+      const result = await storage.updateClientTbrInvite(id, invitedAt);
+      res.json(result);
+    } catch (err: any) {
+      log(`TBR invite update error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/clients/stack/refresh-all", requireAuth, async (req: Request, res: Response) => {
     try {
       const accounts = await storage.getAllClientAccounts();
