@@ -102,7 +102,7 @@ function TopClientsNeedingTbr() {
   }
 
   const needingTbr = (accounts || [])
-    .filter((a: any) => a.tbrStatus === "red" || a.tbrStatus === "yellow")
+    .filter((a: any) => a.tbrStatus === "red" || a.tbrStatus === "yellow" || a.tbrStatus === "scheduled")
     .sort((a: any, b: any) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
     .slice(0, 5);
 
@@ -113,6 +113,7 @@ function TopClientsNeedingTbr() {
   const statusColors: Record<string, string> = {
     red: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
     yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   };
 
   return (
@@ -136,7 +137,7 @@ function TopClientsNeedingTbr() {
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}.</span>
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColors[acct.tbrStatus] || ""}`}>
-                  {acct.tbrStatus === "red" ? "Never" : "Overdue"}
+                  {acct.tbrStatus === "red" ? "Never" : acct.tbrStatus === "scheduled" ? "Scheduled" : "Overdue"}
                 </span>
                 <span className="text-sm font-medium truncate group-hover:text-primary transition-colors">{acct.companyName}</span>
               </div>

@@ -131,7 +131,7 @@ export type ArOnlyClient = typeof arOnlyClients.$inferSelect;
 export interface ClientAccountWithStatus extends ClientAccount {
   lastTbrDate: string | null;
   nextTbrDate: string | null;
-  tbrStatus: "green" | "yellow" | "red";
+  tbrStatus: "green" | "yellow" | "scheduled" | "red";
   tbrStatusReason: string;
   effectiveTier: string;
   scheduleFrequency: number | null;

@@ -91,7 +91,8 @@ function formatHours(value: number | null | undefined): string {
 function StatusBadge({ status, reason }: { status: string; reason: string }) {
   const config = {
     green: { icon: CheckCircle2, label: "On Track", className: "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30" },
-    yellow: { icon: Clock, label: "Attention", className: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+    yellow: { icon: Clock, label: "Overdue", className: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+    scheduled: { icon: Clock, label: "Scheduled", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" },
     red: { icon: XCircle, label: "Needs TBR", className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" },
   }[status] || { icon: AlertCircle, label: "Unknown", className: "" };
 
@@ -683,6 +684,7 @@ export default function Accounts() {
   const summary = {
     total: (accounts || []).length,
     green: (accounts || []).filter(a => a.tbrStatus === "green").length,
+    scheduled: (accounts || []).filter(a => a.tbrStatus === "scheduled").length,
     yellow: (accounts || []).filter(a => a.tbrStatus === "yellow").length,
     red: (accounts || []).filter(a => a.tbrStatus === "red").length,
     tierA: (accounts || []).filter(a => a.effectiveTier === "A").length,
@@ -765,6 +767,7 @@ export default function Accounts() {
                 </span>
                 <div className="flex gap-1 text-xs">
                   <span className="text-green-600">{summary.green}&#10003;</span>
+                  <span className="text-blue-600">{(summary as any).scheduled ?? 0}&#8645;</span>
                   <span className="text-yellow-600">{summary.yellow}!</span>
                   <span className="text-red-600">{summary.red}&#10007;</span>
                 </div>
@@ -828,7 +831,8 @@ export default function Accounts() {
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="green">On Track</SelectItem>
-                <SelectItem value="yellow">Attention</SelectItem>
+                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="yellow">Overdue</SelectItem>
                 <SelectItem value="red">Needs TBR</SelectItem>
               </SelectContent>
             </Select>

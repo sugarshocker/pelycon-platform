@@ -2161,7 +2161,7 @@ export async function registerRoutes(
         const hadRecentTbr = lastTbr && new Date(lastTbr.createdAt) > sixMonthsAgo;
         const hasScheduled = !!nextTbrDate;
 
-        let tbrStatus: "green" | "yellow" | "red";
+        let tbrStatus: "green" | "yellow" | "scheduled" | "red";
         let tbrStatusReason: string;
 
         if (hadRecentTbr && hasScheduled) {
@@ -2171,8 +2171,8 @@ export async function registerRoutes(
           tbrStatus = "yellow";
           tbrStatusReason = "No next review scheduled";
         } else if (!hadRecentTbr && hasScheduled) {
-          tbrStatus = "yellow";
-          tbrStatusReason = "No recent review (>6 months)";
+          tbrStatus = "scheduled";
+          tbrStatusReason = "Overdue but TBR is scheduled";
         } else if (snapshots.length > 0) {
           tbrStatus = "yellow";
           tbrStatusReason = "Overdue — no recent review or schedule";

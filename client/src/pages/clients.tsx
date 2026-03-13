@@ -41,7 +41,7 @@ type SortKey = "companyName" | "tier" | "totalRevenue" | "agrMargin" | "arScore"
 type SortDir = "asc" | "desc";
 
 const AR_SCORE_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
-const TBR_STATUS_ORDER: Record<string, number> = { red: 0, yellow: 1, green: 2 };
+const TBR_STATUS_ORDER: Record<string, number> = { red: 0, yellow: 1, scheduled: 2, green: 3 };
 
 const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string }[] = [
   { key: "ninjaRmm", label: "Ninja RMM", abbr: "Ninja" },
@@ -93,7 +93,8 @@ function ARBadge({ score }: { score: string | null | undefined }) {
 function TBRStatusBadge({ status }: { status: string | null | undefined }) {
   if (!status) return <span className="text-muted-foreground text-xs">—</span>;
   if (status === "red") return <Badge variant="destructive" className="text-xs">No TBR</Badge>;
-  if (status === "yellow") return <Badge className="text-xs bg-amber-500 hover:bg-amber-600">Needs Attention</Badge>;
+  if (status === "yellow") return <Badge className="text-xs bg-amber-500 hover:bg-amber-600 text-white">Overdue</Badge>;
+  if (status === "scheduled") return <Badge className="text-xs bg-blue-500 hover:bg-blue-600 text-white">Scheduled</Badge>;
   if (status === "green") return <Badge variant="secondary" className="text-xs text-green-700 dark:text-green-400">On Track</Badge>;
   return <Badge variant="outline" className="text-xs">{status}</Badge>;
 }
