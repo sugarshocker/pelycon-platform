@@ -44,6 +44,8 @@ import Receivables from "@/pages/receivables";
 import Sales from "@/pages/sales";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 
+const APP_VERSION = "26.3.15";
+
 interface UserContextType {
   user: AuthUser | null;
 }
@@ -167,13 +169,18 @@ function AppSidebar({ onLogout, user }: { onLogout: () => void; user: AuthUser }
             </div>
             <div className="text-[10px] text-sidebar-foreground/50 truncate">{user.email}</div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button size="icon" variant="ghost" onClick={toggleTheme} className="h-8 w-8" data-testid="button-theme-toggle">
-              {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            </Button>
-            <Button size="icon" variant="ghost" onClick={onLogout} className="h-8 w-8" data-testid="button-logout">
-              <LogOut className="h-3.5 w-3.5" />
-            </Button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant="ghost" onClick={toggleTheme} className="h-8 w-8" data-testid="button-theme-toggle">
+                {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              </Button>
+              <Button size="icon" variant="ghost" onClick={onLogout} className="h-8 w-8" data-testid="button-logout">
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <span className="text-[10px] font-mono text-sidebar-foreground/30 pr-1" data-testid="text-app-version">
+              v{APP_VERSION}
+            </span>
           </div>
         </div>
       </SidebarFooter>
