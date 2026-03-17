@@ -437,7 +437,7 @@ export async function getManagedServicesClients(): Promise<CwAgreementCompany[]>
     while (true) {
       try {
         const agreements = await apiGet("/finance/agreements", {
-          conditions: `type/name = "${typeName}" AND agreementStatus = "Active"`,
+          conditions: `type/name = "${typeName}" AND agreementStatus = "Active" AND company/type/name != "Former Client"`,
           pageSize: String(pageSize),
           page: String(page),
           orderBy: "company/name asc",

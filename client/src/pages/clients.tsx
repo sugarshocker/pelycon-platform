@@ -856,6 +856,8 @@ export default function Clients() {
   const [view, setView] = useState<"list" | "stack">("list");
   const [sortKey, setSortKey] = useState<SortKey>("companyName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [complianceSortKey, setComplianceSortKey] = useState<string>("companyName");
+  const [complianceSortDir, setComplianceSortDir] = useState<SortDir>("asc");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showDsImport, setShowDsImport] = useState(false);
   const { toast } = useToast();
@@ -940,8 +942,32 @@ export default function Clients() {
       return sortDir === "asc" ? av - bv : bv - av;
     });
 
+    if (view === "stack") {
+      const toNum = (v: boolean | null | undefined) => v === true ? 1 : v === false ? 0 : -1;
+      list = [...list].sort((a, b) => {
+        const sA = (a.stackCompliance as any) || {};
+        const sB = (b.stackCompliance as any) || {};
+        let av: any, bv: any;
+        if (complianceSortKey === "companyName") { av = a.companyName; bv = b.companyName; }
+        else if (complianceSortKey === "secureScore") { av = sA.secureScore ?? -1; bv = sB.secureScore ?? -1; }
+        else if (complianceSortKey === "coverage") {
+          av = STACK_TOOLS.filter(t => sA[t.key] === true).length;
+          bv = STACK_TOOLS.filter(t => sB[t.key] === true).length;
+        } else {
+          av = toNum(sA[complianceSortKey]); bv = toNum(sB[complianceSortKey]);
+        }
+        if (typeof av === "string") { const cmp = av.localeCompare(bv); return complianceSortDir === "asc" ? cmp : -cmp; }
+        return complianceSortDir === "asc" ? av - bv : bv - av;
+      });
+    }
+
     return list;
-  }, [managedAccounts, search, tierFilter, sortKey, sortDir]);
+  }, [managedAccounts, search, tierFilter, sortKey, sortDir, view, complianceSortKey, complianceSortDir]);
+
+  const handleComplianceSort = (key: string) => {
+    if (complianceSortKey === key) setComplianceSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setComplianceSortKey(key); setComplianceSortDir("asc"); }
+  };
 
   const selectedAccount = useMemo(() => filtered.find(a => a.id === selectedId) ?? null, [filtered, selectedId]);
 
@@ -1136,17 +1162,31 @@ export default function Clients() {
               <table className="w-full text-sm border-collapse">
                 <thead className="sticky top-0 bg-background border-b z-10">
                   <tr>
-                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground sticky left-0 bg-background z-20 border-r min-w-[180px]">
-                      Company
+                    <th
+                      className="text-left px-3 py-2 text-xs font-medium text-muted-foreground sticky left-0 bg-background z-20 border-r min-w-[180px] cursor-pointer hover:text-foreground select-none"
+                      onClick={() => handleComplianceSort("companyName")}
+                    >
+                      <span className="flex items-center gap-1">
+                        Company
+                        <SortIcon active={complianceSortKey === "companyName"} dir={complianceSortDir} />
+                      </span>
                     </th>
                     {STACK_TOOLS.map(tool => {
                       const count = stackSummary.tools[tool.key];
                       const total = stackSummary.total;
                       const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                       return (
-                        <th key={tool.key} className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center whitespace-nowrap" title={`${count} of ${total} clients have ${tool.label}`}>
+                        <th
+                          key={tool.key}
+                          className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center whitespace-nowrap cursor-pointer hover:text-foreground select-none"
+                          title={`${count} of ${total} clients have ${tool.label} — click to sort`}
+                          onClick={() => handleComplianceSort(tool.key)}
+                        >
                           <div className="flex flex-col items-center gap-0.5">
-                            <span>{tool.abbr}</span>
+                            <span className="flex items-center gap-0.5">
+                              {tool.abbr}
+                              <SortIcon active={complianceSortKey === tool.key} dir={complianceSortDir} />
+                            </span>
                             <span className={cn("font-semibold tabular-nums", pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 40 ? "text-yellow-600 dark:text-yellow-400" : "text-muted-foreground")}>
                               {count}/{total}
                             </span>
@@ -1154,8 +1194,24 @@ export default function Clients() {
                         </th>
                       );
                     })}
-                    <th className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center">Sec Score</th>
-                    <th className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center">Coverage</th>
+                    <th
+                      className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center cursor-pointer hover:text-foreground select-none whitespace-nowrap"
+                      onClick={() => handleComplianceSort("secureScore")}
+                    >
+                      <span className="flex items-center justify-center gap-0.5">
+                        Sec Score
+                        <SortIcon active={complianceSortKey === "secureScore"} dir={complianceSortDir} />
+                      </span>
+                    </th>
+                    <th
+                      className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center cursor-pointer hover:text-foreground select-none"
+                      onClick={() => handleComplianceSort("coverage")}
+                    >
+                      <span className="flex items-center justify-center gap-0.5">
+                        Coverage
+                        <SortIcon active={complianceSortKey === "coverage"} dir={complianceSortDir} />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
