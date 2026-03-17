@@ -162,18 +162,15 @@ function TbrEmailSettings() {
 
   const { data: settings } = useQuery<{
     tbrEmailServiceManager: string;
-    tbrEmailLeadEngineer: string;
     tbrEmailOther: string;
   }>({ queryKey: ["/api/app-settings"] });
 
   const [smEmail, setSmEmail] = useState("");
-  const [leEmail, setLeEmail] = useState("");
   const [otherEmail, setOtherEmail] = useState("");
 
   useEffect(() => {
     if (settings) {
       setSmEmail(settings.tbrEmailServiceManager ?? "");
-      setLeEmail(settings.tbrEmailLeadEngineer ?? "");
       setOtherEmail(settings.tbrEmailOther ?? "");
     }
   }, [settings]);
@@ -181,7 +178,6 @@ function TbrEmailSettings() {
   const mutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/app-settings", {
       tbrEmailServiceManager: smEmail.trim(),
-      tbrEmailLeadEngineer: leEmail.trim(),
       tbrEmailOther: otherEmail.trim(),
     }),
     onSuccess: () => {
@@ -192,7 +188,7 @@ function TbrEmailSettings() {
     onError: () => toast({ title: "Save failed", variant: "destructive" }),
   });
 
-  const configured = !!(settings?.tbrEmailServiceManager || settings?.tbrEmailLeadEngineer || settings?.tbrEmailOther);
+  const configured = !!(settings?.tbrEmailServiceManager || settings?.tbrEmailOther);
 
   return (
     <Card data-testid="card-tbr-email-settings">
@@ -209,14 +205,14 @@ function TbrEmailSettings() {
         {!open && (
           <p className="text-xs text-muted-foreground mt-1">
             {configured
-              ? `Reminders sent 3 days before each scheduled TBR${[settings?.tbrEmailServiceManager, settings?.tbrEmailLeadEngineer, settings?.tbrEmailOther].filter(Boolean).map((e, i) => i === 0 ? ` to ${e}` : `, ${e}`).join("")}`
-              : "No reminder recipients configured. Click Configure to add them."}
+              ? `Reminders sent 3 days before each scheduled TBR${[settings?.tbrEmailServiceManager, settings?.tbrEmailOther].filter(Boolean).map((e, i) => i === 0 ? ` to ${e}` : `, ${e}`).join("")}`
+              : "No global recipients configured. Click Configure to add them."}
           </p>
         )}
       </CardHeader>
       {open && (
         <CardContent className="pt-0 space-y-3">
-          <p className="text-xs text-muted-foreground">These addresses will receive reminder emails 3 days before any scheduled TBR. Leave blank to skip that role.</p>
+          <p className="text-xs text-muted-foreground">These global addresses receive reminders 3 days before <em>any</em> TBR. Lead Engineer is set per-client on each schedule.</p>
           <div className="space-y-2">
             <div>
               <label className="text-xs font-medium block mb-1">Service Manager Email</label>
@@ -227,17 +223,6 @@ function TbrEmailSettings() {
                 placeholder="servicemanager@pelycon.com"
                 className="h-8 text-sm"
                 data-testid="input-tbr-sm-email"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium block mb-1">Lead Engineer Email</label>
-              <Input
-                type="email"
-                value={leEmail}
-                onChange={e => setLeEmail(e.target.value)}
-                placeholder="leadengineer@pelycon.com"
-                className="h-8 text-sm"
-                data-testid="input-tbr-le-email"
               />
             </div>
             <div>
@@ -274,6 +259,7 @@ export default function Tracker() {
   const [frequency, setFrequency] = useState("6");
   const [scheduleNotes, setScheduleNotes] = useState("");
   const [reminderEmail, setReminderEmail] = useState("");
+  const [leadEngineerEmail, setLeadEngineerEmail] = useState("");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [chartMode, setChartMode] = useState<"weekly" | "monthly">("weekly");
   const [eventActionItem, setEventActionItem] = useState<{
@@ -298,7 +284,7 @@ export default function Tracker() {
   });
 
   const upsertScheduleMutation = useMutation({
-    mutationFn: async (data: { orgId: number; orgName: string; frequencyMonths: number; nextReviewDate: string | null; notes: string | null; reminderEmail: string | null }) => {
+    mutationFn: async (data: { orgId: number; orgName: string; frequencyMonths: number; nextReviewDate: string | null; notes: string | null; reminderEmail: string | null; leadEngineerEmail: string | null }) => {
       const res = await apiRequest("POST", "/api/schedules", data);
       return res.json();
     },
@@ -440,6 +426,7 @@ export default function Tracker() {
     setFrequency("6");
     setScheduleNotes("");
     setReminderEmail("");
+    setLeadEngineerEmail("");
     setScheduleDialogOpen(true);
   };
 
@@ -460,6 +447,7 @@ export default function Tracker() {
     setFrequency(String(schedule.frequencyMonths));
     setScheduleNotes(schedule.notes || "");
     setReminderEmail(schedule.reminderEmail || "");
+    setLeadEngineerEmail(schedule.leadEngineerEmail || "");
     setScheduleDialogOpen(true);
   };
 
@@ -487,6 +475,7 @@ export default function Tracker() {
       nextReviewDate: nextDate || null,
       notes: scheduleNotes || null,
       reminderEmail: reminderEmail || null,
+      leadEngineerEmail: leadEngineerEmail || null,
     });
   };
 
@@ -935,7 +924,21 @@ export default function Tracker() {
                   data-testid="input-reminder-email"
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Receives a reminder email 3 days before the review</p>
+              <p className="text-xs text-muted-foreground mt-1">Client-facing account manager for this client</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Lead Engineer Email</label>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Input
+                  type="email"
+                  placeholder="engineer@pelycon.com"
+                  value={leadEngineerEmail}
+                  onChange={(e) => setLeadEngineerEmail(e.target.value)}
+                  data-testid="input-lead-engineer-email"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Lead engineer assigned to this client</p>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Notes</label>

@@ -1457,6 +1457,7 @@ export async function registerRoutes(
               lastReviewDate: now,
               notes: schedule.notes,
               reminderEmail: schedule.reminderEmail,
+              leadEngineerEmail: schedule.leadEngineerEmail,
             });
             log(`Schedule ${schedule.id} updated: lastReviewDate=${now.toISOString()}, nextReviewDate=${nextDate.toISOString()}`);
           }
@@ -1623,7 +1624,7 @@ export async function registerRoutes(
 
   app.post("/api/schedules", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const { orgId, orgName, frequencyMonths, nextReviewDate, notes, reminderEmail } = req.body;
+      const { orgId, orgName, frequencyMonths, nextReviewDate, notes, reminderEmail, leadEngineerEmail } = req.body;
       if (!orgId || !orgName) return res.status(400).json({ message: "Org ID and name required" });
       const schedule = await storage.upsertSchedule({
         orgId,
@@ -1633,6 +1634,7 @@ export async function registerRoutes(
         lastReviewDate: null,
         notes: notes || null,
         reminderEmail: reminderEmail || null,
+        leadEngineerEmail: leadEngineerEmail || null,
       });
       log(`Schedule upserted for ${orgName} (orgId: ${orgId})`);
       res.json(schedule);
@@ -1674,17 +1676,17 @@ export async function registerRoutes(
       if (dueSchedules.length === 0) {
         return res.json({ sent: 0, message: "No reminders due" });
       }
-      const [smEmail, leEmail, otherEmail] = await Promise.all([
+      const [smEmail, otherEmail] = await Promise.all([
         storage.getAppSetting("tbrEmailServiceManager"),
-        storage.getAppSetting("tbrEmailLeadEngineer"),
         storage.getAppSetting("tbrEmailOther"),
       ]);
-      const globalEmails = [smEmail, leEmail, otherEmail].filter(Boolean) as string[];
+      const globalEmails = [smEmail, otherEmail].filter(Boolean) as string[];
       let sent = 0;
       for (const schedule of dueSchedules) {
         if (!schedule.nextReviewDate) continue;
         const recipients = Array.from(new Set([
           ...(schedule.reminderEmail ? [schedule.reminderEmail] : []),
+          ...(schedule.leadEngineerEmail ? [schedule.leadEngineerEmail] : []),
           ...globalEmails,
         ]));
         if (recipients.length === 0) continue;
@@ -2455,14 +2457,12 @@ export async function registerRoutes(
 
   app.get("/api/app-settings", requireAuth, async (_req: Request, res: Response) => {
     try {
-      const [smEmail, leEmail, otherEmail] = await Promise.all([
+      const [smEmail, otherEmail] = await Promise.all([
         storage.getAppSetting("tbrEmailServiceManager"),
-        storage.getAppSetting("tbrEmailLeadEngineer"),
         storage.getAppSetting("tbrEmailOther"),
       ]);
       res.json({
         tbrEmailServiceManager: smEmail ?? "",
-        tbrEmailLeadEngineer: leEmail ?? "",
         tbrEmailOther: otherEmail ?? "",
       });
     } catch (err: any) {
@@ -2472,10 +2472,9 @@ export async function registerRoutes(
 
   app.post("/api/app-settings", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { tbrEmailServiceManager, tbrEmailLeadEngineer, tbrEmailOther } = req.body;
+      const { tbrEmailServiceManager, tbrEmailOther } = req.body;
       await Promise.all([
         storage.setAppSetting("tbrEmailServiceManager", tbrEmailServiceManager ?? ""),
-        storage.setAppSetting("tbrEmailLeadEngineer", tbrEmailLeadEngineer ?? ""),
         storage.setAppSetting("tbrEmailOther", tbrEmailOther ?? ""),
       ]);
       res.json({ success: true });

@@ -17,18 +17,18 @@ async function checkAndSendReminders() {
 
     log(`Found ${schedules.length} schedule(s) due for reminder`);
 
-    const [smEmail, leEmail, otherEmail] = await Promise.all([
+    const [smEmail, otherEmail] = await Promise.all([
       storage.getAppSetting("tbrEmailServiceManager"),
-      storage.getAppSetting("tbrEmailLeadEngineer"),
       storage.getAppSetting("tbrEmailOther"),
     ]);
-    const globalEmails = [smEmail, leEmail, otherEmail].filter(Boolean) as string[];
+    const globalEmails = [smEmail, otherEmail].filter(Boolean) as string[];
 
     for (const schedule of schedules) {
       if (!schedule.nextReviewDate) continue;
 
       const recipients = Array.from(new Set([
         ...(schedule.reminderEmail ? [schedule.reminderEmail] : []),
+        ...(schedule.leadEngineerEmail ? [schedule.leadEngineerEmail] : []),
         ...globalEmails,
       ]));
 
