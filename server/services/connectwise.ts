@@ -428,6 +428,9 @@ const MANAGED_SERVICES_AGREEMENT_TYPES = [
 ];
 
 export async function getManagedServicesClients(): Promise<CwAgreementCompany[]> {
+  // Filtering by company type is not supported via the CW agreements API conditions.
+  // We rely on agreementStatus = "Active" as the authoritative filter: former/inactive
+  // clients should have their managed services agreements cancelled in ConnectWise.
   const companyMap = new Map<number, CwAgreementCompany>();
 
   for (const typeName of MANAGED_SERVICES_AGREEMENT_TYPES) {
@@ -437,7 +440,7 @@ export async function getManagedServicesClients(): Promise<CwAgreementCompany[]>
     while (true) {
       try {
         const agreements = await apiGet("/finance/agreements", {
-          conditions: `type/name = "${typeName}" AND agreementStatus = "Active" AND company/type/name = "Client"`,
+          conditions: `type/name = "${typeName}" AND agreementStatus = "Active"`,
           pageSize: String(pageSize),
           page: String(page),
           orderBy: "company/name asc",
