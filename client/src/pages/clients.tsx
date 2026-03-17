@@ -62,9 +62,12 @@ const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string
   { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP", required: true },
 ];
 
-function StackDot({ value }: { value: boolean | null | undefined }) {
+function StackDot({ value, required = true }: { value: boolean | null | undefined; required?: boolean }) {
   if (value === true) return <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />;
-  if (value === false) return <XCircle className="h-4 w-4 text-red-500 mx-auto" />;
+  if (value === false) {
+    if (!required) return <MinusCircle className="h-4 w-4 text-muted-foreground/40 mx-auto" />;
+    return <XCircle className="h-4 w-4 text-red-500 mx-auto" />;
+  }
   return <MinusCircle className="h-4 w-4 text-muted-foreground/30 mx-auto" />;
 }
 
@@ -207,7 +210,7 @@ function OverviewTab({ account }: { account: Account }) {
         <div className="grid grid-cols-3 gap-y-2 gap-x-1">
           {STACK_TOOLS.map(tool => (
             <div key={tool.key} className="flex items-center gap-1.5">
-              <StackDot value={account.stackCompliance?.[tool.key] as boolean | null} />
+              <StackDot value={account.stackCompliance?.[tool.key] as boolean | null} required={tool.required} />
               <span className="text-xs text-muted-foreground truncate">{tool.abbr}</span>
             </div>
           ))}
@@ -517,7 +520,7 @@ function StackManualOverridePanel({ account, onClose }: { account: Account; onCl
         return (
           <div key={tool.key} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <StackDot value={val} />
+              <StackDot value={val} required={tool.required} />
               <span className="text-sm">{tool.label}</span>
               {isManual && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
             </div>
@@ -886,8 +889,8 @@ export default function Clients() {
         if (complianceSortKey === "companyName") { av = a.companyName; bv = b.companyName; }
         else if (complianceSortKey === "secureScore") { av = sA.secureScore ?? -1; bv = sB.secureScore ?? -1; }
         else if (complianceSortKey === "coverage") {
-          av = STACK_TOOLS.filter(t => sA[t.key] === true).length;
-          bv = STACK_TOOLS.filter(t => sB[t.key] === true).length;
+          av = REQUIRED_TOOLS.filter(t => sA[t.key] === true).length;
+          bv = REQUIRED_TOOLS.filter(t => sB[t.key] === true).length;
         } else {
           av = toNum(sA[complianceSortKey]); bv = toNum(sB[complianceSortKey]);
         }
@@ -1109,6 +1112,7 @@ export default function Clients() {
                           <div className="flex flex-col items-center gap-0.5">
                             <span className="flex items-center gap-0.5">
                               {tool.abbr}
+                              {!tool.required && <span className="text-[9px] text-muted-foreground/60 italic leading-none">opt</span>}
                               <SortIcon active={complianceSortKey === tool.key} dir={complianceSortDir} />
                             </span>
                             <span className={cn("font-semibold tabular-nums", pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 40 ? "text-yellow-600 dark:text-yellow-400" : "text-muted-foreground")}>
@@ -1141,8 +1145,8 @@ export default function Clients() {
                 <tbody>
                   {filtered.map(account => {
                     const stack = account.stackCompliance as any;
-                    const haveCount = STACK_TOOLS.filter(t => stack?.[t.key] === true).length;
-                    const pct = Math.round((haveCount / STACK_TOOLS.length) * 100);
+                    const haveCount = REQUIRED_TOOLS.filter(t => stack?.[t.key] === true).length;
+                    const pct = Math.round((haveCount / REQUIRED_TOOLS.length) * 100);
                     return (
                       <tr
                         key={account.id}
@@ -1158,7 +1162,7 @@ export default function Clients() {
                         </td>
                         {STACK_TOOLS.map(tool => (
                           <td key={tool.key} className="px-3 py-2 text-center">
-                            <StackDot value={stack?.[tool.key]} />
+                            <StackDot value={stack?.[tool.key]} required={tool.required} />
                           </td>
                         ))}
                         <td className="px-3 py-2 text-center text-xs font-semibold">
