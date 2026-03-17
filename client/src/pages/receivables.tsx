@@ -824,7 +824,7 @@ export default function Receivables() {
       scoreD: all.filter(a => a.ar.paymentScore === "D").length,
       totalClients: all.length,
       managedCount: all.filter(a => a.source === "managed").length,
-      agreementOnlyCount: all.filter(a => a.source === "agreement-only").length,
+      hourlyCount: all.filter(a => a.source === "agreement-only").length,
       portfolioAging: {
         current: all.reduce((s, a) => s + a.ar.aging.current, 0),
         days1to30: all.reduce((s, a) => s + a.ar.aging.days1to30, 0),
@@ -870,7 +870,7 @@ export default function Receivables() {
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold" data-testid="text-page-title">Accounts Receivable</h1>
         <span className="text-xs text-muted-foreground">
-          {portfolio.totalClients} clients ({portfolio.managedCount} managed, {portfolio.agreementOnlyCount} agreement-only)
+          {portfolio.totalClients} clients ({portfolio.managedCount} managed, {portfolio.hourlyCount} hourly support)
         </span>
       </div>
 
@@ -958,7 +958,7 @@ export default function Receivables() {
           <SelectContent>
             <SelectItem value="all">All Clients</SelectItem>
             <SelectItem value="managed">Managed Services</SelectItem>
-            <SelectItem value="agreement-only">Agreement Only</SelectItem>
+            <SelectItem value="agreement-only">Hourly Support</SelectItem>
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">{filtered.length} clients</span>
@@ -1057,7 +1057,7 @@ export default function Receivables() {
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="truncate">{a.companyName}</span>
                     {a.source === "agreement-only" && (
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400">AGR</Badge>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">Hourly</Badge>
                     )}
                   </div>
                 </TableCell>
