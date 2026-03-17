@@ -39,7 +39,6 @@ import {
   CalendarDays,
   ArrowRight,
   Link2,
-  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
@@ -664,85 +663,7 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
   );
 }
 
-function DropSuiteCsvImport({ onClose }: { onClose: () => void }) {
-  const { toast } = useToast();
-  const [csvText, setCsvText] = useState("");
-  const [results, setResults] = useState<Array<{ companyName: string; status: string }> | null>(null);
 
-  const mutation = useMutation({
-    mutationFn: async (rows: Array<{ companyName: string; dropsuiteUserId: number }>) => {
-      const res = await apiRequest("POST", "/api/dropsuite/import-csv", { rows });
-      return res as any;
-    },
-    onSuccess: (data: any) => {
-      setResults(data.results || []);
-      queryClient.invalidateQueries({ queryKey: ["/api/client-mappings"] });
-      toast({ title: `DropSuite import complete`, description: `${data.mapped} of ${data.total} clients mapped.` });
-    },
-    onError: () => {
-      toast({ title: "Import failed", variant: "destructive" });
-    },
-  });
-
-  function parseAndImport() {
-    const lines = csvText.trim().split("\n").filter(l => l.trim());
-    const rows: Array<{ companyName: string; dropsuiteUserId: string }> = [];
-    for (const line of lines) {
-      const isTab = line.includes("\t");
-      const parts = isTab
-        ? line.split("\t").map(p => p.trim().replace(/^"|"$/g, ""))
-        : line.split(",").map(p => p.trim().replace(/^"|"$/g, ""));
-      if (parts.length < 2) continue;
-      const [col1, col2] = parts;
-      const col1IsId = /^\d[\d-]*$/.test(col1);
-      const userId = col1IsId ? col1 : col2;
-      const name = col1IsId ? col2 : col1;
-      if (userId && name) rows.push({ companyName: name, dropsuiteUserId: userId });
-    }
-    if (rows.length === 0) {
-      toast({ title: "No valid rows found", description: "Expected: ID<tab>CompanyName or CompanyName,ID per line", variant: "destructive" });
-      return;
-    }
-    mutation.mutate(rows);
-  }
-
-  return (
-    <div className="p-4 space-y-3">
-      <div>
-        <p className="text-xs font-medium mb-1">Paste CSV (CompanyName, DropSuiteUserID)</p>
-        <p className="text-[11px] text-muted-foreground mb-2">
-          Paste rows directly from the DropSuite portal Customers export (tab-separated). Each row: <code className="bg-muted px-1 rounded">2296065-14{"        "}Company Name</code>
-        </p>
-        <textarea
-          className="w-full h-36 text-xs font-mono border rounded-md p-2 bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-          placeholder={"2296065-14\tRevive Longevity Center\n2129946-14\tCathey & Cathey CPA PSC\n2006888-14\tBluegrass Home Care Services"}
-          value={csvText}
-          onChange={e => setCsvText(e.target.value)}
-          data-testid="textarea-dropsuite-csv"
-        />
-      </div>
-      {results && (
-        <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
-          {results.map((r, i) => (
-            <div key={i} className="flex items-center justify-between text-[11px]">
-              <span className="truncate font-medium">{r.companyName}</span>
-              <span className={r.status === "mapped" ? "text-green-600" : "text-muted-foreground"}>{r.status}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex gap-2">
-        <Button size="sm" className="flex-1" onClick={parseAndImport} disabled={mutation.isPending || !csvText.trim()} data-testid="button-import-dropsuite-csv">
-          <Upload className="h-3.5 w-3.5 mr-1.5" />
-          {mutation.isPending ? "Importing…" : "Import"}
-        </Button>
-        <Button size="sm" variant="outline" onClick={onClose} data-testid="button-cancel-dropsuite-import">
-          Close
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function ClientSidePanel({ account, onClose }: { account: Account; onClose: () => void }) {
   const [, setLocation] = useLocation();
@@ -859,8 +780,22 @@ export default function Clients() {
   const [complianceSortKey, setComplianceSortKey] = useState<string>("companyName");
   const [complianceSortDir, setComplianceSortDir] = useState<SortDir>("asc");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [showDsImport, setShowDsImport] = useState(false);
   const { toast } = useToast();
+
+  const fullSyncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/accounts/sync");
+      return res as any;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/client-accounts"] });
+      const removed = data.removedNames?.length ? ` Removed: ${data.removedNames.join(", ")}.` : "";
+      toast({ title: `Clients synced`, description: `${data.synced} active client(s) loaded from ConnectWise.${removed}` });
+    },
+    onError: () => {
+      toast({ title: "Sync failed", description: "Could not sync clients from ConnectWise.", variant: "destructive" });
+    },
+  });
 
   const { data: accounts = [], isLoading } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
@@ -1016,17 +951,18 @@ export default function Clients() {
                 <Shield className="h-3.5 w-3.5 mr-1.5" />
                 Stack Compliance
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => fullSyncMutation.mutate()}
+                disabled={fullSyncMutation.isPending}
+                data-testid="button-sync-clients"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${fullSyncMutation.isPending ? "animate-spin" : ""}`} />
+                {fullSyncMutation.isPending ? "Syncing…" : "Sync Clients"}
+              </Button>
               {view === "stack" && (
                 <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowDsImport(v => !v)}
-                    data-testid="button-dropsuite-import"
-                  >
-                    <Upload className="h-3.5 w-3.5 mr-1.5" />
-                    DropSuite IDs
-                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1070,18 +1006,6 @@ export default function Clients() {
             <span className="text-xs text-muted-foreground ml-auto">{filtered.length} shown</span>
           </div>
         </div>
-
-        {showDsImport && view === "stack" && (
-          <div className="mx-4 mt-0 mb-3 border rounded-lg bg-muted/30 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b bg-background">
-              <div className="flex items-center gap-2">
-                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-semibold">Import DropSuite Customer IDs</span>
-              </div>
-            </div>
-            <DropSuiteCsvImport onClose={() => setShowDsImport(false)} />
-          </div>
-        )}
 
         <div className="flex-1 overflow-auto">
           {isLoading ? (

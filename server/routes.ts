@@ -1966,7 +1966,7 @@ export async function registerRoutes(
     return "$" + Math.round(val).toLocaleString();
   }
 
-  async function syncAccountsFromConnectWise(): Promise<any[]> {
+  async function syncAccountsFromConnectWise(): Promise<{ results: any[]; removed: string[] }> {
     const cwClients = await connectwise.getManagedServicesClients();
     log(`[accounts-sync] Found ${cwClients.length} managed services clients from ConnectWise agreements`);
 
@@ -2023,7 +2023,20 @@ export async function registerRoutes(
       results.push(account);
     }
 
-    return results;
+    // Prune accounts that are no longer in the CW "Client" list
+    const freshCwIds = new Set(cwClients.map(c => c.cwCompanyId));
+    const allExisting = await storage.getAllClientAccounts();
+    const removed: string[] = [];
+    for (const acct of allExisting) {
+      if (!freshCwIds.has(acct.cwCompanyId)) {
+        await storage.deleteClientAccount(acct.id);
+        log(`[accounts-sync] Pruned "${acct.companyName}" (cwId ${acct.cwCompanyId}) — no longer an active CW Client`);
+        removed.push(acct.companyName);
+      }
+    }
+    if (removed.length) log(`[accounts-sync] Removed ${removed.length} account(s): ${removed.join(", ")}`);
+
+    return { results, removed };
   }
 
   async function syncArOnlyClients(): Promise<number> {
@@ -2065,8 +2078,8 @@ export async function registerRoutes(
     autoSyncRunning = true;
     try {
       log("[accounts-sync] Starting automatic sync...");
-      const results = await syncAccountsFromConnectWise();
-      log(`[accounts-sync] Auto-sync complete: ${results.length} accounts updated`);
+      const { results, removed } = await syncAccountsFromConnectWise();
+      log(`[accounts-sync] Auto-sync complete: ${results.length} accounts updated, ${removed.length} removed`);
       const arOnlyCount = await syncArOnlyClients();
       log(`[ar-sync] AR-only sync complete: ${arOnlyCount} additional clients updated`);
     } catch (err: any) {
@@ -2086,9 +2099,9 @@ export async function registerRoutes(
         return res.status(503).json({ message: "ConnectWise is not configured" });
       }
 
-      const results = await syncAccountsFromConnectWise();
+      const { results, removed } = await syncAccountsFromConnectWise();
       const arOnlyCount = await syncArOnlyClients();
-      res.json({ synced: results.length, arOnlySynced: arOnlyCount, accounts: results });
+      res.json({ synced: results.length, removed: removed.length, removedNames: removed, arOnlySynced: arOnlyCount, accounts: results });
     } catch (err: any) {
       log(`[accounts-sync] Manual sync error: ${err.message}`);
       res.status(500).json({ message: err.message });
