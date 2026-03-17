@@ -18,6 +18,7 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   ArrowUpDown,
   FileText,
   CheckCircle2,
@@ -984,18 +985,31 @@ export default function Receivables() {
         />
       )}
 
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mb-1.5 px-0.5">
+        <span className="flex items-center gap-1">
+          <ChevronRight className="h-3.5 w-3.5 text-primary/60" />
+          Click any row to view invoices &amp; AR detail
+        </span>
+        <span className="text-muted-foreground/40">·</span>
+        <span className="flex items-center gap-1">
+          <BarChart3 className="h-3.5 w-3.5 text-primary/60" />
+          Check <strong className="font-semibold text-foreground">Compare</strong> on up to 6 clients to analyze payment trends side-by-side
+        </span>
+      </div>
+
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="py-2 px-2 w-8">
+              <TableHead className="py-2 px-2 w-16">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center justify-center">
-                      <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-default">
+                      <BarChart3 className="h-3 w-3" />
+                      Compare
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>Select clients to analyze catch-up trends (max 6)</TooltipContent>
+                  <TooltipContent>Check up to 6 clients to compare payment trends side-by-side</TooltipContent>
                 </Tooltip>
               </TableHead>
               <SortHeader field="companyName">Company</SortHeader>
@@ -1007,17 +1021,18 @@ export default function Receivables() {
               <TableHead className="py-2 px-2 text-xs">Aging</TableHead>
               <TableHead className="py-2 px-2 text-xs">Trend</TableHead>
               <SortHeader field="totalRevenue">Revenue</SortHeader>
+              <TableHead className="py-2 px-2 w-8" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
+              <TableRow><TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">
                 {accountsWithAR.length === 0 ? "No AR data yet — run a sync to populate." : "No clients match your filters."}
               </TableCell></TableRow>
             ) : filtered.map((a) => (
               <TableRow
                 key={a.id}
-                className={`cursor-pointer hover:bg-muted/50 ${catchUpIds.has(a.id) ? "bg-orange-50 dark:bg-orange-950/20" : ""}`}
+                className={`group cursor-pointer hover:bg-muted/50 transition-colors ${catchUpIds.has(a.id) ? "bg-orange-50 dark:bg-orange-950/20" : ""}`}
                 onClick={() => setSelectedAccount(a)}
                 data-testid={`row-ar-${a.id}`}
               >
@@ -1077,6 +1092,9 @@ export default function Receivables() {
                 </TableCell>
                 <TableCell className="py-2 px-2 text-xs tabular-nums">
                   {formatCurrency(a.totalRevenue)}
+                </TableCell>
+                <TableCell className="py-2 px-2 w-8">
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                 </TableCell>
               </TableRow>
             ))}
