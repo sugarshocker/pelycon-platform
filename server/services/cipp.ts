@@ -106,6 +106,23 @@ export interface CippClientData {
   licenseNames: string[];
 }
 
+// Known SKU part numbers for Microsoft 365 Business Premium
+const BP_SKUS = ["SPB", "O365_BUSINESS_PREMIUM", "SMB_BUSINESS_PREMIUM", "Microsoft_365_Business_Premium", "M365_BUSINESS_PREMIUM", "MICROSOFT_BUSINESS_CENTER"];
+// Microsoft 365 Business Premium SKU GUID (stable across tenants)
+const BP_SKU_ID = "cbdc14ab-d96c-4c30-b9f4-6ada7cdc1d46";
+
+function isBizPremiumLicense(l: any): boolean {
+  const skuPartNumber = (l.SkuPartNumber || l.skuPartNumber || "").toUpperCase();
+  const skuId = (l.SkuId || l.skuId || l.id || "").toLowerCase();
+  const displayName = (l.LicenseName || l.licenseName || l.displayName || l.DisplayName || "").toLowerCase();
+  const hasConsumed = (l.ConsumedUnits ?? l.consumedUnits ?? 1) > 0;
+  if (!hasConsumed) return false;
+  if (skuId === BP_SKU_ID) return true;
+  if (BP_SKUS.some(sku => skuPartNumber.includes(sku.toUpperCase()))) return true;
+  if (displayName.includes("business premium")) return true;
+  return false;
+}
+
 export async function getClientData(tenantDomain: string): Promise<CippClientData> {
   const empty: CippClientData = { msBizPremium: null, secureScore: null, licenseNames: [] };
   if (!isConfigured()) return empty;
@@ -122,15 +139,34 @@ export async function getClientData(tenantDomain: string): Promise<CippClientDat
     if (licenseData.status === "fulfilled") {
       const licenses = Array.isArray(licenseData.value)
         ? licenseData.value
-        : (licenseData.value?.Results || []);
+        : (licenseData.value?.Results || licenseData.value?.value || []);
+
+      // Collect all readable names for debugging/display
       licenseNames = licenses.map((l: any) =>
-        l.SkuPartNumber || l.skuPartNumber || l.displayName || ""
-      );
-      const bpSkus = ["SPB", "O365_BUSINESS_PREMIUM", "SMB_BUSINESS_PREMIUM", "Microsoft_365_Business_Premium", "M365_BUSINESS_PREMIUM"];
-      msBizPremium = licenseNames.some((name) =>
-        bpSkus.some((sku) => name.toUpperCase().includes(sku.toUpperCase()))
-      );
+        l.LicenseName || l.licenseName || l.DisplayName || l.displayName || l.SkuPartNumber || l.skuPartNumber || l.skuId || ""
+      ).filter(Boolean);
+
+      log(`CIPP [${tenantDomain}] licenses (${licenses.length}): ${licenseNames.slice(0, 5).join(", ")}${licenseNames.length > 5 ? "…" : ""}`);
+
+      msBizPremium = licenses.some(isBizPremiumLicense);
+
+      // If still not found, also try the subscribedSkus endpoint directly (Graph via CIPP)
+      if (!msBizPremium && licenses.length === 0) {
+        try {
+          const skuData = await cippGet(`/api/ListGraphRequest?Endpoint=subscribedSkus&TenantFilter=${encodeURIComponent(tenantDomain)}&ReverseTenantLookup=false`);
+          const skus = Array.isArray(skuData) ? skuData : (skuData?.Results || skuData?.value || []);
+          msBizPremium = skus.some(isBizPremiumLicense);
+          if (skus.length > 0) {
+            const skuNames = skus.map((s: any) => s.skuPartNumber || s.SkuPartNumber || s.displayName || "?");
+            log(`CIPP [${tenantDomain}] subscribedSkus fallback (${skus.length}): ${skuNames.slice(0, 5).join(", ")}`);
+          }
+        } catch (e2: any) {
+          log(`CIPP [${tenantDomain}] subscribedSkus fallback error: ${e2.message}`);
+        }
+      }
     }
+
+    log(`CIPP [${tenantDomain}] msBizPremium=${msBizPremium}`);
 
     let secureScore: number | null = null;
     if (scoreData.status === "fulfilled") {
