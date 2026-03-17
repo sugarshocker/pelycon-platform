@@ -101,7 +101,7 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight" data-testid="text-login-title">
-              Technology Business Review
+              Executive Management Platform
             </h1>
             <p className="text-muted-foreground mt-1">
               {needsSetup

@@ -100,7 +100,7 @@ function AppSidebar({ onLogout, user }: { onLogout: () => void; user: AuthUser }
               Pelycon Technologies
             </span>
             <span className="text-[10px] text-sidebar-foreground/50 uppercase tracking-widest">
-              Executive Platform
+              Executive Management Platform
             </span>
           </div>
         </div>
