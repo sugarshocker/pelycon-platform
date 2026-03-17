@@ -2113,6 +2113,9 @@ export async function registerRoutes(
       const managedAccounts = await storage.getAllClientAccounts();
       const arOnlyAccounts = await storage.getAllArOnlyClients();
 
+      // Deduplicate: if a company appears in both managed and AR-only tables, prefer managed
+      const managedCwIds = new Set(managedAccounts.map(a => a.cwCompanyId).filter(Boolean));
+
       const combined = [
         ...managedAccounts.map(a => ({
           id: a.id,
@@ -2125,17 +2128,19 @@ export async function registerRoutes(
           totalRevenue: a.totalRevenue,
           source: "managed" as const,
         })),
-        ...arOnlyAccounts.map(a => ({
-          id: a.id + 100000,
-          cwCompanyId: a.cwCompanyId,
-          companyName: a.companyName,
-          agreementTypes: a.agreementTypes,
-          arSummary: a.arSummary,
-          lastSyncedAt: a.lastSyncedAt,
-          tier: null,
-          totalRevenue: (a.agreementMonthlyRevenue || 0) * 12,
-          source: "agreement-only" as const,
-        })),
+        ...arOnlyAccounts
+          .filter(a => !managedCwIds.has(a.cwCompanyId))
+          .map(a => ({
+            id: a.id + 100000,
+            cwCompanyId: a.cwCompanyId,
+            companyName: a.companyName,
+            agreementTypes: a.agreementTypes,
+            arSummary: a.arSummary,
+            lastSyncedAt: a.lastSyncedAt,
+            tier: null,
+            totalRevenue: (a.agreementMonthlyRevenue || 0) * 12,
+            source: "agreement-only" as const,
+          })),
       ];
 
       res.json(combined);
