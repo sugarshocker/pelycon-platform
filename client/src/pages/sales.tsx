@@ -27,6 +27,9 @@ interface QuoterQuote {
 }
 
 interface QuoterSummary {
+  outstandingQuotes: QuoterQuote[];
+  outstandingCount: number;
+  outstandingValue: number;
   activeQuotes: QuoterQuote[];
   activeCount: number;
   activeValue: number;
@@ -94,26 +97,26 @@ export default function Sales() {
   const statCards = [
     {
       icon: FileText,
-      label: "Active Quotes",
-      value: isLoading ? null : (data?.activeCount ?? 0),
-      display: isLoading ? null : String(data?.activeCount ?? 0),
-      sub: "Currently pending approval",
+      label: "Outstanding Quotes",
+      value: isLoading ? null : (data?.outstandingCount ?? 0),
+      display: isLoading ? null : String(data?.outstandingCount ?? 0),
+      sub: "Sent or published, awaiting decision",
       color: "text-blue-500",
     },
     {
       icon: Clock,
-      label: "Quotes This Month",
-      value: isLoading ? null : (data?.quotesThisMonth ?? 0),
-      display: isLoading ? null : String(data?.quotesThisMonth ?? 0),
-      sub: `Created in ${monthName}`,
+      label: "Active Quotes",
+      value: isLoading ? null : (data?.activeCount ?? 0),
+      display: isLoading ? null : String(data?.activeCount ?? 0),
+      sub: "Outstanding + expired + draft",
       color: "text-purple-500",
     },
     {
       icon: DollarSign,
       label: "Pipeline Value",
-      value: isLoading ? null : (data?.activeValue ?? 0),
-      display: isLoading ? null : fmt$(data?.activeValue ?? 0),
-      sub: "Total value of active quotes",
+      value: isLoading ? null : (data?.outstandingValue ?? 0),
+      display: isLoading ? null : fmt$(data?.outstandingValue ?? 0),
+      sub: "Value of outstanding quotes",
       color: "text-primary",
     },
     {
@@ -190,11 +193,11 @@ export default function Sales() {
                 <Circle className="h-4 w-4 text-blue-500 fill-blue-100 dark:fill-blue-900/50" />
                 Outstanding Quotes
                 {!isLoading && data && (
-                  <Badge variant="secondary" className="text-xs font-normal">{data.activeCount}</Badge>
+                  <Badge variant="secondary" className="text-xs font-normal">{data.outstandingCount}</Badge>
                 )}
               </CardTitle>
               {!isLoading && data && (
-                <p className="text-xs text-muted-foreground">Last 12 months{data.olderActiveCount > 0 ? ` · ${data.olderActiveCount} older quote${data.olderActiveCount === 1 ? "" : "s"} not shown` : ""}</p>
+                <p className="text-xs text-muted-foreground">Published &amp; sent — last 12 months</p>
               )}
             </div>
           </CardHeader>
@@ -208,19 +211,19 @@ export default function Sales() {
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
                 {(error as Error)?.message || "Failed to load quotes"}
               </div>
-            ) : data?.activeQuotes.length === 0 ? (
+            ) : (data?.outstandingQuotes ?? []).length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 No outstanding quotes right now
               </div>
             ) : (
               <div className="divide-y">
-                {data!.activeQuotes.slice(0, 10).map(q => (
+                {(data!.outstandingQuotes).slice(0, 10).map(q => (
                   <QuoteRow key={q.id} q={q} />
                 ))}
-                {data!.activeQuotes.length > 10 && (
+                {data!.outstandingQuotes.length > 10 && (
                   <p className="text-xs text-muted-foreground text-center pt-3">
-                    +{data!.activeQuotes.length - 10} more — view in Quoter
+                    +{data!.outstandingQuotes.length - 10} more — view in Quoter
                   </p>
                 )}
               </div>

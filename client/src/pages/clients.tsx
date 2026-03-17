@@ -8,6 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   X,
@@ -18,6 +25,7 @@ import {
   Shield,
   DollarSign,
   TrendingUp,
+  TrendingDown,
   ClipboardList,
   Receipt,
   LayoutList,
@@ -37,22 +45,22 @@ import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import type { ClientAccount, StackComplianceData } from "@shared/schema";
 
-type SortKey = "companyName" | "tier" | "totalRevenue" | "agrMargin" | "arScore" | "tbrStatus";
+type SortKey = "companyName" | "tier" | "totalRevenue" | "gmPct" | "arScore" | "tbrStatus" | "secureScore";
 type SortDir = "asc" | "desc";
 
 const AR_SCORE_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 const TBR_STATUS_ORDER: Record<string, number> = { red: 0, yellow: 1, scheduled: 2, green: 3 };
 
-const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string }[] = [
-  { key: "ninjaRmm", label: "Ninja RMM", abbr: "Ninja" },
-  { key: "huntressEdr", label: "Huntress EDR", abbr: "EDR" },
-  { key: "huntressItdr", label: "Huntress ITDR", abbr: "ITDR" },
-  { key: "huntressSat", label: "Huntress SAT", abbr: "SAT" },
-  { key: "dropSuite", label: "DropSuite Backup", abbr: "DropSuite" },
-  { key: "zorusDns", label: "Zorus DNS", abbr: "Zorus" },
-  { key: "connectSecure", label: "ConnectSecure", abbr: "ConnSec" },
-  { key: "huntressSiem", label: "Huntress SIEM", abbr: "SIEM" },
-  { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP" },
+const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string; required: boolean }[] = [
+  { key: "ninjaRmm", label: "Ninja RMM", abbr: "Ninja", required: true },
+  { key: "huntressEdr", label: "Huntress EDR", abbr: "EDR", required: true },
+  { key: "huntressItdr", label: "Huntress ITDR", abbr: "ITDR", required: true },
+  { key: "huntressSat", label: "Huntress SAT", abbr: "SAT", required: true },
+  { key: "dropSuite", label: "DropSuite Backup", abbr: "DropSuite", required: true },
+  { key: "zorusDns", label: "Zorus DNS", abbr: "Zorus", required: true },
+  { key: "connectSecure", label: "ConnectSecure", abbr: "ConnSec", required: false },
+  { key: "huntressSiem", label: "Huntress SIEM", abbr: "SIEM", required: false },
+  { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP", required: true },
 ];
 
 function StackDot({ value, needsMapping }: { value: boolean | null | undefined; needsMapping?: boolean }) {
@@ -120,10 +128,12 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return dir === "asc" ? <ChevronUp className="h-3 w-3 text-primary" /> : <ChevronDown className="h-3 w-3 text-primary" />;
 }
 
+const REQUIRED_TOOLS = STACK_TOOLS.filter(t => t.required);
+
 function ComplianceScore({ stack }: { stack: StackComplianceData | null | undefined }) {
   if (!stack) return <span className="text-muted-foreground text-xs">—</span>;
-  const total = STACK_TOOLS.length;
-  const have = STACK_TOOLS.filter(t => stack[t.key] === true).length;
+  const total = REQUIRED_TOOLS.length;
+  const have = REQUIRED_TOOLS.filter(t => stack[t.key] === true).length;
   const pct = Math.round((have / total) * 100);
   const color = pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
   return <span className={cn("text-xs font-semibold", color)}>{have}/{total}</span>;
@@ -388,6 +398,20 @@ function TBRTab({ account, onNavigate }: { account: Account; onNavigate: (path: 
   );
 }
 
+function computePaymentTrend(monthlyTrend: { onTimePercent: number }[] | null | undefined): "improving" | "declining" | "stable" | null {
+  if (!monthlyTrend || monthlyTrend.length < 4) return null;
+  const sorted = [...monthlyTrend].slice(-6);
+  const half = Math.floor(sorted.length / 2);
+  const older = sorted.slice(0, half);
+  const recent = sorted.slice(half);
+  const avgOlder = older.reduce((s, m) => s + m.onTimePercent, 0) / older.length;
+  const avgRecent = recent.reduce((s, m) => s + m.onTimePercent, 0) / recent.length;
+  const diff = avgRecent - avgOlder;
+  if (diff >= 8) return "improving";
+  if (diff <= -8) return "declining";
+  return "stable";
+}
+
 function ReceivablesTab({ account }: { account: Account }) {
   const ar = account.arSummary as any;
   if (!ar) {
@@ -405,8 +429,25 @@ function ReceivablesTab({ account }: { account: Account }) {
     { label: "61–90 days", val: aging.days61to90 ?? 0 },
     { label: "90+ days", val: aging.days91plus ?? 0 },
   ];
+  const hasOverdue = (ar.outstandingBalance ?? ar.totalOutstanding ?? 0) > 0;
+  const trend = hasOverdue ? computePaymentTrend(ar.monthlyTrend) : null;
   return (
     <div className="space-y-4 p-4">
+      {trend && trend !== "stable" && (
+        <div className={cn(
+          "flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-md border",
+          trend === "improving"
+            ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
+            : "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+        )}>
+          {trend === "improving"
+            ? <TrendingUp className="h-3.5 w-3.5" />
+            : <TrendingDown className="h-3.5 w-3.5" />}
+          {trend === "improving"
+            ? "Catching up — on-time payment rate improving over last 3 months"
+            : "Falling behind — on-time payment rate declining over last 3 months"}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg border bg-muted/30 p-3">
           <p className="text-xs text-muted-foreground">Payment Score</p>
@@ -515,9 +556,12 @@ interface ClientMappingData {
   notes: string | null;
 }
 
+interface DropsuiteAccountOption { userId: string; companyName: string; }
+
 function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose: () => void }) {
   const { toast } = useToast();
   const { data: allMappings = [] } = useQuery<ClientMappingData[]>({ queryKey: ["/api/client-mappings"] });
+  const { data: dsAccounts = [] } = useQuery<DropsuiteAccountOption[]>({ queryKey: ["/api/dropsuite/accounts"] });
   const existing = allMappings.find(m => m.cwCompanyId === account.cwCompanyId);
 
   const [ninjaOrgId, setNinjaOrgId] = useState(existing?.ninjaOrgId != null ? String(existing.ninjaOrgId) : "");
@@ -592,21 +636,44 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium flex items-center gap-1.5">
-            DropSuite User ID
+            DropSuite Account
             {needsDs && (
               <span className="text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-1.5 py-0.5">
                 needs mapping
               </span>
             )}
           </label>
-          <Input
-            value={dropsuiteUserId}
-            onChange={e => setDropsuiteUserId(e.target.value)}
-            placeholder="Numeric user ID from DropSuite portal"
-            className={`h-8 text-sm ${needsDs ? "border-amber-400 focus-visible:ring-amber-400" : ""}`}
-            data-testid="input-dropsuite-user-id"
-          />
-          <p className="text-[11px] text-muted-foreground">Found in DropSuite portal → Customers list (export CSV to get IDs)</p>
+          {dsAccounts.length > 0 ? (
+            <Select
+              value={dropsuiteUserId || "__none__"}
+              onValueChange={v => setDropsuiteUserId(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger className={`h-8 text-sm ${needsDs ? "border-amber-400" : ""}`} data-testid="select-dropsuite-account">
+                <SelectValue placeholder="Select DropSuite account…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— No mapping —</SelectItem>
+                {dsAccounts.map(a => (
+                  <SelectItem key={a.userId} value={a.userId}>
+                    {a.companyName} <span className="text-muted-foreground ml-1 text-[10px]">{a.userId}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={dropsuiteUserId}
+              onChange={e => setDropsuiteUserId(e.target.value)}
+              placeholder="Numeric user ID from DropSuite portal"
+              className={`h-8 text-sm ${needsDs ? "border-amber-400 focus-visible:ring-amber-400" : ""}`}
+              data-testid="input-dropsuite-user-id"
+            />
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            {dsAccounts.length > 0
+              ? `${dsAccounts.length} accounts from last CSV import`
+              : "Import a DropSuite CSV to populate this dropdown"}
+          </p>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Notes</label>
@@ -889,9 +956,13 @@ export default function Clients() {
       if (sortKey === "companyName") { av = a.companyName; bv = b.companyName; }
       else if (sortKey === "tier") { av = a.tierOverride || a.tier; bv = b.tierOverride || b.tier; }
       else if (sortKey === "totalRevenue") { av = a.totalRevenue ?? 0; bv = b.totalRevenue ?? 0; }
-      else if (sortKey === "agrMargin") {
-        av = (a.marginAnalysis as any)?.agrMarginPercent ?? -999;
-        bv = (b.marginAnalysis as any)?.agrMarginPercent ?? -999;
+      else if (sortKey === "gmPct") {
+        av = a.grossMarginPercent ?? -999;
+        bv = b.grossMarginPercent ?? -999;
+      }
+      else if (sortKey === "secureScore") {
+        av = (a.stackCompliance as any)?.secureScore ?? -1;
+        bv = (b.stackCompliance as any)?.secureScore ?? -1;
       }
       else if (sortKey === "arScore") {
         av = AR_SCORE_ORDER[(a.arSummary as any)?.paymentScore ?? ""] ?? 99;
@@ -1038,10 +1109,11 @@ export default function Clients() {
                   <SortTh label="Company" sortKey="companyName" current={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortTh label="Tier" sortKey="tier" current={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortTh label="Revenue" sortKey="totalRevenue" current={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortTh label="Agr Margin" sortKey="agrMargin" current={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortTh label="GM%" sortKey="gmPct" current={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortTh label="AR Score" sortKey="arScore" current={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortTh label="TBR Status" sortKey="tbrStatus" current={sortKey} dir={sortDir} onSort={handleSort} />
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-left">Stack</th>
+                  <SortTh label="Sec Score" sortKey="secureScore" current={sortKey} dir={sortDir} onSort={handleSort} />
                   <th className="w-12" />
                 </tr>
               </thead>
@@ -1059,7 +1131,7 @@ export default function Clients() {
                     <td className="px-3 py-2.5 font-medium text-sm">{account.companyName}</td>
                     <td className="px-3 py-2.5"><TierBadge tier={account.tierOverride || account.tier} /></td>
                     <td className="px-3 py-2.5 tabular-nums text-sm">{fmtRevenue(account.totalRevenue)}</td>
-                    <td className="px-3 py-2.5"><MarginPct pct={(account.marginAnalysis as any)?.agrMarginPercent} /></td>
+                    <td className="px-3 py-2.5"><MarginPct pct={account.grossMarginPercent} /></td>
                     <td className="px-3 py-2.5"><ARBadge score={(account.arSummary as any)?.paymentScore} /></td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1 flex-wrap">
@@ -1072,6 +1144,17 @@ export default function Clients() {
                       </div>
                     </td>
                     <td className="px-3 py-2.5"><ComplianceScore stack={account.stackCompliance} /></td>
+                    <td className="px-3 py-2.5">
+                      {(account.stackCompliance as any)?.secureScore != null ? (
+                        <span className={cn("text-xs font-semibold tabular-nums",
+                          (account.stackCompliance as any).secureScore >= 70 ? "text-green-600 dark:text-green-400" :
+                          (account.stackCompliance as any).secureScore >= 40 ? "text-amber-600 dark:text-amber-400" :
+                          "text-red-600 dark:text-red-400"
+                        )}>
+                          {(account.stackCompliance as any).secureScore}%
+                        </span>
+                      ) : <span className="text-muted-foreground text-xs">—</span>}
+                    </td>
                     <td className="px-3 py-2.5">
                       <Button
                         size="icon"

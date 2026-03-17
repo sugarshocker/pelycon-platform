@@ -44,7 +44,7 @@ import Receivables from "@/pages/receivables";
 import Sales from "@/pages/sales";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 
-const APP_VERSION = "26.3.15";
+const APP_VERSION = "26.3.17";
 
 interface UserContextType {
   user: AuthUser | null;

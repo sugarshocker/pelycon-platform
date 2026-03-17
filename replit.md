@@ -42,27 +42,36 @@ A full-stack executive dashboard for Pelycon Technologies (MSP). Pulls live data
 
 ## Database Tables
 - `tbr_snapshots` — Finalized TBR reviews
-- `tbr_schedules` — Review schedules (frequency, next date)
+- `tbr_schedules` — Review schedules (frequency, next date, reminderEmail)
 - `tbr_staging` — Staging notes, CSVs, **warranty_data** jsonb (serverHardware, merakiLicensing, lobApplications)
 - `client_accounts` — Managed services clients with financial data, margin analysis, AR summary, **stack_compliance** jsonb
-- `client_mapping` — **NEW** Maps cwCompanyId → ninjaOrgId, huntressOrgId, cippTenantId for cross-system matching
+- `client_mapping` — Maps cwCompanyId → ninjaOrgId, huntressOrgId, cippTenantId, dropsuiteUserId for cross-system matching
+- `dropsuite_accounts` — All DropSuite accounts from CSV imports (userId PK, companyName) — used for dropdown in mapping panel
+- `app_settings` — Key-value application settings (e.g. TBR reminder emails: tbrEmailServiceManager, tbrEmailLeadEngineer, tbrEmailOther)
 - `ar_only_clients` — Additional clients with AR-only data (CW IDs offset +100000)
 - `users` — User accounts with roles and pageAccess jsonb
 
 ## Stack Compliance
-Tools tracked per client:
-- **ninjaRmm** — NinjaOne org match (auto-detected by name)
-- **huntressEdr** — Huntress org match (auto-detected by name)
-- **huntressItdr** — Huntress ITDR (manual or future API)
-- **huntressSat** — Huntress SAT (manual or future API)
-- **dropSuite** — DropSuite Backup (manual toggle)
-- **zorusDns** — Zorus DNS (future: Ninja installed SW scan)
-- **connectSecure** — ConnectSecure (manual or future API)
-- **huntressSiem** — Huntress SIEM (manual or future API)
-- **msBizPremium** — Microsoft Business Premium (CIPP, requires CIPP_BASE_URL + CIPP_API_KEY)
-- **secureScore** — Secure Score % (CIPP, requires CIPP_BASE_URL + CIPP_API_KEY)
+Tools tracked per client. **Score excludes connectSecure and huntressSiem** (optional tools, shown but not counted):
+- **ninjaRmm** — NinjaOne org match (required)
+- **huntressEdr** — Huntress org match (required)
+- **huntressItdr** — Huntress ITDR (required)
+- **huntressSat** — Huntress SAT (required)
+- **dropSuite** — DropSuite Backup (required)
+- **zorusDns** — Zorus DNS (required)
+- **connectSecure** — ConnectSecure (optional, not in score)
+- **huntressSiem** — Huntress SIEM (optional, not in score)
+- **msBizPremium** — Microsoft Business Premium (required, CIPP)
+- **secureScore** — Secure Score % (CIPP) — shown in both list view and stack tab
 
 Stack data is refreshed via `POST /api/clients/:id/stack/refresh`. Manual overrides stored in `manualOverrides` jsonb field.
+
+## TBR Email Reminders
+- Reminder job runs hourly, sends 3 days before any scheduled TBR
+- Global recipients stored in `app_settings` (tbrEmailServiceManager, tbrEmailLeadEngineer, tbrEmailOther)
+- Per-schedule email in `tbrSchedules.reminderEmail` (account manager)
+- Configure global emails via "TBR Reminder Emails" card on the tracker page
+- `/api/app-settings` GET/POST endpoints (admin-only write)
 
 ## Page Access Keys
 Defined in `ALL_PAGE_KEYS` in `App.tsx`:

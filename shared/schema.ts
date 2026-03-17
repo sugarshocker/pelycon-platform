@@ -498,3 +498,17 @@ export const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   role: z.enum(["admin", "editor", "viewer"]).default("viewer"),
 });
+
+export const dropsuiteAccounts = pgTable("dropsuite_accounts", {
+  userId: text("user_id").primaryKey(),
+  companyName: text("company_name").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type DropsuiteAccount = typeof dropsuiteAccounts.$inferSelect;
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

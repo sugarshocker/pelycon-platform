@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -152,6 +152,114 @@ function TopClientsNeedingTbr() {
           ))}
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+function TbrEmailSettings() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+
+  const { data: settings } = useQuery<{
+    tbrEmailServiceManager: string;
+    tbrEmailLeadEngineer: string;
+    tbrEmailOther: string;
+  }>({ queryKey: ["/api/app-settings"] });
+
+  const [smEmail, setSmEmail] = useState("");
+  const [leEmail, setLeEmail] = useState("");
+  const [otherEmail, setOtherEmail] = useState("");
+
+  useEffect(() => {
+    if (settings) {
+      setSmEmail(settings.tbrEmailServiceManager ?? "");
+      setLeEmail(settings.tbrEmailLeadEngineer ?? "");
+      setOtherEmail(settings.tbrEmailOther ?? "");
+    }
+  }, [settings]);
+
+  const mutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/app-settings", {
+      tbrEmailServiceManager: smEmail.trim(),
+      tbrEmailLeadEngineer: leEmail.trim(),
+      tbrEmailOther: otherEmail.trim(),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/app-settings"] });
+      toast({ title: "Reminder email settings saved" });
+      setOpen(false);
+    },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  const configured = !!(settings?.tbrEmailServiceManager || settings?.tbrEmailLeadEngineer || settings?.tbrEmailOther);
+
+  return (
+    <Card data-testid="card-tbr-email-settings">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Mail className="h-4 w-4 text-muted-foreground" />
+            TBR Reminder Emails
+          </CardTitle>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setOpen(!open)} data-testid="button-toggle-email-settings">
+            {open ? "Close" : "Configure"}
+          </Button>
+        </div>
+        {!open && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {configured
+              ? `Reminders sent 3 days before each scheduled TBR${[settings?.tbrEmailServiceManager, settings?.tbrEmailLeadEngineer, settings?.tbrEmailOther].filter(Boolean).map((e, i) => i === 0 ? ` to ${e}` : `, ${e}`).join("")}`
+              : "No reminder recipients configured. Click Configure to add them."}
+          </p>
+        )}
+      </CardHeader>
+      {open && (
+        <CardContent className="pt-0 space-y-3">
+          <p className="text-xs text-muted-foreground">These addresses will receive reminder emails 3 days before any scheduled TBR. Leave blank to skip that role.</p>
+          <div className="space-y-2">
+            <div>
+              <label className="text-xs font-medium block mb-1">Service Manager Email</label>
+              <Input
+                type="email"
+                value={smEmail}
+                onChange={e => setSmEmail(e.target.value)}
+                placeholder="servicemanager@pelycon.com"
+                className="h-8 text-sm"
+                data-testid="input-tbr-sm-email"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1">Lead Engineer Email</label>
+              <Input
+                type="email"
+                value={leEmail}
+                onChange={e => setLeEmail(e.target.value)}
+                placeholder="leadengineer@pelycon.com"
+                className="h-8 text-sm"
+                data-testid="input-tbr-le-email"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1">Other Recipient Email</label>
+              <Input
+                type="email"
+                value={otherEmail}
+                onChange={e => setOtherEmail(e.target.value)}
+                placeholder="other@pelycon.com"
+                className="h-8 text-sm"
+                data-testid="input-tbr-other-email"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending} data-testid="button-save-email-settings">
+              {mutation.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -662,6 +770,7 @@ export default function Tracker() {
               </CardContent>
             </Card>
 
+            <TbrEmailSettings />
             <TopClientsNeedingTbr />
           </>
         )}
@@ -826,7 +935,7 @@ export default function Tracker() {
                   data-testid="input-reminder-email"
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Receives a reminder email 2 days before the review</p>
+              <p className="text-xs text-muted-foreground mt-1">Receives a reminder email 3 days before the review</p>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Notes</label>

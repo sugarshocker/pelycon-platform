@@ -6,6 +6,8 @@ import {
   type ClientAccount, type InsertClientAccount, clientAccounts,
   type ArOnlyClient, type InsertArOnlyClient, arOnlyClients,
   type ClientMapping, type InsertClientMapping, clientMapping,
+  type DropsuiteAccount, dropsuiteAccounts,
+  appSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lte, gte, isNull, isNotNull } from "drizzle-orm";
@@ -53,6 +55,10 @@ export interface IStorage {
   getAllClientMappings(): Promise<ClientMapping[]>;
   getClientMappingByCwId(cwCompanyId: number): Promise<ClientMapping | undefined>;
   upsertClientMapping(data: InsertClientMapping): Promise<ClientMapping>;
+  getAllDropsuiteAccounts(): Promise<DropsuiteAccount[]>;
+  upsertDropsuiteAccount(userId: string, companyName: string): Promise<void>;
+  getAppSetting(key: string): Promise<string | null>;
+  setAppSetting(key: string, value: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -336,6 +342,33 @@ export class DatabaseStorage implements IStorage {
     }
     const [result] = await db.insert(clientMapping).values(data).returning();
     return result;
+  }
+
+  async getAllDropsuiteAccounts(): Promise<DropsuiteAccount[]> {
+    return db.select().from(dropsuiteAccounts).orderBy(dropsuiteAccounts.companyName);
+  }
+
+  async upsertDropsuiteAccount(userId: string, companyName: string): Promise<void> {
+    await db.insert(dropsuiteAccounts)
+      .values({ userId, companyName, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: dropsuiteAccounts.userId,
+        set: { companyName, updatedAt: new Date() },
+      });
+  }
+
+  async getAppSetting(key: string): Promise<string | null> {
+    const results = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
+    return results[0]?.value ?? null;
+  }
+
+  async setAppSetting(key: string, value: string): Promise<void> {
+    await db.insert(appSettings)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value, updatedAt: new Date() },
+      });
   }
 }
 

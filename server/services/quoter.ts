@@ -164,6 +164,9 @@ function mapQuote(q: any): QuoterQuote {
 }
 
 export interface QuoterSummary {
+  outstandingQuotes: QuoterQuote[];
+  outstandingCount: number;
+  outstandingValue: number;
   activeQuotes: QuoterQuote[];
   activeCount: number;
   activeValue: number;
@@ -173,6 +176,23 @@ export interface QuoterSummary {
   wonThisMonthValue: number;
   recentQuotes: QuoterQuote[];
 }
+
+// Outstanding: Published + all Sent-* stages (awaiting client decision)
+const OUTSTANDING_STAGES = new Set([
+  "Published",
+  "Sent - Undeliverable",
+  "Sent - Pending",
+  "Sent - Delivered",
+  "Sent - Opened",
+  "Sent - Clicked",
+]);
+
+// Active = Outstanding + Expired + Draft
+const ACTIVE_STAGES = new Set([
+  ...OUTSTANDING_STAGES,
+  "Expired",
+  "Draft",
+]);
 
 export async function getQuotesSummary(): Promise<QuoterSummary> {
   if (!isConfigured()) {
@@ -188,11 +208,15 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
   const cutoff = twelveMonthsAgo.toISOString();
 
-  const TERMINAL = new Set(["expired", "lost", "declined", "accepted", "ordered", "fulfilled"]);
   const WON = new Set(["accepted", "ordered", "fulfilled"]);
 
+  const outstanding = quotes
+    .filter(q => OUTSTANDING_STAGES.has(q.stage) && q.createdAt >= cutoff)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const outstandingValue = outstanding.reduce((sum, q) => sum + (q.total || 0), 0);
+
   const allActive = quotes
-    .filter(q => !q.draft && !TERMINAL.has(q.status))
+    .filter(q => ACTIVE_STAGES.has(q.stage))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const active = allActive.filter(q => q.createdAt >= cutoff);
   const olderActiveCount = allActive.length - active.length;
@@ -207,6 +231,9 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
     .slice(0, 20);
 
   return {
+    outstandingQuotes: outstanding,
+    outstandingCount: outstanding.length,
+    outstandingValue,
     activeQuotes: active,
     activeCount: active.length,
     activeValue,
