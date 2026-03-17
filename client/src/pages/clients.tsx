@@ -63,12 +63,7 @@ const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string
   { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP", required: true },
 ];
 
-function StackDot({ value, needsMapping }: { value: boolean | null | undefined; needsMapping?: boolean }) {
-  if (needsMapping) return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-1 py-0.5 leading-none whitespace-nowrap mx-auto">
-      Map
-    </span>
-  );
+function StackDot({ value }: { value: boolean | null | undefined }) {
   if (value === true) return <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />;
   if (value === false) return <XCircle className="h-4 w-4 text-red-500 mx-auto" />;
   return <MinusCircle className="h-4 w-4 text-muted-foreground/30 mx-auto" />;
@@ -520,14 +515,12 @@ function StackManualOverridePanel({ account, onClose }: { account: Account; onCl
       {STACK_TOOLS.map(tool => {
         const val = stack[tool.key];
         const isManual = stack.manualOverrides?.[tool.key] !== undefined;
-        const dsNeedsMapping = tool.key === "dropSuite" && stack.dropsuiteNeedsMapping === true;
         return (
           <div key={tool.key} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <StackDot value={val} needsMapping={dsNeedsMapping} />
+              <StackDot value={val} />
               <span className="text-sm">{tool.label}</span>
-              {dsNeedsMapping && <Badge variant="outline" className="text-[10px] h-4 px-1 text-amber-600 border-amber-300">needs mapping</Badge>}
-              {isManual && !dsNeedsMapping && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
+              {isManual && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -556,12 +549,9 @@ interface ClientMappingData {
   notes: string | null;
 }
 
-interface DropsuiteAccountOption { userId: string; companyName: string; }
-
 function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose: () => void }) {
   const { toast } = useToast();
   const { data: allMappings = [] } = useQuery<ClientMappingData[]>({ queryKey: ["/api/client-mappings"] });
-  const { data: dsAccounts = [] } = useQuery<DropsuiteAccountOption[]>({ queryKey: ["/api/dropsuite/accounts"] });
   const existing = allMappings.find(m => m.cwCompanyId === account.cwCompanyId);
 
   const [ninjaOrgId, setNinjaOrgId] = useState(existing?.ninjaOrgId != null ? String(existing.ninjaOrgId) : "");
@@ -592,8 +582,6 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
       toast({ title: "Save failed", variant: "destructive" });
     },
   });
-
-  const needsDs = account.stackCompliance?.dropsuiteNeedsMapping === true && !dropsuiteUserId;
 
   return (
     <div className="p-4 space-y-4">
@@ -635,44 +623,16 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
           <p className="text-[11px] text-muted-foreground">Default domain name from Entra / CIPP</p>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium flex items-center gap-1.5">
-            DropSuite Account
-            {needsDs && (
-              <span className="text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded px-1.5 py-0.5">
-                needs mapping
-              </span>
-            )}
-          </label>
-          {dsAccounts.length > 0 ? (
-            <Select
-              value={dropsuiteUserId || "__none__"}
-              onValueChange={v => setDropsuiteUserId(v === "__none__" ? "" : v)}
-            >
-              <SelectTrigger className={`h-8 text-sm ${needsDs ? "border-amber-400" : ""}`} data-testid="select-dropsuite-account">
-                <SelectValue placeholder="Select DropSuite account…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— No mapping —</SelectItem>
-                {dsAccounts.map(a => (
-                  <SelectItem key={a.userId} value={a.userId}>
-                    {a.companyName} <span className="text-muted-foreground ml-1 text-[10px]">{a.userId}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Input
-              value={dropsuiteUserId}
-              onChange={e => setDropsuiteUserId(e.target.value)}
-              placeholder="Numeric user ID from DropSuite portal"
-              className={`h-8 text-sm ${needsDs ? "border-amber-400 focus-visible:ring-amber-400" : ""}`}
-              data-testid="input-dropsuite-user-id"
-            />
-          )}
+          <label className="text-xs font-medium">DropSuite User ID (override)</label>
+          <Input
+            value={dropsuiteUserId}
+            onChange={e => setDropsuiteUserId(e.target.value)}
+            placeholder="Auto-detected via email domain"
+            className="h-8 text-sm"
+            data-testid="input-dropsuite-user-id"
+          />
           <p className="text-[11px] text-muted-foreground">
-            {dsAccounts.length > 0
-              ? `${dsAccounts.length} accounts from last CSV import`
-              : "Import a DropSuite CSV to populate this dropdown"}
+            Leave blank — DropSuite is auto-detected by matching the CIPP tenant email domain against DropSuite accounts. Only set this to force a specific user ID.
           </p>
         </div>
         <div className="space-y-1">
@@ -1218,10 +1178,7 @@ export default function Clients() {
                         </td>
                         {STACK_TOOLS.map(tool => (
                           <td key={tool.key} className="px-3 py-2 text-center">
-                            <StackDot
-                              value={stack?.[tool.key]}
-                              needsMapping={tool.key === "dropSuite" && stack?.dropsuiteNeedsMapping === true}
-                            />
+                            <StackDot value={stack?.[tool.key]} />
                           </td>
                         ))}
                         <td className="px-3 py-2 text-center text-xs font-semibold">

@@ -179,3 +179,52 @@ export async function getAllOrganizationNames(): Promise<string[]> {
   const orgs = await getOrganizations();
   return orgs.map(o => o.name);
 }
+
+let allDomainsCacheSet: Set<string> | null = null;
+let allDomainsCacheExpiry = 0;
+
+export async function getAllAccountDomains(): Promise<Set<string>> {
+  if (allDomainsCacheSet && Date.now() < allDomainsCacheExpiry) return allDomainsCacheSet;
+  if (!isConfigured()) return new Set();
+
+  const domains = new Set<string>();
+  try {
+    let page = 1;
+    while (page <= 100) {
+      const data = await apiGet(`/accounts?page=${page}&per_page=100`, false);
+      const accounts: any[] = data.accounts || (Array.isArray(data) ? data : []);
+      if (accounts.length === 0) break;
+      for (const a of accounts) {
+        const email: string = a.email || a.user_email || a.name || "";
+        const atIdx = email.indexOf("@");
+        if (atIdx > 0) domains.add(email.substring(atIdx + 1).toLowerCase());
+      }
+      if (accounts.length < 100) break;
+      page++;
+    }
+    log(`DropSuite: discovered ${domains.size} unique email domains from accounts`);
+  } catch (e: any) {
+    log(`DropSuite getAllAccountDomains error: ${e.message}`);
+  }
+
+  allDomainsCacheSet = domains;
+  allDomainsCacheExpiry = Date.now() + 15 * 60 * 1000;
+  return domains;
+}
+
+export async function checkDomainHasBackup(tenantDomain: string): Promise<boolean> {
+  if (!isConfigured() || !tenantDomain) return false;
+  const domains = await getAllAccountDomains();
+  const target = tenantDomain.toLowerCase();
+
+  if (domains.has(target)) return true;
+
+  for (const d of domains) {
+    if (d.endsWith(`.${target}`) || target.endsWith(`.${d}`)) return true;
+    const tBase = target.replace(/\.onmicrosoft\.com$/, "").replace(/\.[^.]+$/, "");
+    const dBase = d.replace(/\.onmicrosoft\.com$/, "").replace(/\.[^.]+$/, "");
+    if (tBase && dBase && tBase.length > 2 && tBase === dBase) return true;
+  }
+
+  return false;
+}

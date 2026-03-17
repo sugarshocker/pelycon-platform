@@ -142,22 +142,11 @@ async function refreshStackForAccount(
     log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);
   }
 
-  if (dropsuite.isConfigured()) {
-    const dropsuiteUserId: string | null = mapping?.dropsuiteUserId ?? null;
-    if (dropsuiteUserId) {
-      updated.dropSuite = true;
-      updated.dropsuiteNeedsMapping = false;
-      log(`Stack [${account.companyName}] → DropSuite: mapped (id=${dropsuiteUserId}), marking backup=true`);
-    } else {
-      updated.dropsuiteNeedsMapping = true;
-      log(`Stack [${account.companyName}] → DropSuite: no user ID mapped`);
-    }
-  }
-
   const { isConfigured: cippConfigured, getClientData: cippGetClientData, getTenants: cippGetTenants } = await import("./services/cipp.js");
+  let cippTenantFilter: string | null = null;
   if (cippConfigured()) {
     try {
-      let cippTenantFilter: string | null = mapping?.cippTenantId ?? null;
+      cippTenantFilter = mapping?.cippTenantId ?? null;
       if (!cippTenantFilter) {
         const cippTenants = prefetched.cippTenants ?? await cippGetTenants();
         const matched = cippTenants.find((t: any) => fuzzyNameMatch(account.companyName, t.displayName || ""));
@@ -167,9 +156,34 @@ async function refreshStackForAccount(
         const cippData = await cippGetClientData(cippTenantFilter);
         updated.msBizPremium = cippData.msBizPremium;
         updated.secureScore = cippData.secureScore;
+        log(`Stack [${account.companyName}] → CIPP tenant: ${cippTenantFilter}`);
       }
     } catch (e: any) {
       log(`Stack refresh CIPP error for ${account.companyName}: ${e.message}`);
+    }
+  }
+
+  if (dropsuite.isConfigured()) {
+    if (updated.dropSuite === true) {
+      updated.dropsuiteNeedsMapping = false;
+      log(`Stack [${account.companyName}] → DropSuite: already detected via NinjaOne software scan`);
+    } else {
+      const dropsuiteUserId: string | null = mapping?.dropsuiteUserId ?? null;
+      if (dropsuiteUserId) {
+        updated.dropSuite = true;
+        updated.dropsuiteNeedsMapping = false;
+        log(`Stack [${account.companyName}] → DropSuite: matched via manual mapping (id=${dropsuiteUserId})`);
+      } else if (cippTenantFilter) {
+        const hasDomain = await dropsuite.checkDomainHasBackup(cippTenantFilter);
+        updated.dropSuite = hasDomain;
+        updated.dropsuiteNeedsMapping = false;
+        log(`Stack [${account.companyName}] → DropSuite: domain check "${cippTenantFilter}" = ${hasDomain}`);
+      } else {
+        const dsInfo = await dropsuite.getAccountBackupStatus(account.companyName);
+        updated.dropSuite = dsInfo.hasBackup;
+        updated.dropsuiteNeedsMapping = false;
+        log(`Stack [${account.companyName}] → DropSuite: name match = ${dsInfo.hasBackup}`);
+      }
     }
   }
 
