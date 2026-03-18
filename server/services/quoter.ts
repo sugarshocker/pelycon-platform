@@ -117,24 +117,27 @@ function parseDecimal(val: string | null | undefined): number | null {
   return isNaN(n) ? null : n;
 }
 
-function computeStage(status: string, draft: boolean, emailStatus: string | null): string {
+const WON_STATUSES = new Set(["accepted", "ordered", "fulfilled"]);
+const LOST_STATUSES = new Set(["lost", "declined"]);
+const NOW = () => new Date();
+
+function computeStage(status: string, draft: boolean, emailStatus: string | null, expiredAt: string | null): string {
   if (draft) return "Draft";
-  switch (status) {
-    case "expired": return "Expired";
-    case "accepted": return "Won - Accepted";
-    case "ordered": return "Won - Ordered";
-    case "fulfilled": return "Won - Fulfilled";
-    case "lost": case "declined": return "Lost";
-    default:
-      switch (emailStatus) {
-        case "undeliverable": return "Sent - Undeliverable";
-        case "pending": case "queued": return "Sent - Pending";
-        case "delivered": return "Sent - Delivered";
-        case "opened": return "Sent - Opened";
-        case "clicked": return "Sent - Clicked";
-        case "sent": return "Sent - Delivered";
-        default: return "Published";
-      }
+  if (WON_STATUSES.has(status)) return status === "accepted" ? "Won - Accepted" : status === "ordered" ? "Won - Ordered" : "Won - Fulfilled";
+  if (LOST_STATUSES.has(status)) return "Lost";
+  // Explicitly expired by API status
+  if (status === "expired") return "Expired";
+  // Past the expiry date (Quoter doesn't always flip status field)
+  if (expiredAt && new Date(expiredAt) < NOW()) return "Expired";
+  // Awaiting decision: classify by email delivery status
+  switch (emailStatus) {
+    case "undeliverable": return "Sent - Undeliverable";
+    case "pending": case "queued": return "Sent - Pending";
+    case "delivered": return "Sent - Delivered";
+    case "opened": return "Sent - Opened";
+    case "clicked": return "Sent - Clicked";
+    case "sent": return "Sent - Delivered";
+    default: return "Published";
   }
 }
 
@@ -142,11 +145,12 @@ function mapQuote(q: any): QuoterQuote {
   const status = q.status || "pending";
   const draft = !!q.draft;
   const emailStatus = q.email_status || null;
+  const expiredAt = q.expired_at || null;
   return {
     id: q.id,
     name: q.name || "",
     status,
-    stage: computeStage(status, draft, emailStatus),
+    stage: computeStage(status, draft, emailStatus, expiredAt),
     draft,
     total: parseDecimal(q.one_time_total_decimal ?? q.monthly_total_decimal ?? q.annual_total_decimal),
     oneTimeTotal: parseDecimal(q.one_time_total_decimal),
@@ -164,35 +168,33 @@ function mapQuote(q: any): QuoterQuote {
 }
 
 export interface QuoterSummary {
-  outstandingQuotes: QuoterQuote[];
-  outstandingCount: number;
-  outstandingValue: number;
-  activeQuotes: QuoterQuote[];
-  activeCount: number;
-  activeValue: number;
-  olderActiveCount: number;
-  quotesThisMonth: number;
+  // Category 1: sent/published — awaiting client decision (no date cutoff)
+  awaitingQuotes: QuoterQuote[];
+  awaitingCount: number;
+  awaitingValue: number;
+  // Category 2: expired or draft — could still be won (no date cutoff)
+  needsActionQuotes: QuoterQuote[];
+  needsActionCount: number;
+  needsActionValue: number;
+  // Won this calendar month
   wonThisMonth: number;
   wonThisMonthValue: number;
+  quotesThisMonth: number;
   recentQuotes: QuoterQuote[];
 }
 
-// Outstanding: Published + all Sent-* stages (awaiting client decision)
-const OUTSTANDING_STAGES = new Set([
+// Awaiting Decision: sent/published quotes waiting for client response
+const AWAITING_STAGES = new Set([
   "Published",
-  "Sent - Undeliverable",
   "Sent - Pending",
   "Sent - Delivered",
   "Sent - Opened",
   "Sent - Clicked",
+  "Sent - Undeliverable",
 ]);
 
-// Active = Outstanding + Expired + Draft
-const ACTIVE_STAGES = new Set([
-  ...OUTSTANDING_STAGES,
-  "Expired",
-  "Draft",
-]);
+// Needs Action: expired or draft — could still be recovered, no date cutoff
+const NEEDS_ACTION_STAGES = new Set(["Expired", "Draft"]);
 
 export async function getQuotesSummary(): Promise<QuoterSummary> {
   if (!isConfigured()) {
@@ -204,23 +206,60 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const twelveMonthsAgo = new Date(now);
-  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
-  const cutoff = twelveMonthsAgo.toISOString();
-
   const WON = new Set(["accepted", "ordered", "fulfilled"]);
 
-  const outstanding = quotes
-    .filter(q => OUTSTANDING_STAGES.has(q.stage) && q.createdAt >= cutoff)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const outstandingValue = outstanding.reduce((sum, q) => sum + (q.total || 0), 0);
+  const twelveMonthsAgo = new Date(now);
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+  const cutoff12 = twelveMonthsAgo.toISOString();
 
-  const allActive = quotes
-    .filter(q => ACTIVE_STAGES.has(q.stage))
+  // Stage engagement ranking — higher = more engaged with the quote
+  const STAGE_RANK: Record<string, number> = {
+    "Sent - Clicked": 5,
+    "Sent - Opened": 4,
+    "Sent - Delivered": 3,
+    "Sent - Pending": 2,
+    "Sent - Undeliverable": 1,
+    "Published": 0,   // finalized but not yet emailed
+    "Draft": -1,
+    "Expired": -2,
+  };
+
+  // Deduplicate by quote number — keep the most-engaged record per quote
+  function dedupeByNumber(list: QuoterQuote[]): QuoterQuote[] {
+    const best = new Map<string, QuoterQuote>();
+    for (const q of list) {
+      const key = q.number || q.id;
+      const existing = best.get(key);
+      if (!existing || (STAGE_RANK[q.stage] ?? -99) > (STAGE_RANK[existing.stage] ?? -99)) {
+        best.set(key, q);
+      }
+    }
+    return [...best.values()];
+  }
+
+  const sixtyDaysAgo = new Date(now);
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  const cutoff60 = sixtyDaysAgo.toISOString();
+
+  // Awaiting Decision: emailed to client (Sent-* stages) within 12 months, deduplicated by quote number
+  // "Published" without email = not yet sent to client, excluded from this bucket
+  const SENT_STAGES = new Set(["Sent - Delivered", "Sent - Opened", "Sent - Clicked", "Sent - Pending", "Sent - Undeliverable"]);
+  const rawAwaiting = quotes.filter(q => SENT_STAGES.has(q.stage) && q.createdAt >= cutoff12);
+  const awaitingQuotes = dedupeByNumber(rawAwaiting)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const active = allActive.filter(q => q.createdAt >= cutoff);
-  const olderActiveCount = allActive.length - active.length;
-  const activeValue = active.reduce((sum, q) => sum + (q.total || 0), 0);
+  const awaitingValue = awaitingQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
+
+  // Needs Follow-Up: recently expired (within 60 days) + any draft
+  // Uses shorter window for expired — older expired quotes are effectively dead leads
+  const rawNeedsAction = quotes.filter(q =>
+    (q.stage === "Draft") ||
+    (q.stage === "Expired" && q.createdAt >= cutoff60)
+  );
+  const needsActionQuotes = dedupeByNumber(rawNeedsAction)
+    .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+  const needsActionValue = needsActionQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
+
+  log(`Quoter: awaiting=${rawAwaiting.length}→${awaitingQuotes.length} deduped | needs-action raw=${rawNeedsAction.length}→${needsActionQuotes.length} deduped (expired 60d + drafts)`);
 
   const thisMonth = quotes.filter(q => q.createdAt >= startOfMonth);
   const wonThisMonth = quotes.filter(q => WON.has(q.status) && q.modifiedAt >= startOfMonth);
@@ -230,17 +269,18 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
     .slice(0, 20);
 
+  log(`Quoter summary: ${awaitingQuotes.length} awaiting decision, ${needsActionQuotes.length} needs action`);
+
   return {
-    outstandingQuotes: outstanding,
-    outstandingCount: outstanding.length,
-    outstandingValue,
-    activeQuotes: active,
-    activeCount: active.length,
-    activeValue,
-    olderActiveCount,
-    quotesThisMonth: thisMonth.length,
+    awaitingQuotes,
+    awaitingCount: awaitingQuotes.length,
+    awaitingValue,
+    needsActionQuotes,
+    needsActionCount: needsActionQuotes.length,
+    needsActionValue,
     wonThisMonth: wonThisMonth.length,
     wonThisMonthValue,
+    quotesThisMonth: thisMonth.length,
     recentQuotes,
   };
 }

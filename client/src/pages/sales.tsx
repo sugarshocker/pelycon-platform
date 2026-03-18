@@ -27,13 +27,12 @@ interface QuoterQuote {
 }
 
 interface QuoterSummary {
-  outstandingQuotes: QuoterQuote[];
-  outstandingCount: number;
-  outstandingValue: number;
-  activeQuotes: QuoterQuote[];
-  activeCount: number;
-  activeValue: number;
-  olderActiveCount: number;
+  awaitingQuotes: QuoterQuote[];
+  awaitingCount: number;
+  awaitingValue: number;
+  needsActionQuotes: QuoterQuote[];
+  needsActionCount: number;
+  needsActionValue: number;
   quotesThisMonth: number;
   wonThisMonth: number;
   wonThisMonthValue: number;
@@ -63,7 +62,11 @@ function StageBadge({ stage }: { stage: string }) {
     return <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
   if (stage === "Published")
     return <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
-  if (stage === "Expired" || stage === "Lost")
+  if (stage === "Expired")
+    return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Draft")
+    return <Badge className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
+  if (stage === "Lost")
     return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
   return <Badge variant="secondary" className="text-[10px] px-1.5 whitespace-nowrap">{stage}</Badge>;
 }
@@ -97,26 +100,26 @@ export default function Sales() {
   const statCards = [
     {
       icon: FileText,
-      label: "Outstanding Quotes",
-      value: isLoading ? null : (data?.outstandingCount ?? 0),
-      display: isLoading ? null : String(data?.outstandingCount ?? 0),
-      sub: "Sent or published, awaiting decision",
+      label: "Awaiting Decision",
+      value: isLoading ? null : (data?.awaitingCount ?? 0),
+      display: isLoading ? null : String(data?.awaitingCount ?? 0),
+      sub: "Sent to client, waiting for response",
       color: "text-blue-500",
     },
     {
       icon: Clock,
-      label: "Active Quotes",
-      value: isLoading ? null : (data?.activeCount ?? 0),
-      display: isLoading ? null : String(data?.activeCount ?? 0),
-      sub: "Outstanding + expired + draft",
-      color: "text-purple-500",
+      label: "Needs Follow-Up",
+      value: isLoading ? null : (data?.needsActionCount ?? 0),
+      display: isLoading ? null : String(data?.needsActionCount ?? 0),
+      sub: "Expired or draft — could still be won",
+      color: "text-amber-500",
     },
     {
       icon: DollarSign,
       label: "Pipeline Value",
-      value: isLoading ? null : (data?.outstandingValue ?? 0),
-      display: isLoading ? null : fmt$(data?.outstandingValue ?? 0),
-      sub: "Value of outstanding quotes",
+      value: isLoading ? null : (data?.awaitingValue ?? 0),
+      display: isLoading ? null : fmt$(data?.awaitingValue ?? 0),
+      sub: "Value of quotes awaiting decision",
       color: "text-primary",
     },
     {
@@ -191,13 +194,13 @@ export default function Sales() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <Circle className="h-4 w-4 text-blue-500 fill-blue-100 dark:fill-blue-900/50" />
-                Outstanding Quotes
+                Awaiting Decision
                 {!isLoading && data && (
-                  <Badge variant="secondary" className="text-xs font-normal">{data.outstandingCount}</Badge>
+                  <Badge variant="secondary" className="text-xs font-normal">{data.awaitingCount}</Badge>
                 )}
               </CardTitle>
               {!isLoading && data && (
-                <p className="text-xs text-muted-foreground">Published &amp; sent — last 12 months</p>
+                <p className="text-xs text-muted-foreground">Sent to client, no response yet</p>
               )}
             </div>
           </CardHeader>
@@ -211,19 +214,19 @@ export default function Sales() {
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
                 {(error as Error)?.message || "Failed to load quotes"}
               </div>
-            ) : (data?.outstandingQuotes ?? []).length === 0 ? (
+            ) : (data?.awaitingQuotes ?? []).length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                No outstanding quotes right now
+                No quotes awaiting decision
               </div>
             ) : (
               <div className="divide-y">
-                {(data!.outstandingQuotes).slice(0, 10).map(q => (
+                {data!.awaitingQuotes.slice(0, 10).map(q => (
                   <QuoteRow key={q.id} q={q} />
                 ))}
-                {data!.outstandingQuotes.length > 10 && (
+                {data!.awaitingQuotes.length > 10 && (
                   <p className="text-xs text-muted-foreground text-center pt-3">
-                    +{data!.outstandingQuotes.length - 10} more — view in Quoter
+                    +{data!.awaitingQuotes.length - 10} more — view in Quoter
                   </p>
                 )}
               </div>
@@ -233,10 +236,18 @@ export default function Sales() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-green-500" />
-              Recent Quote Activity
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-500" />
+                Needs Follow-Up
+                {!isLoading && data && (
+                  <Badge variant="secondary" className="text-xs font-normal">{data.needsActionCount}</Badge>
+                )}
+              </CardTitle>
+              {!isLoading && data && (
+                <p className="text-xs text-muted-foreground">Expired or draft</p>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -246,13 +257,23 @@ export default function Sales() {
             ) : isError ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                Failed to load quote activity
+                Failed to load quotes
+              </div>
+            ) : (data?.needsActionQuotes ?? []).length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                No expired or draft quotes
               </div>
             ) : (
               <div className="divide-y">
-                {(data?.recentQuotes || []).slice(0, 10).map(q => (
+                {data!.needsActionQuotes.slice(0, 10).map(q => (
                   <QuoteRow key={q.id} q={q} />
                 ))}
+                {data!.needsActionQuotes.length > 10 && (
+                  <p className="text-xs text-muted-foreground text-center pt-3">
+                    +{data!.needsActionQuotes.length - 10} more — view in Quoter
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
