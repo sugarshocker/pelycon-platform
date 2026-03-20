@@ -33,6 +33,7 @@ import {
   Receipt,
   TrendingUp,
   ShieldCheck,
+  HelpCircle,
 } from "lucide-react";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -42,6 +43,7 @@ import UserManagement from "@/pages/user-management";
 import Clients from "@/pages/clients";
 import Receivables from "@/pages/receivables";
 import Sales from "@/pages/sales";
+import Help from "@/pages/help";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 
 const APP_VERSION = "26.3.17";
@@ -138,6 +140,26 @@ function AppSidebar({ onLogout, user }: { onLogout: () => void; user: AuthUser }
           );
         })}
 
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-sidebar-foreground/40 px-4 py-1">
+            Help
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={location === "/help"}
+                  onClick={() => setLocation("/help")}
+                  data-testid="nav-help"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  <span>Knowledge Base</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {user.role === "admin" && (
           <SidebarGroup>
             <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-sidebar-foreground/40 px-4 py-1">
@@ -215,6 +237,7 @@ function AuthenticatedApp({ onLogout, user }: { onLogout: () => void; user: Auth
                 {hasPageAccess(user, "receivables") && <Route path="/receivables" component={Receivables} />}
                 {hasPageAccess(user, "sales") && <Route path="/sales" component={Sales} />}
                 {user.role === "admin" && <Route path="/users" component={UserManagement} />}
+                <Route path="/help" component={Help} />
                 <Route>
                   <div className="flex items-center justify-center h-full">
                     <p className="text-muted-foreground">You do not have access to this page.</p>
