@@ -123,20 +123,24 @@ async function refreshStackForAccount(
     const huntressOrg = huntressOrgId
       ? huntressOrgs.find((o: any) => o.id === huntressOrgId)
       : huntressOrgs.find((o: any) => fuzzyNameMatch(account.companyName, o.name || ""));
-    updated.huntressEdr = huntressOrg ? true : false;
     if (huntressOrg) {
       log(`Stack [${account.companyName}] → Huntress matched: ${huntressOrg.name}`);
       try {
         const orgFlags = await huntress.getOrgStackFlags(huntressOrg.id);
+        // EDR: org must have active agents — existence alone is not sufficient
+        updated.huntressEdr = orgFlags.hasEdr ? true : false;
         updated.huntressItdr = orgFlags.hasItdr ? true : false;
         updated.huntressSat = orgFlags.hasSat ? true : false;
         updated.huntressSiem = orgFlags.hasSiem ? true : false;
-        log(`Stack [${account.companyName}] → Huntress flags: ITDR=${orgFlags.hasItdr}, SAT=${orgFlags.hasSat}, SIEM=${orgFlags.hasSiem}`);
+        log(`Stack [${account.companyName}] → Huntress flags: EDR=${orgFlags.hasEdr}(${orgFlags.agentCount} agents), ITDR=${orgFlags.hasItdr}(${orgFlags.identityCount} identities), SAT=${orgFlags.hasSat}(${orgFlags.satLearnerCount} learners), SIEM=${orgFlags.hasSiem}`);
       } catch (he: any) {
         log(`Stack [${account.companyName}] → Huntress org detail error: ${he.message}`);
+        // If we can't get flags, only mark EDR true if org exists (conservative fallback)
+        updated.huntressEdr = true;
       }
     } else {
       log(`Stack [${account.companyName}] → Huntress: no match`);
+      updated.huntressEdr = false;
     }
   } catch (e: any) {
     log(`Stack refresh Huntress error for ${account.companyName}: ${e.message}`);

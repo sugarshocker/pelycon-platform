@@ -148,9 +148,13 @@ export async function getOrganizations(): Promise<Array<{ id: number; name: stri
 }
 
 export interface OrgStackFlags {
-  hasItdr: boolean;
-  hasSat: boolean;
+  hasEdr: boolean;       // true if org has active Huntress EDR agents installed
+  hasItdr: boolean;      // true if org has identities monitored (ITDR product active)
+  hasSat: boolean;       // true if org has SAT learners enrolled
   hasSiem: boolean;
+  agentCount: number;
+  identityCount: number;
+  satLearnerCount: number;
 }
 
 const orgDetailCache = new Map<number, { flags: OrgStackFlags; expires: number }>();
@@ -163,8 +167,15 @@ export async function getOrgStackFlags(orgId: number): Promise<OrgStackFlags> {
     const orgDetail = await apiGet(`/organizations/${orgId}`);
     const org = orgDetail.organization || orgDetail || {};
 
-    const m365Users = org.microsoft_365_users_count ?? org.billable_identity_count ?? 0;
+    // EDR: must have active agents installed — not just existing as an org
+    const agentCount = org.agents_count ?? 0;
+    const hasEdr = agentCount > 0;
+
+    // SAT: learner count from org detail
     const satLearners = org.sat_learner_count ?? 0;
+    const hasSat = satLearners > 0;
+
+    // SIEM
     const hasSiem = !!(
       org.siem_agent_count > 0 ||
       org.siem_enabled === true ||
@@ -172,17 +183,47 @@ export async function getOrgStackFlags(orgId: number): Promise<OrgStackFlags> {
       org.siem_event_count > 0
     );
 
+    // ITDR: call the identities endpoint — presence of any identity = ITDR is active
+    // Huntress ITDR requires an active identity monitoring subscription
+    let identityCount = 0;
+    let hasItdr = false;
+    try {
+      // First try org-level field (fast, no extra call if available)
+      const m365Users = org.microsoft_365_users_count ?? org.billable_identity_count ?? null;
+      if (m365Users !== null) {
+        identityCount = m365Users;
+        hasItdr = m365Users > 0;
+        log(`Huntress ITDR org ${orgId}: using org field microsoft_365_users_count=${m365Users}`);
+      } else {
+        // Fall back to identities endpoint — page=1 limit=1 just to check presence
+        const identData = await apiGetSafe(`/identities?organization_id=${orgId}&page=1&limit=1`);
+        if (identData) {
+          const identities = identData.identities || identData.data || [];
+          const total = identData.pagination?.total ?? identities.length;
+          identityCount = total;
+          hasItdr = total > 0;
+          log(`Huntress ITDR org ${orgId}: /identities returned total=${total}`);
+        }
+      }
+    } catch (ie: any) {
+      log(`Huntress ITDR check error org ${orgId}: ${ie.message}`);
+    }
+
     const flags: OrgStackFlags = {
-      hasItdr: m365Users > 0,
-      hasSat: satLearners > 0,
+      hasEdr,
+      hasItdr,
+      hasSat,
       hasSiem,
+      agentCount,
+      identityCount,
+      satLearnerCount: satLearners,
     };
-    log(`Huntress org ${orgId} stack flags: ITDR=${flags.hasItdr}(${m365Users} M365), SAT=${flags.hasSat}(${satLearners} learners), SIEM=${flags.hasSiem}`);
+    log(`Huntress org ${orgId} stack flags: EDR=${hasEdr}(${agentCount} agents), ITDR=${hasItdr}(${identityCount} identities), SAT=${hasSat}(${satLearners} learners), SIEM=${hasSiem}`);
     orgDetailCache.set(orgId, { flags, expires: Date.now() + 10 * 60 * 1000 });
     return flags;
   } catch (e: any) {
     log(`Huntress getOrgStackFlags error for org ${orgId}: ${e.message}`);
-    return { hasItdr: false, hasSat: false, hasSiem: false };
+    return { hasEdr: false, hasItdr: false, hasSat: false, hasSiem: false, agentCount: 0, identityCount: 0, satLearnerCount: 0 };
   }
 }
 
