@@ -211,50 +211,58 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
   const cutoff12 = twelveMonthsAgo.toISOString();
 
-  // Stage engagement ranking — higher = more engaged with the quote
-  const STAGE_RANK: Record<string, number> = {
+  // Final states that always win over any other revision of the same quote
+  const FINAL_STAGE_RANK: Record<string, number> = {
     "Won - Fulfilled": 9,
     "Won - Ordered": 8,
     "Won - Accepted": 7,
     "Won": 6,
-    "Sent - Clicked": 5,
-    "Sent - Opened": 4,
-    "Sent - Delivered": 3,
-    "Sent - Pending": 2,
-    "Sent - Undeliverable": 1,
-    "Expired": 0,     // still awaiting decision (client let it expire)
-    "Published": -1,  // finalized but not yet emailed
-    "Draft": -2,
+    "Lost": 5,
   };
 
-  // Deduplicate ALL quotes globally first — keep the highest-ranked version per quote number.
-  // This ensures a quote with both a "pending" revision and an "accepted" revision correctly
-  // resolves to "Won - Accepted" before any bucket filtering happens.
+  // Deduplicate ALL quotes globally:
+  // 1. Final states (Won/Lost) always beat non-final states
+  // 2. Among non-final states, the most recently modified revision wins
+  // 3. Tiebreak on final states: higher FINAL_STAGE_RANK wins
   const best = new Map<string, QuoterQuote>();
   for (const q of mappedQuotes) {
     const key = q.number || q.id;
     const existing = best.get(key);
-    if (!existing || (STAGE_RANK[q.stage] ?? -99) > (STAGE_RANK[existing.stage] ?? -99)) {
-      best.set(key, q);
-    }
+    if (!existing) { best.set(key, q); continue; }
+    const newFinal = FINAL_STAGE_RANK[q.stage] ?? -1;
+    const exFinal  = FINAL_STAGE_RANK[existing.stage] ?? -1;
+    if (newFinal > exFinal) { best.set(key, q); continue; }       // new is a better final state
+    if (exFinal > newFinal) continue;                              // existing is a better final state
+    // Both same final tier → pick more recent modifiedAt
+    if (new Date(q.modifiedAt) > new Date(existing.modifiedAt)) { best.set(key, q); }
   }
   const quotes = [...best.values()];
 
-  // Awaiting Decision: all 7 statuses — Published, all Sent-* variants, and Expired
+  // 35-day lookback window: Expired quotes older than this are stale / no longer actionable
+  const thirtyFiveDaysAgo = new Date(now);
+  thirtyFiveDaysAgo.setDate(thirtyFiveDaysAgo.getDate() - 35);
+  const cutoff35 = thirtyFiveDaysAgo.toISOString();
+
+  // Awaiting Decision: Published + all Sent-* + Expired within the last 35 days
   const AWAITING_STAGES = new Set([
     "Published",
     "Sent - Undeliverable", "Sent - Pending", "Sent - Delivered", "Sent - Opened", "Sent - Clicked",
     "Expired",
   ]);
   const awaitingQuotes = quotes
-    .filter(q => AWAITING_STAGES.has(q.stage) && q.createdAt >= cutoff12)
+    .filter(q => {
+      if (!AWAITING_STAGES.has(q.stage)) return false;
+      // For expired quotes: only include if expired within last 35 days (still actionable)
+      if (q.stage === "Expired") return q.expiredAt != null && q.expiredAt >= cutoff35;
+      return true;
+    })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const awaitingValue = awaitingQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
 
-  // Needs Follow-Up: Expired quotes within 12 months (same window as Awaiting Decision)
-  const needsActionQuotes = quotes
-    .filter(q => q.stage === "Expired" && q.createdAt >= cutoff12)
-    .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+  // Needs Follow-Up: Expired quotes within the last 35 days (subset of Awaiting Decision)
+  const needsActionQuotes = awaitingQuotes
+    .filter(q => q.stage === "Expired")
+    .sort((a, b) => new Date(b.expiredAt!).getTime() - new Date(a.expiredAt!).getTime());
   const needsActionValue = needsActionQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
 
   // Pipeline Value: all open quotes — not Won or Lost (Awaiting + Expired + Draft)
