@@ -119,7 +119,7 @@ export default function Sales() {
       label: "Pipeline Value",
       value: isLoading ? null : (data?.awaitingValue ?? 0),
       display: isLoading ? null : fmt$(data?.awaitingValue ?? 0),
-      sub: "Sent + expired quotes awaiting decision",
+      sub: "Open quotes awaiting client decision",
       color: "text-primary",
     },
     {

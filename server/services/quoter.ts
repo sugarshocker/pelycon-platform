@@ -238,10 +238,10 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
   }
   const quotes = [...best.values()];
 
-  // Awaiting Decision: emailed (Sent-* stages) OR expired — client hasn't responded yet
-  // "Published" without email = not yet sent to client, excluded from this bucket
+  // Awaiting Decision: all 7 statuses — Published, all Sent-* variants, and Expired
   const AWAITING_STAGES = new Set([
-    "Sent - Delivered", "Sent - Opened", "Sent - Clicked", "Sent - Pending", "Sent - Undeliverable",
+    "Published",
+    "Sent - Undeliverable", "Sent - Pending", "Sent - Delivered", "Sent - Opened", "Sent - Clicked",
     "Expired",
   ]);
   const awaitingQuotes = quotes
