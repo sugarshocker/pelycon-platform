@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
+  Ban,
   Building2,
   AlertTriangle,
   BarChart3,
@@ -50,19 +51,48 @@ type SortDir = "asc" | "desc";
 const AR_SCORE_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
 const TBR_STATUS_ORDER: Record<string, number> = { red: 0, yellow: 1, scheduled: 2, green: 3 };
 
-const STACK_TOOLS: { key: keyof StackComplianceData; label: string; abbr: string; required: boolean }[] = [
-  { key: "ninjaRmm", label: "Ninja RMM", abbr: "Ninja", required: true },
-  { key: "huntressEdr", label: "Huntress EDR", abbr: "EDR", required: true },
-  { key: "huntressItdr", label: "Huntress ITDR", abbr: "ITDR", required: true },
-  { key: "huntressSat", label: "Huntress SAT", abbr: "SAT", required: true },
-  { key: "dropSuite", label: "DropSuite Backup", abbr: "DropSuite", required: true },
-  { key: "zorusDns", label: "Zorus DNS", abbr: "Zorus", required: true },
-  { key: "connectSecure", label: "ConnectSecure", abbr: "ConnSec", required: false },
-  { key: "huntressSiem", label: "Huntress SIEM", abbr: "SIEM", required: false },
-  { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP", required: true },
+const STACK_TOOL_GROUPS: {
+  key: string;
+  label: string;
+  description: string;
+  tools: { key: keyof StackComplianceData; label: string; abbr: string; required: boolean }[];
+}[] = [
+  {
+    key: "endpoint",
+    label: "Endpoint",
+    description: "Installed on devices",
+    tools: [
+      { key: "ninjaRmm", label: "Ninja RMM", abbr: "Ninja", required: true },
+      { key: "huntressEdr", label: "Huntress EDR", abbr: "EDR", required: true },
+      { key: "zorusDns", label: "Zorus DNS", abbr: "Zorus", required: true },
+    ],
+  },
+  {
+    key: "mailbox",
+    label: "Mailbox / User",
+    description: "Per user or mailbox",
+    tools: [
+      { key: "huntressItdr", label: "Huntress ITDR", abbr: "ITDR", required: true },
+      { key: "huntressSat", label: "Huntress SAT", abbr: "SAT", required: true },
+      { key: "dropSuite", label: "DropSuite Backup", abbr: "DropSuite", required: true },
+      { key: "msBizPremium", label: "MS Business Premium", abbr: "MS BP", required: true },
+    ],
+  },
+  {
+    key: "optional",
+    label: "Optional",
+    description: "Add-on services",
+    tools: [
+      { key: "connectSecure", label: "ConnectSecure", abbr: "ConnSec", required: false },
+      { key: "huntressSiem", label: "Huntress SIEM", abbr: "SIEM", required: false },
+    ],
+  },
 ];
 
-function StackDot({ value, required = true }: { value: boolean | null | undefined; required?: boolean }) {
+const STACK_TOOLS = STACK_TOOL_GROUPS.flatMap(g => g.tools.map(t => ({ ...t, group: g.key })));
+
+function StackDot({ value, required = true, optedOut = false }: { value: boolean | null | undefined; required?: boolean; optedOut?: boolean }) {
+  if (optedOut) return <Ban className="h-4 w-4 text-muted-foreground/50 mx-auto" title="Opted out" />;
   if (value === true) return <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />;
   if (value === false) {
     if (!required) return <MinusCircle className="h-4 w-4 text-muted-foreground/40 mx-auto" />;
@@ -127,11 +157,19 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 const REQUIRED_TOOLS = STACK_TOOLS.filter(t => t.required);
 
+function getComplianceStats(stack: StackComplianceData | null | undefined) {
+  if (!stack) return { have: 0, total: 0, pct: 0 };
+  const optedOut = stack.optedOutTools ?? [];
+  const applicable = REQUIRED_TOOLS.filter(t => !optedOut.includes(t.key as string));
+  const have = applicable.filter(t => stack[t.key] === true).length;
+  const total = applicable.length;
+  const pct = total > 0 ? Math.round((have / total) * 100) : 100;
+  return { have, total, pct };
+}
+
 function ComplianceScore({ stack }: { stack: StackComplianceData | null | undefined }) {
   if (!stack) return <span className="text-muted-foreground text-xs">—</span>;
-  const total = REQUIRED_TOOLS.length;
-  const have = REQUIRED_TOOLS.filter(t => stack[t.key] === true).length;
-  const pct = Math.round((have / total) * 100);
+  const { have, total, pct } = getComplianceStats(stack);
   const color = pct >= 80 ? "text-green-600 dark:text-green-400" : pct >= 50 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
   return <span className={cn("text-xs font-semibold", color)}>{have}/{total}</span>;
 }
@@ -207,19 +245,27 @@ function OverviewTab({ account }: { account: Account }) {
       </div>
       <div className="rounded-lg border bg-muted/30 p-3">
         <p className="text-xs text-muted-foreground mb-2">Stack Compliance</p>
-        <div className="grid grid-cols-3 gap-y-2 gap-x-1">
-          {STACK_TOOLS.map(tool => (
-            <div key={tool.key} className="flex items-center gap-1.5">
-              <StackDot value={account.stackCompliance?.[tool.key] as boolean | null} required={tool.required} />
-              <span className="text-xs text-muted-foreground truncate">{tool.abbr}</span>
+        {STACK_TOOL_GROUPS.filter(g => g.key !== "optional").map(group => (
+          <div key={group.key} className="mb-2 last:mb-0">
+            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mb-1">{group.label}</p>
+            <div className="grid grid-cols-3 gap-y-1.5 gap-x-1">
+              {group.tools.map(tool => {
+                const optedOut = (account.stackCompliance?.optedOutTools ?? []).includes(tool.key as string);
+                return (
+                  <div key={tool.key} className="flex items-center gap-1.5">
+                    <StackDot value={account.stackCompliance?.[tool.key] as boolean | null} required={tool.required} optedOut={optedOut} />
+                    <span className={cn("text-xs truncate", optedOut ? "text-muted-foreground/40 line-through" : "text-muted-foreground")}>{tool.abbr}</span>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 text-center">
-              <span className="text-xs font-bold text-primary">{account.stackCompliance?.secureScore ?? "—"}</span>
-            </div>
-            <span className="text-xs text-muted-foreground">Secure Score</span>
           </div>
+        ))}
+        <div className="flex items-center gap-1.5 mt-1 pt-1 border-t">
+          <div className="w-4 text-center">
+            <span className="text-xs font-bold text-primary">{account.stackCompliance?.secureScore ?? "—"}</span>
+          </div>
+          <span className="text-xs text-muted-foreground">Secure Score</span>
         </div>
       </div>
     </div>
@@ -509,33 +555,61 @@ function StackManualOverridePanel({ account, onClose }: { account: Account; onCl
     mutation.mutate({ manualOverrides: overrides, [key]: next } as any);
   };
 
+  const toggleOptOut = (key: string) => {
+    const current = stack.optedOutTools ?? [];
+    const next = current.includes(key) ? current.filter(k => k !== key) : [...current, key];
+    mutation.mutate({ optedOutTools: next } as any);
+  };
+
   return (
-    <div className="p-4 space-y-3">
+    <div className="p-4 space-y-4">
       <p className="text-xs text-muted-foreground">
-        Auto-detected values are read-only. Toggle manual overrides below to correct any data.
+        Auto-detected values are read-only. Toggle manual overrides or mark a service as opted-out to adjust compliance.
       </p>
-      {STACK_TOOLS.map(tool => {
-        const val = stack[tool.key];
-        const isManual = stack.manualOverrides?.[tool.key] !== undefined;
-        return (
-          <div key={tool.key} className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <StackDot value={val} required={tool.required} />
-              <span className="text-sm">{tool.label}</span>
-              {isManual && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => toggleTool(tool.key, val)}
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-                data-testid={`toggle-stack-${tool.key}`}
-              >
-                {val === true ? "mark ✗" : val === false ? "clear" : "mark ✓"}
-              </button>
-            </div>
+      {STACK_TOOL_GROUPS.map(group => (
+        <div key={group.key}>
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</p>
+            <div className="flex-1 h-px bg-border" />
           </div>
-        );
-      })}
+          <div className="space-y-2">
+            {group.tools.map(tool => {
+              const val = stack[tool.key];
+              const isManual = stack.manualOverrides?.[tool.key] !== undefined;
+              const isOptedOut = (stack.optedOutTools ?? []).includes(tool.key as string);
+              return (
+                <div key={tool.key} className={cn("flex items-center justify-between rounded px-2 py-1", isOptedOut && "bg-muted/40 opacity-70")}>
+                  <div className="flex items-center gap-2">
+                    <StackDot value={val} required={tool.required} optedOut={isOptedOut} />
+                    <span className={cn("text-sm", isOptedOut && "line-through text-muted-foreground")}>{tool.label}</span>
+                    {isManual && !isOptedOut && <Badge variant="outline" className="text-[10px] h-4 px-1">manual</Badge>}
+                    {isOptedOut && <Badge variant="secondary" className="text-[10px] h-4 px-1 text-muted-foreground">opted out</Badge>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {!isOptedOut && (
+                      <button
+                        onClick={() => toggleTool(tool.key as string, val as boolean | null)}
+                        className="text-xs text-muted-foreground hover:text-foreground underline"
+                        data-testid={`toggle-stack-${tool.key}`}
+                      >
+                        {val === true ? "mark ✗" : val === false ? "clear" : "mark ✓"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => toggleOptOut(tool.key as string)}
+                      className={cn("text-xs underline", isOptedOut ? "text-primary hover:text-primary/80" : "text-muted-foreground/60 hover:text-muted-foreground")}
+                      data-testid={`optout-stack-${tool.key}`}
+                      title={isOptedOut ? "Remove opt-out — include in compliance" : "Mark as opted out — exclude from compliance"}
+                    >
+                      {isOptedOut ? "re-enable" : "opt out"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1234,6 +1308,22 @@ export default function Clients() {
             <div className="overflow-auto">
               <table className="w-full text-sm border-collapse">
                 <thead className="sticky top-0 bg-background border-b z-10">
+                  {/* Group header row */}
+                  <tr className="border-b border-border/50">
+                    <th className="sticky left-0 bg-background z-20 border-r" />
+                    {STACK_TOOL_GROUPS.map(group => (
+                      <th
+                        key={group.key}
+                        colSpan={group.tools.length}
+                        className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-center text-muted-foreground/70 border-r last:border-r-0"
+                        style={{ background: group.key === "endpoint" ? "hsl(var(--muted)/0.4)" : group.key === "mailbox" ? "hsl(var(--muted)/0.25)" : undefined }}
+                      >
+                        {group.label}
+                      </th>
+                    ))}
+                    <th colSpan={2} />
+                  </tr>
+                  {/* Tool column header row */}
                   <tr>
                     <th
                       className="text-left px-3 py-2 text-xs font-medium text-muted-foreground sticky left-0 bg-background z-20 border-r min-w-[180px] cursor-pointer hover:text-foreground select-none"
@@ -1244,14 +1334,18 @@ export default function Clients() {
                         <SortIcon active={complianceSortKey === "companyName"} dir={complianceSortDir} />
                       </span>
                     </th>
-                    {STACK_TOOLS.map(tool => {
+                    {STACK_TOOLS.map((tool) => {
                       const count = stackSummary.tools[tool.key];
                       const total = stackSummary.total;
                       const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                      const isLastInGroup = (() => {
+                        const gTools = STACK_TOOL_GROUPS.find(g => g.key === tool.group)?.tools ?? [];
+                        return gTools[gTools.length - 1]?.key === tool.key;
+                      })();
                       return (
                         <th
                           key={tool.key}
-                          className="px-3 py-2 text-[10px] font-medium text-muted-foreground text-center whitespace-nowrap cursor-pointer hover:text-foreground select-none"
+                          className={cn("px-3 py-2 text-[10px] font-medium text-muted-foreground text-center whitespace-nowrap cursor-pointer hover:text-foreground select-none", isLastInGroup && "border-r")}
                           title={`${count} of ${total} clients have ${tool.label} — click to sort`}
                           onClick={() => handleComplianceSort(tool.key)}
                         >
@@ -1290,9 +1384,9 @@ export default function Clients() {
                 </thead>
                 <tbody>
                   {filtered.map(account => {
-                    const stack = account.stackCompliance as any;
-                    const haveCount = REQUIRED_TOOLS.filter(t => stack?.[t.key] === true).length;
-                    const pct = Math.round((haveCount / REQUIRED_TOOLS.length) * 100);
+                    const stack = account.stackCompliance as StackComplianceData | null;
+                    const optedOut = stack?.optedOutTools ?? [];
+                    const { pct } = getComplianceStats(stack);
                     return (
                       <tr
                         key={account.id}
@@ -1306,11 +1400,21 @@ export default function Clients() {
                         <td className="px-3 py-2 font-medium sticky left-0 bg-inherit border-r">
                           <span className="block truncate max-w-[175px]">{account.companyName}</span>
                         </td>
-                        {STACK_TOOLS.map(tool => (
-                          <td key={tool.key} className="px-3 py-2 text-center">
-                            <StackDot value={stack?.[tool.key]} required={tool.required} />
-                          </td>
-                        ))}
+                        {STACK_TOOLS.map(tool => {
+                          const isLastInGroup = (() => {
+                            const gTools = STACK_TOOL_GROUPS.find(g => g.key === tool.group)?.tools ?? [];
+                            return gTools[gTools.length - 1]?.key === tool.key;
+                          })();
+                          return (
+                            <td key={tool.key} className={cn("px-3 py-2 text-center", isLastInGroup && "border-r")}>
+                              <StackDot
+                                value={stack?.[tool.key] as boolean | null}
+                                required={tool.required}
+                                optedOut={optedOut.includes(tool.key as string)}
+                              />
+                            </td>
+                          );
+                        })}
                         <td className="px-3 py-2 text-center text-xs font-semibold">
                           {stack?.secureScore != null ? `${stack.secureScore}%` : "—"}
                         </td>

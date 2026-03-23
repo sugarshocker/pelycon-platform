@@ -183,6 +183,7 @@ export interface StackComplianceData {
   secureScore: number | null;
   lastRefreshed: string | null;
   manualOverrides: Record<string, boolean | null>;
+  optedOutTools?: string[];
 }
 
 export const loginSchema = z.object({
