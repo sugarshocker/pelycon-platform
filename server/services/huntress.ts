@@ -175,13 +175,19 @@ export async function getOrgStackFlags(orgId: number): Promise<OrgStackFlags> {
     const satLearners = org.sat_learner_count ?? 0;
     const hasSat = satLearners > 0;
 
-    // SIEM
-    const hasSiem = !!(
+    // SIEM — detected via logs_sources_count (Huntress log sources = SIEM product active)
+    // Fallback fields checked for forward-compatibility
+    const logsSourcesCount = org.logs_sources_count ?? 0;
+    let hasSiem = !!(
+      logsSourcesCount > 0 ||
       org.siem_agent_count > 0 ||
       org.siem_enabled === true ||
       org.has_siem === true ||
-      org.siem_event_count > 0
+      org.siem_event_count > 0 ||
+      org.managed_siem === true ||
+      org.mdr_enabled === true
     );
+    log(`Huntress org ${orgId}: logs_sources_count=${logsSourcesCount}, hasSiem=${hasSiem}`);
 
     // ITDR: call the identities endpoint — presence of any identity = ITDR is active
     // Huntress ITDR requires an active identity monitoring subscription
