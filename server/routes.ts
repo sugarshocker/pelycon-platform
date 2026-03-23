@@ -2345,11 +2345,32 @@ export async function registerRoutes(
     }
   });
 
+  // In-memory bulk refresh progress state
+  const bulkRefreshJob = {
+    active: false,
+    total: 0,
+    completed: 0,
+    currentClient: "",
+    startedAt: null as string | null,
+  };
+
+  app.get("/api/clients/stack/refresh-progress", requireAuth, (_req: Request, res: Response) => {
+    res.json({ ...bulkRefreshJob });
+  });
+
   app.post("/api/clients/stack/refresh-all", requireAuth, async (req: Request, res: Response) => {
+    if (bulkRefreshJob.active) {
+      return res.json({ started: false, count: bulkRefreshJob.total, alreadyRunning: true });
+    }
     try {
       const accounts = await storage.getAllClientAccounts();
       const managed = accounts.filter(a => a.tier && ["A", "B", "C"].includes(a.tier));
       const mappings = await storage.getAllClientMappings();
+      bulkRefreshJob.active = true;
+      bulkRefreshJob.total = managed.length;
+      bulkRefreshJob.completed = 0;
+      bulkRefreshJob.currentClient = "";
+      bulkRefreshJob.startedAt = new Date().toISOString();
       res.json({ started: true, count: managed.length });
       (async () => {
         log(`Bulk stack refresh: pre-fetching org lists...`);
@@ -2368,6 +2389,7 @@ export async function registerRoutes(
         const prefetched = { ninjaOrgs, huntressOrgs, cippTenants };
         let ok = 0;
         for (const account of managed) {
+          bulkRefreshJob.currentClient = account.companyName;
           try {
             const mapping = mappings.find(m => m.cwCompanyId === account.cwCompanyId);
             const updated = await refreshStackForAccount(account, mapping, prefetched);
@@ -2376,11 +2398,18 @@ export async function registerRoutes(
           } catch (e: any) {
             log(`Bulk refresh error for ${account.companyName}: ${e.message}`);
           }
+          bulkRefreshJob.completed++;
           await new Promise(r => setTimeout(r, 100));
         }
         log(`Bulk stack refresh complete: ${ok}/${managed.length} accounts updated`);
-      })().catch(e => log(`Bulk refresh fatal: ${e.message}`));
+        bulkRefreshJob.active = false;
+        bulkRefreshJob.currentClient = "";
+      })().catch(e => {
+        log(`Bulk refresh fatal: ${e.message}`);
+        bulkRefreshJob.active = false;
+      });
     } catch (err: any) {
+      bulkRefreshJob.active = false;
       res.status(500).json({ message: err.message });
     }
   });

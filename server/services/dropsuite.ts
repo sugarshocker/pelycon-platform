@@ -109,6 +109,14 @@ export async function getAccountBackupStatusById(userId: number): Promise<DropSu
   }
 }
 
+function normDs(s: string): string {
+  return s.toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
 export async function getAccountBackupStatus(companyName: string): Promise<DropSuiteAccountInfo> {
   const cacheKey = companyName.toLowerCase();
   const cached = accountCache.get(cacheKey);
@@ -119,48 +127,76 @@ export async function getAccountBackupStatus(companyName: string): Promise<DropS
   try {
     const orgs = await getOrganizations();
 
-    function norm(s: string): string {
-      return s.toLowerCase()
-        .replace(/&/g, " and ")
-        .replace(/\b(inc|llc|pllc|corp|ltd|co|group|services|solutions|tech|technologies|consulting|associates|management|systems|partners|company|international|properties|enterprises|law|legal|psc|pc|dds|cpa|md|dvm)\b/g, " ")
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ").trim();
+    const normTarget = normDs(companyName);
+    let matched: DropSuiteOrg | undefined;
+    let matchMethod = "";
+
+    // 1. Exact normalized match
+    for (const org of orgs) {
+      const orgNorm = normDs(org.name);
+      if (orgNorm === normTarget) { matched = org; matchMethod = "exact"; break; }
     }
 
-    const normTarget = norm(companyName);
-    let matched: DropSuiteOrg | undefined;
-
-    for (const org of orgs) {
-      const orgName = norm(org.name);
-      if (orgName === normTarget || orgName.includes(normTarget) || normTarget.includes(orgName)) {
-        matched = org;
-        break;
+    // 2. Substring match
+    if (!matched) {
+      for (const org of orgs) {
+        const orgNorm = normDs(org.name);
+        if (orgNorm.includes(normTarget) || normTarget.includes(orgNorm)) {
+          matched = org; matchMethod = "substring"; break;
+        }
       }
     }
 
+    // 3. Token overlap (80% threshold)
     if (!matched) {
       const tokTarget = normTarget.split(" ").filter(t => t.length > 2);
       for (const org of orgs) {
-        const tokOrg = norm(org.name).split(" ").filter(t => t.length > 2);
+        const tokOrg = normDs(org.name).split(" ").filter(t => t.length > 2);
         if (tokTarget.length === 0 || tokOrg.length === 0) continue;
         const shorter = tokTarget.length <= tokOrg.length ? tokTarget : tokOrg;
         const longer = tokTarget.length <= tokOrg.length ? tokOrg : tokTarget;
         const hits = shorter.filter(t => longer.some(lt => lt === t || lt.includes(t) || t.includes(lt))).length;
         if (hits >= Math.ceil(shorter.length * 0.8)) {
-          matched = org;
-          break;
+          matched = org; matchMethod = "token-overlap"; break;
+        }
+      }
+    }
+
+    // 4. Acronym expansion: treat short all-uppercase names (≤5 chars) as initials
+    //    e.g. "CMP" matches "CM Process" because first letters c,m start with c,m
+    if (!matched && /^[A-Z]{2,5}$/.test(companyName.replace(/\s.*/, ""))) {
+      const initials = companyName.replace(/\s.*/, "").toLowerCase();
+      for (const org of orgs) {
+        const orgNorm = normDs(org.name);
+        const orgInitials = orgNorm.split(" ").filter(t => t.length > 0).map(t => t[0]).join("");
+        if (orgInitials.startsWith(initials) || initials.startsWith(orgInitials)) {
+          matched = org; matchMethod = "acronym"; break;
+        }
+      }
+    }
+
+    // 5. First-word prefix: company first meaningful word starts with or equals DropSuite org first word
+    if (!matched && normTarget.length >= 3) {
+      const targetFirst = normTarget.split(" ")[0];
+      for (const org of orgs) {
+        const orgFirst = normDs(org.name).split(" ")[0];
+        if (targetFirst.length >= 3 && orgFirst.length >= 3) {
+          if (targetFirst === orgFirst || orgFirst.startsWith(targetFirst) || targetFirst.startsWith(orgFirst)) {
+            matched = org; matchMethod = "first-word"; break;
+          }
         }
       }
     }
 
     if (!matched) {
-      log(`DropSuite: no match for "${companyName}" among ${orgs.length} orgs`);
+      const orgList = orgs.slice(0, 20).map(o => `"${o.name}"`).join(", ");
+      log(`DropSuite: no match for "${companyName}" (normalized: "${normTarget}") among ${orgs.length} orgs. Sample: ${orgList}`);
       const info: DropSuiteAccountInfo = { hasBackup: false };
       accountCache.set(cacheKey, { info, expires: Date.now() + 10 * 60 * 1000 });
       return info;
     }
 
-    log(`DropSuite: matched "${companyName}" → "${matched.name}" (id=${matched.id})`);
+    log(`DropSuite: matched "${companyName}" → "${matched.name}" (id=${matched.id}, method=${matchMethod})`);
 
     const info: DropSuiteAccountInfo = {
       hasBackup: true,

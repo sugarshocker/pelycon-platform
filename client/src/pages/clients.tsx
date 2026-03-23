@@ -639,6 +639,8 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
     })),
     [cippTenants]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const mutation = useMutation({
     mutationFn: async () => {
       return apiRequest("PUT", `/api/client-mappings/${account.cwCompanyId}`, {
@@ -651,11 +653,21 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
         notes: notes.trim() !== "" ? notes.trim() : null,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-mappings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      toast({ title: "Platform mappings saved", description: "Run a stack refresh to apply changes." });
-      onClose();
+      toast({ title: "Mapping saved — refreshing stack…", description: `Checking ${account.companyName}'s tools with the new mapping.` });
+      // Auto-trigger single-client stack refresh so the new mapping takes effect immediately
+      setRefreshing(true);
+      try {
+        await apiRequest("POST", `/api/clients/${account.id}/stack/refresh`);
+        queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+        toast({ title: "Stack refreshed", description: `${account.companyName} compliance data updated with new mapping.` });
+      } catch {
+        toast({ title: "Stack refresh failed", description: "Mapping was saved. Run 'Refresh Stack Data' manually to apply it.", variant: "destructive" });
+      } finally {
+        setRefreshing(false);
+        onClose();
+      }
     },
     onError: () => {
       toast({ title: "Save failed", variant: "destructive" });
@@ -745,12 +757,13 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
           size="sm"
           className="flex-1"
           onClick={() => mutation.mutate()}
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || refreshing}
           data-testid="button-save-mapping"
         >
-          {mutation.isPending ? "Saving…" : "Save Mapping"}
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${(mutation.isPending || refreshing) ? "animate-spin" : "hidden"}`} />
+          {refreshing ? "Refreshing stack…" : mutation.isPending ? "Saving…" : "Save & Refresh Stack"}
         </Button>
-        <Button size="sm" variant="outline" onClick={onClose} data-testid="button-cancel-mapping">
+        <Button size="sm" variant="outline" onClick={onClose} disabled={mutation.isPending || refreshing} data-testid="button-cancel-mapping">
           Cancel
         </Button>
       </div>
@@ -911,25 +924,42 @@ export default function Clients() {
     },
   });
 
-  const [bulkRefreshing, setBulkRefreshing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ active: boolean; total: number; completed: number; currentClient: string } | null>(null);
+
   const refreshAllMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", `/api/clients/stack/refresh-all`);
     },
     onSuccess: (data: any) => {
-      setBulkRefreshing(true);
-      const count = data?.count ?? 0;
-      toast({ title: `Refreshing ${count} clients`, description: "Stack data is updating in the background — this may take several minutes. Results will appear as each client completes." });
-      const poll = setInterval(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
-      }, 5000);
-      const maxWait = count > 20 ? 15 * 60 * 1000 : 5 * 60 * 1000;
-      setTimeout(() => { clearInterval(poll); setBulkRefreshing(false); }, maxWait);
+      if (data?.alreadyRunning) {
+        toast({ title: "Refresh already in progress", description: "Stack data is still updating from a previous run." });
+      }
+      // Start polling progress
+      const pollInterval = setInterval(async () => {
+        try {
+          const prog = await apiRequest("GET", "/api/clients/stack/refresh-progress") as any;
+          setBulkProgress(prog);
+          if (!prog.active) {
+            clearInterval(pollInterval);
+            queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+            setTimeout(() => setBulkProgress(null), 3000);
+          } else {
+            queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+          }
+        } catch {
+          clearInterval(pollInterval);
+          setBulkProgress(null);
+        }
+      }, 2000);
+      // Safety timeout
+      setTimeout(() => { clearInterval(pollInterval); setBulkProgress(null); }, 20 * 60 * 1000);
     },
     onError: () => {
-      toast({ title: "Bulk refresh failed", variant: "destructive" });
+      toast({ title: "Stack refresh failed", variant: "destructive" });
     },
   });
+
+  const bulkRefreshing = bulkProgress?.active ?? false;
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -1051,27 +1081,51 @@ export default function Clients() {
                 variant="outline"
                 onClick={() => fullSyncMutation.mutate()}
                 disabled={fullSyncMutation.isPending}
+                title="Pull the current client list, financials, and AR data from ConnectWise"
                 data-testid="button-sync-clients"
               >
                 <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${fullSyncMutation.isPending ? "animate-spin" : ""}`} />
-                {fullSyncMutation.isPending ? "Syncing…" : "Sync Clients"}
+                {fullSyncMutation.isPending ? "Syncing…" : "Update Client List"}
               </Button>
-              {view === "stack" && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => refreshAllMutation.mutate()}
-                    disabled={refreshAllMutation.isPending || bulkRefreshing}
-                    data-testid="button-refresh-all-stack"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${bulkRefreshing ? "animate-spin" : ""}`} />
-                    {bulkRefreshing ? "Refreshing…" : "Refresh All"}
-                  </Button>
-                </>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => refreshAllMutation.mutate()}
+                disabled={refreshAllMutation.isPending || bulkRefreshing}
+                title="Re-check all clients' tool compliance against Huntress, NinjaOne, CIPP, and DropSuite"
+                data-testid="button-refresh-all-stack"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${bulkRefreshing ? "animate-spin" : ""}`} />
+                {bulkRefreshing ? `Refreshing Stack…` : "Refresh Stack Data"}
+              </Button>
             </div>
           </div>
+
+          {/* Stack refresh progress bar */}
+          {bulkProgress && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-1.5" data-testid="stack-refresh-progress">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <RefreshCw className="h-3 w-3 animate-spin text-[#E77125]" />
+                  {bulkProgress.active
+                    ? <><span className="font-medium text-foreground">{bulkProgress.completed}</span> of <span className="font-medium text-foreground">{bulkProgress.total}</span> clients refreshed</>
+                    : <span className="text-green-600 dark:text-green-400 font-medium">✓ Refresh complete — {bulkProgress.completed} clients updated</span>
+                  }
+                </span>
+                {bulkProgress.active && bulkProgress.currentClient && (
+                  <span className="text-muted-foreground/70 truncate max-w-[200px]">→ {bulkProgress.currentClient}</span>
+                )}
+              </div>
+              {bulkProgress.active && bulkProgress.total > 0 && (
+                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="h-full bg-[#E77125] rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((bulkProgress.completed / bulkProgress.total) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48 max-w-xs">
