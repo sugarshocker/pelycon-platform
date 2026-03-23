@@ -551,6 +551,60 @@ interface ClientMappingData {
   notes: string | null;
 }
 
+function SearchableOrgSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  testId,
+  loading,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; label: string }[];
+  placeholder: string;
+  testId: string;
+  loading?: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(() => {
+    if (!search) return options;
+    const q = search.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(q));
+  }, [options, search]);
+
+  return (
+    <Select value={value} onValueChange={v => { onChange(v === "__clear__" ? "" : v); }}>
+      <SelectTrigger className="h-8 text-sm" data-testid={testId}>
+        <SelectValue placeholder={loading ? "Loading…" : placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <div className="px-2 pb-1">
+          <Input
+            value={search}
+            onChange={e => { e.stopPropagation(); setSearch(e.target.value); }}
+            placeholder="Search…"
+            className="h-7 text-xs"
+            onKeyDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+        <SelectItem value="__clear__" className="text-muted-foreground italic text-xs">
+          — Auto-detect by name —
+        </SelectItem>
+        {filtered.slice(0, 100).map(o => (
+          <SelectItem key={o.id} value={o.id} className="text-sm">
+            {o.label}
+          </SelectItem>
+        ))}
+        {filtered.length > 100 && (
+          <div className="px-3 py-1 text-xs text-muted-foreground">Type to filter ({filtered.length} total)</div>
+        )}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose: () => void }) {
   const { toast } = useToast();
   const { data: allMappings = [] } = useQuery<ClientMappingData[]>({ queryKey: ["/api/client-mappings"] });
@@ -561,6 +615,29 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
   const [cippTenantId, setCippTenantId] = useState(existing?.cippTenantId ?? "");
   const [dropsuiteUserId, setDropsuiteUserId] = useState(existing?.dropsuiteUserId != null ? String(existing.dropsuiteUserId) : "");
   const [notes, setNotes] = useState(existing?.notes ?? "");
+
+  const { data: ninjaOrgs = [], isLoading: ninjaLoading } = useQuery<{ id: number; name: string }[]>({
+    queryKey: ["/api/organizations"],
+  });
+  const { data: huntressOrgs = [], isLoading: huntressLoading } = useQuery<{ id: number; name: string }[]>({
+    queryKey: ["/api/huntress/organizations"],
+  });
+  const { data: cippTenants = [], isLoading: cippLoading } = useQuery<{ id: string; defaultDomainName: string; displayName: string }[]>({
+    queryKey: ["/api/cipp/tenants"],
+  });
+
+  const ninjaOptions = useMemo(() =>
+    ninjaOrgs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(o => ({ id: String(o.id), label: o.name })),
+    [ninjaOrgs]);
+  const huntressOptions = useMemo(() =>
+    huntressOrgs.slice().sort((a, b) => a.name.localeCompare(b.name)).map(o => ({ id: String(o.id), label: o.name })),
+    [huntressOrgs]);
+  const cippOptions = useMemo(() =>
+    cippTenants.slice().sort((a, b) => a.displayName.localeCompare(b.displayName)).map(o => ({
+      id: o.defaultDomainName,
+      label: `${o.displayName} (${o.defaultDomainName})`,
+    })),
+    [cippTenants]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -588,41 +665,56 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
   return (
     <div className="p-4 space-y-4">
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Override the platform IDs used when matching this client across integrations. Leave blank to let the system auto-detect by name.
+        Select the matching organization from each platform. Choose "Auto-detect by name" to let the system match automatically.
       </p>
       <div className="space-y-3">
         <div className="space-y-1">
-          <label className="text-xs font-medium">NinjaOne Org ID</label>
-          <Input
+          <label className="text-xs font-medium">NinjaOne Organization</label>
+          <SearchableOrgSelect
             value={ninjaOrgId}
-            onChange={e => setNinjaOrgId(e.target.value)}
+            onChange={setNinjaOrgId}
+            options={ninjaOptions}
             placeholder="Auto-detect by name"
-            className="h-8 text-sm"
-            data-testid="input-ninja-org-id"
+            testId="select-ninja-org"
+            loading={ninjaLoading}
           />
-          <p className="text-[11px] text-muted-foreground">Numeric ID from NinjaOne</p>
+          {ninjaOrgId && ninjaOptions.find(o => o.id === ninjaOrgId) && (
+            <p className="text-[11px] text-green-600 dark:text-green-400">
+              ✓ Mapped to: {ninjaOptions.find(o => o.id === ninjaOrgId)?.label} (ID: {ninjaOrgId})
+            </p>
+          )}
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">Huntress Org ID</label>
-          <Input
+          <label className="text-xs font-medium">Huntress Organization</label>
+          <SearchableOrgSelect
             value={huntressOrgId}
-            onChange={e => setHuntressOrgId(e.target.value)}
+            onChange={setHuntressOrgId}
+            options={huntressOptions}
             placeholder="Auto-detect by name"
-            className="h-8 text-sm"
-            data-testid="input-huntress-org-id"
+            testId="select-huntress-org"
+            loading={huntressLoading}
           />
-          <p className="text-[11px] text-muted-foreground">Numeric ID from Huntress</p>
+          {huntressOrgId && huntressOptions.find(o => o.id === huntressOrgId) && (
+            <p className="text-[11px] text-green-600 dark:text-green-400">
+              ✓ Mapped to: {huntressOptions.find(o => o.id === huntressOrgId)?.label} (ID: {huntressOrgId})
+            </p>
+          )}
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">CIPP Tenant Domain</label>
-          <Input
+          <label className="text-xs font-medium">CIPP / Microsoft Tenant</label>
+          <SearchableOrgSelect
             value={cippTenantId}
-            onChange={e => setCippTenantId(e.target.value)}
-            placeholder="e.g. contoso.onmicrosoft.com"
-            className="h-8 text-sm"
-            data-testid="input-cipp-tenant-id"
+            onChange={setCippTenantId}
+            options={cippOptions}
+            placeholder="Auto-detect by name"
+            testId="select-cipp-tenant"
+            loading={cippLoading}
           />
-          <p className="text-[11px] text-muted-foreground">Default domain name from Entra / CIPP</p>
+          {cippTenantId && (
+            <p className="text-[11px] text-green-600 dark:text-green-400">
+              ✓ Domain: {cippTenantId}
+            </p>
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">DropSuite User ID (override)</label>
@@ -634,7 +726,7 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
             data-testid="input-dropsuite-user-id"
           />
           <p className="text-[11px] text-muted-foreground">
-            Leave blank — DropSuite is auto-detected by matching the CIPP tenant email domain against DropSuite accounts. Only set this to force a specific user ID.
+            Leave blank — auto-detected by matching the CIPP tenant email domain. Only set this to force a specific user ID.
           </p>
         </div>
         <div className="space-y-1">
@@ -642,7 +734,7 @@ function PlatformMappingsPanel({ account, onClose }: { account: Account; onClose
           <Input
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Optional notes"
+            placeholder="Optional notes about this mapping"
             className="h-8 text-sm"
             data-testid="input-mapping-notes"
           />

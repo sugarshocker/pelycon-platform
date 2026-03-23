@@ -156,6 +156,130 @@ function TopClientsNeedingTbr() {
   );
 }
 
+function ScheduleList({
+  schedules,
+  onEdit,
+  onNew,
+}: {
+  schedules: TbrSchedule[];
+  onEdit: (id: number) => void;
+  onNew: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const now = new Date();
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return schedules
+      .filter(s => !q || s.orgName.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const aDate = a.nextReviewDate ? new Date(a.nextReviewDate).getTime() : Infinity;
+        const bDate = b.nextReviewDate ? new Date(b.nextReviewDate).getTime() : Infinity;
+        return aDate - bDate;
+      });
+  }, [schedules, search]);
+
+  function scheduleStatus(s: TbrSchedule) {
+    if (!s.nextReviewDate) return { label: "No Date", cls: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" };
+    const d = new Date(s.nextReviewDate);
+    const daysUntil = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysUntil < 0) return { label: "Past Due", cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" };
+    if (daysUntil <= 14) return { label: `In ${daysUntil}d`, cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" };
+    return { label: `In ${daysUntil}d`, cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" };
+  }
+
+  function freqLabel(months: number | null) {
+    if (!months) return "—";
+    if (months === 1) return "Monthly";
+    if (months === 3) return "Quarterly";
+    if (months === 6) return "Semi-Annual";
+    if (months === 12) return "Annual";
+    return `${months} mo`;
+  }
+
+  function fmtDate(d: Date | string | null) {
+    if (!d) return "—";
+    const date = d instanceof Date ? d : new Date(d as string);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  }
+
+  return (
+    <Card data-testid="card-all-schedules">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4 text-[#E77125]" />
+          TBR Schedule Management
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search clients…"
+            className="h-7 text-xs w-40"
+            data-testid="input-schedule-search"
+          />
+          <Button size="sm" className="h-7 text-xs" onClick={onNew} data-testid="button-schedule-new-inline">
+            + Add Schedule
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            {schedules.length === 0 ? "No TBR schedules yet. Click '+ Add Schedule' to create one." : "No schedules match your search."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground">
+                  <th className="text-left px-4 py-2 font-medium">Client</th>
+                  <th className="text-left px-4 py-2 font-medium">Frequency</th>
+                  <th className="text-left px-4 py-2 font-medium">Next Review</th>
+                  <th className="text-left px-4 py-2 font-medium">Lead Engineer</th>
+                  <th className="text-left px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(s => {
+                  const status = scheduleStatus(s);
+                  return (
+                    <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors" data-testid={`schedule-row-${s.id}`}>
+                      <td className="px-4 py-2.5 font-medium text-sm">{s.orgName}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground text-xs">{freqLabel(s.frequencyMonths)}</td>
+                      <td className="px-4 py-2.5 text-xs">{fmtDate(s.nextReviewDate)}</td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground truncate max-w-[160px]">
+                        {s.leadEngineerEmail || <span className="text-muted-foreground/40">—</span>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${status.cls}`}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => onEdit(s.id)}
+                          data-testid={`button-edit-schedule-${s.id}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TbrEmailSettings() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -466,17 +590,32 @@ export default function Tracker() {
   };
 
   const handleSaveSchedule = () => {
-    const org = organizations?.find((o) => o.id === parseInt(scheduleOrgId));
-    if (!org) return;
-    upsertScheduleMutation.mutate({
-      orgId: org.id,
-      orgName: org.name,
-      frequencyMonths: parseInt(frequency),
-      nextReviewDate: nextDate || null,
-      notes: scheduleNotes || null,
-      reminderEmail: reminderEmail || null,
-      leadEngineerEmail: leadEngineerEmail || null,
-    });
+    if (editingScheduleId) {
+      // When editing, use the existing schedule's orgId/orgName — don't require NinjaOne lookup
+      const existing = (schedules || []).find(s => s.id === editingScheduleId);
+      if (!existing) return;
+      upsertScheduleMutation.mutate({
+        orgId: existing.orgId,
+        orgName: existing.orgName,
+        frequencyMonths: parseInt(frequency),
+        nextReviewDate: nextDate || null,
+        notes: scheduleNotes || null,
+        reminderEmail: reminderEmail || null,
+        leadEngineerEmail: leadEngineerEmail || null,
+      });
+    } else {
+      const org = organizations?.find((o) => o.id === parseInt(scheduleOrgId));
+      if (!org) return;
+      upsertScheduleMutation.mutate({
+        orgId: org.id,
+        orgName: org.name,
+        frequencyMonths: parseInt(frequency),
+        nextReviewDate: nextDate || null,
+        notes: scheduleNotes || null,
+        reminderEmail: reminderEmail || null,
+        leadEngineerEmail: leadEngineerEmail || null,
+      });
+    }
   };
 
   const handleDeleteSchedule = () => {
@@ -761,6 +900,13 @@ export default function Tracker() {
 
             <TbrEmailSettings />
             <TopClientsNeedingTbr />
+
+            {/* ── All TBR Schedules Table ── */}
+            <ScheduleList
+              schedules={schedules || []}
+              onEdit={openEditScheduleDialog}
+              onNew={() => openNewScheduleDialog()}
+            />
           </>
         )}
       </div>

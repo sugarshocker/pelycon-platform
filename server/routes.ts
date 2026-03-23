@@ -662,6 +662,29 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/huntress/organizations", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const { getOrganizations: huntressGetOrgs } = await import("./services/huntress.js");
+      const orgs = await huntressGetOrgs();
+      res.json(orgs);
+    } catch (err: any) {
+      log(`Huntress orgs error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/cipp/tenants", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const { isConfigured: cippConfigured, getTenants: cippGetTenants } = await import("./services/cipp.js");
+      if (!cippConfigured()) return res.json([]);
+      const tenants = await cippGetTenants();
+      res.json(tenants);
+    } catch (err: any) {
+      log(`CIPP tenants error: ${err.message}`);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/devices/:orgId", requireAuth, async (req: Request, res: Response) => {
     try {
       const orgId = parseInt(req.params.orgId as string);
