@@ -117,13 +117,18 @@ function parseDecimal(val: string | null | undefined): number | null {
   return isNaN(n) ? null : n;
 }
 
-const WON_STATUSES = new Set(["accepted", "ordered", "fulfilled"]);
+const WON_STATUSES = new Set(["accepted", "ordered", "fulfilled", "won"]);
 const LOST_STATUSES = new Set(["lost", "declined"]);
 const NOW = () => new Date();
 
 function computeStage(status: string, draft: boolean, emailStatus: string | null, expiredAt: string | null): string {
   if (draft) return "Draft";
-  if (WON_STATUSES.has(status)) return status === "accepted" ? "Won - Accepted" : status === "ordered" ? "Won - Ordered" : "Won - Fulfilled";
+  if (WON_STATUSES.has(status)) {
+    if (status === "won") return "Won";
+    if (status === "accepted") return "Won - Accepted";
+    if (status === "ordered") return "Won - Ordered";
+    return "Won - Fulfilled";
+  }
   if (LOST_STATUSES.has(status)) return "Lost";
   // Explicitly expired by API status
   if (status === "expired") return "Expired";
@@ -183,30 +188,22 @@ export interface QuoterSummary {
   recentQuotes: QuoterQuote[];
 }
 
-// Awaiting Decision: sent/published quotes waiting for client response
-const AWAITING_STAGES = new Set([
-  "Published",
-  "Sent - Pending",
-  "Sent - Delivered",
-  "Sent - Opened",
-  "Sent - Clicked",
-  "Sent - Undeliverable",
-]);
-
-// Needs Action: expired or draft — could still be recovered, no date cutoff
-const NEEDS_ACTION_STAGES = new Set(["Expired", "Draft"]);
+export async function fetchRawQuotes(): Promise<any[]> {
+  if (!isConfigured()) throw new Error("Quoter not configured");
+  return fetchAllPages("/quotes");
+}
 
 export async function getQuotesSummary(): Promise<QuoterSummary> {
   if (!isConfigured()) {
     throw new Error("Quoter not configured");
   }
 
-  const allQuotes = await fetchAllPages("/quotes");
-  const quotes = allQuotes.map(mapQuote);
+  const rawAllQuotes = await fetchAllPages("/quotes");
+  const mappedQuotes = rawAllQuotes.map(mapQuote);
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const WON = new Set(["accepted", "ordered", "fulfilled"]);
+  const WON = new Set(["accepted", "ordered", "fulfilled", "won"]);
 
   const twelveMonthsAgo = new Date(now);
   twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
@@ -214,52 +211,51 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
 
   // Stage engagement ranking — higher = more engaged with the quote
   const STAGE_RANK: Record<string, number> = {
+    "Won - Fulfilled": 9,
+    "Won - Ordered": 8,
+    "Won - Accepted": 7,
+    "Won": 6,
     "Sent - Clicked": 5,
     "Sent - Opened": 4,
     "Sent - Delivered": 3,
     "Sent - Pending": 2,
     "Sent - Undeliverable": 1,
-    "Published": 0,   // finalized but not yet emailed
-    "Draft": -1,
-    "Expired": -2,
+    "Expired": 0,     // still awaiting decision (client let it expire)
+    "Published": -1,  // finalized but not yet emailed
+    "Draft": -2,
   };
 
-  // Deduplicate by quote number — keep the most-engaged record per quote
-  function dedupeByNumber(list: QuoterQuote[]): QuoterQuote[] {
-    const best = new Map<string, QuoterQuote>();
-    for (const q of list) {
-      const key = q.number || q.id;
-      const existing = best.get(key);
-      if (!existing || (STAGE_RANK[q.stage] ?? -99) > (STAGE_RANK[existing.stage] ?? -99)) {
-        best.set(key, q);
-      }
+  // Deduplicate ALL quotes globally first — keep the highest-ranked version per quote number.
+  // This ensures a quote with both a "pending" revision and an "accepted" revision correctly
+  // resolves to "Won - Accepted" before any bucket filtering happens.
+  const best = new Map<string, QuoterQuote>();
+  for (const q of mappedQuotes) {
+    const key = q.number || q.id;
+    const existing = best.get(key);
+    if (!existing || (STAGE_RANK[q.stage] ?? -99) > (STAGE_RANK[existing.stage] ?? -99)) {
+      best.set(key, q);
     }
-    return [...best.values()];
   }
+  const quotes = [...best.values()];
 
-  const sixtyDaysAgo = new Date(now);
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-  const cutoff60 = sixtyDaysAgo.toISOString();
-
-  // Awaiting Decision: emailed to client (Sent-* stages) within 12 months, deduplicated by quote number
+  // Awaiting Decision: emailed (Sent-* stages) OR expired — client hasn't responded yet
   // "Published" without email = not yet sent to client, excluded from this bucket
-  const SENT_STAGES = new Set(["Sent - Delivered", "Sent - Opened", "Sent - Clicked", "Sent - Pending", "Sent - Undeliverable"]);
-  const rawAwaiting = quotes.filter(q => SENT_STAGES.has(q.stage) && q.createdAt >= cutoff12);
-  const awaitingQuotes = dedupeByNumber(rawAwaiting)
+  const AWAITING_STAGES = new Set([
+    "Sent - Delivered", "Sent - Opened", "Sent - Clicked", "Sent - Pending", "Sent - Undeliverable",
+    "Expired",
+  ]);
+  const awaitingQuotes = quotes
+    .filter(q => AWAITING_STAGES.has(q.stage) && q.createdAt >= cutoff12)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const awaitingValue = awaitingQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
 
-  // Needs Follow-Up: recently expired (within 60 days) + any draft
-  // Uses shorter window for expired — older expired quotes are effectively dead leads
-  const rawNeedsAction = quotes.filter(q =>
-    (q.stage === "Draft") ||
-    (q.stage === "Expired" && q.createdAt >= cutoff60)
-  );
-  const needsActionQuotes = dedupeByNumber(rawNeedsAction)
+  // Needs Follow-Up: drafts only (expired moved to Awaiting Decision)
+  const needsActionQuotes = quotes
+    .filter(q => q.stage === "Draft")
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
   const needsActionValue = needsActionQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
 
-  log(`Quoter: awaiting=${rawAwaiting.length}→${awaitingQuotes.length} deduped | needs-action raw=${rawNeedsAction.length}→${needsActionQuotes.length} deduped (expired 60d + drafts)`);
+  log(`Quoter: ${mappedQuotes.length} raw → ${quotes.length} deduped | awaiting=${awaitingQuotes.length} | needs-action=${needsActionQuotes.length} (drafts only)`);
 
   const thisMonth = quotes.filter(q => q.createdAt >= startOfMonth);
   const wonThisMonth = quotes.filter(q => WON.has(q.status) && q.modifiedAt >= startOfMonth);
