@@ -111,15 +111,15 @@ export default function Sales() {
       label: "Needs Follow-Up",
       value: isLoading ? null : (data?.needsActionCount ?? 0),
       display: isLoading ? null : String(data?.needsActionCount ?? 0),
-      sub: "Draft quotes not yet sent",
+      sub: "Expired quotes that need attention",
       color: "text-amber-500",
     },
     {
       icon: DollarSign,
       label: "Pipeline Value",
-      value: isLoading ? null : (data?.awaitingValue ?? 0),
-      display: isLoading ? null : fmt$(data?.awaitingValue ?? 0),
-      sub: "Open quotes awaiting client decision",
+      value: isLoading ? null : (data?.pipelineValue ?? 0),
+      display: isLoading ? null : fmt$(data?.pipelineValue ?? 0),
+      sub: "All open quotes (not won or lost)",
       color: "text-primary",
     },
     {
@@ -245,7 +245,7 @@ export default function Sales() {
                 )}
               </CardTitle>
               {!isLoading && data && (
-                <p className="text-xs text-muted-foreground">Draft quotes</p>
+                <p className="text-xs text-muted-foreground">Expired quotes</p>
               )}
             </div>
           </CardHeader>

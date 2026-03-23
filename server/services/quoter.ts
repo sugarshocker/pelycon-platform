@@ -173,14 +173,16 @@ function mapQuote(q: any): QuoterQuote {
 }
 
 export interface QuoterSummary {
-  // Category 1: sent/published — awaiting client decision (no date cutoff)
+  // Awaiting Decision: Published + all Sent-* + Expired (7 statuses)
   awaitingQuotes: QuoterQuote[];
   awaitingCount: number;
   awaitingValue: number;
-  // Category 2: expired or draft — could still be won (no date cutoff)
+  // Needs Follow-Up: Expired quotes only
   needsActionQuotes: QuoterQuote[];
   needsActionCount: number;
   needsActionValue: number;
+  // Pipeline Value: all open quotes (not Won or Lost) — Awaiting + Expired + Draft
+  pipelineValue: number;
   // Won this calendar month
   wonThisMonth: number;
   wonThisMonthValue: number;
@@ -249,13 +251,19 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const awaitingValue = awaitingQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
 
-  // Needs Follow-Up: drafts only (expired moved to Awaiting Decision)
+  // Needs Follow-Up: Expired quotes within 12 months (same window as Awaiting Decision)
   const needsActionQuotes = quotes
-    .filter(q => q.stage === "Draft")
+    .filter(q => q.stage === "Expired" && q.createdAt >= cutoff12)
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
   const needsActionValue = needsActionQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
 
-  log(`Quoter: ${mappedQuotes.length} raw → ${quotes.length} deduped | awaiting=${awaitingQuotes.length} | needs-action=${needsActionQuotes.length} (drafts only)`);
+  // Pipeline Value: all open quotes — not Won or Lost (Awaiting + Expired + Draft)
+  const LOST_STAGES = new Set(["Lost"]);
+  const WON_STAGES = new Set(["Won", "Won - Accepted", "Won - Ordered", "Won - Fulfilled"]);
+  const pipelineQuotes = quotes.filter(q => !WON_STAGES.has(q.stage) && !LOST_STAGES.has(q.stage));
+  const pipelineValue = pipelineQuotes.reduce((sum, q) => sum + (q.total || 0), 0);
+
+  log(`Quoter: ${mappedQuotes.length} raw → ${quotes.length} deduped | awaiting=${awaitingQuotes.length} | needs-action(expired)=${needsActionQuotes.length} | pipeline=${pipelineQuotes.length}`);
 
   const thisMonth = quotes.filter(q => q.createdAt >= startOfMonth);
   const wonThisMonth = quotes.filter(q => WON.has(q.status) && q.modifiedAt >= startOfMonth);
@@ -265,7 +273,7 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
     .slice(0, 20);
 
-  log(`Quoter summary: ${awaitingQuotes.length} awaiting decision, ${needsActionQuotes.length} needs action`);
+  log(`Quoter summary: awaiting=${awaitingQuotes.length} | expired/follow-up=${needsActionQuotes.length} | pipeline value=$${pipelineValue.toFixed(0)} | won this month=${wonThisMonth.length}`);
 
   return {
     awaitingQuotes,
@@ -274,6 +282,7 @@ export async function getQuotesSummary(): Promise<QuoterSummary> {
     needsActionQuotes,
     needsActionCount: needsActionQuotes.length,
     needsActionValue,
+    pipelineValue,
     wonThisMonth: wonThisMonth.length,
     wonThisMonthValue,
     quotesThisMonth: thisMonth.length,
