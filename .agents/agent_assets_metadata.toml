@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "hsyb0xpEobHDpkScHuska"
+uri = "file://pelycon-platform.tar.gz"
+type = "unspecified"
+title = "Pelycon Platform — Full Codebase (4.1 MB)"
