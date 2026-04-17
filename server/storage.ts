@@ -7,10 +7,13 @@ import {
   type ArOnlyClient, type InsertArOnlyClient, arOnlyClients,
   type ClientMapping, type InsertClientMapping, clientMapping,
   type DropsuiteAccount, dropsuiteAccounts,
+  type Tenant, tenants,
+  type Client, type InsertClient, clients,
+  type Announcement, type InsertAnnouncement, announcements,
   appSettings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, lte, gte, isNull, isNotNull } from "drizzle-orm";
+import { eq, desc, and, lte, gte, gt, isNull, isNotNull, or } from "drizzle-orm";
 
 export interface IStorage {
   getUserById(id: number): Promise<User | undefined>;
@@ -99,6 +102,10 @@ export class DatabaseStorage implements IStorage {
   async getUserCount(): Promise<number> {
     const results = await db.select().from(users);
     return results.length;
+  }
+
+  async getPortalUsersByClientId(clientId: number): Promise<User[]> {
+    return db.select().from(users).where(eq(users.clientId, clientId));
   }
 
   async createTbrSnapshot(snapshot: InsertTbrSnapshot): Promise<TbrSnapshot> {
@@ -369,6 +376,74 @@ export class DatabaseStorage implements IStorage {
         target: appSettings.key,
         set: { value, updatedAt: new Date() },
       });
+  }
+
+  async getTenantById(id: number): Promise<Tenant | null> {
+    const results = await db.select().from(tenants).where(eq(tenants.id, id)).limit(1);
+    return results[0] ?? null;
+  }
+
+  // ── Client (portal) CRUD ────────────────────────────────────────────────
+
+  async getClientById(id: number): Promise<Client | null> {
+    const results = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
+    return results[0] ?? null;
+  }
+
+  async getClientByPsaId(tenantId: number, psaCompanyId: number): Promise<Client | null> {
+    const results = await db.select().from(clients)
+      .where(and(eq(clients.tenantId, tenantId), eq(clients.psaCompanyId, psaCompanyId)))
+      .limit(1);
+    return results[0] ?? null;
+  }
+
+  async getAllClientsByTenant(tenantId: number): Promise<Client[]> {
+    return db.select().from(clients).where(eq(clients.tenantId, tenantId));
+  }
+
+  async updateClient(id: number, data: Partial<InsertClient>): Promise<Client> {
+    const [result] = await db.update(clients)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(clients.id, id))
+      .returning();
+    return result;
+  }
+
+  // ── Announcement CRUD ───────────────────────────────────────────────────
+
+  async getAllAnnouncements(tenantId: number): Promise<Announcement[]> {
+    return db.select().from(announcements)
+      .where(eq(announcements.tenantId, tenantId))
+      .orderBy(desc(announcements.createdAt));
+  }
+
+  async getPublishedAnnouncements(tenantId: number, clientId?: number | null): Promise<Announcement[]> {
+    const now = new Date();
+    return db.select().from(announcements)
+      .where(and(
+        eq(announcements.tenantId, tenantId),
+        lte(announcements.publishedAt, now),
+        or(isNull(announcements.expiresAt), gt(announcements.expiresAt, now)),
+        or(isNull(announcements.clientId), ...(clientId != null ? [eq(announcements.clientId, clientId)] : [])),
+      ))
+      .orderBy(desc(announcements.publishedAt));
+  }
+
+  async createAnnouncement(data: InsertAnnouncement): Promise<Announcement> {
+    const [result] = await db.insert(announcements).values(data).returning();
+    return result;
+  }
+
+  async updateAnnouncement(id: number, data: Partial<InsertAnnouncement>): Promise<Announcement> {
+    const [result] = await db.update(announcements)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(announcements.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteAnnouncement(id: number): Promise<void> {
+    await db.delete(announcements).where(eq(announcements.id, id));
   }
 }
 

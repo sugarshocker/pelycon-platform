@@ -4,6 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 
 export const tbrSnapshots = pgTable("tbr_snapshots", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   orgId: integer("org_id").notNull(),
   orgName: text("org_name").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -65,6 +66,7 @@ export type ClientMapping = typeof clientMapping.$inferSelect;
 
 export const clientAccounts = pgTable("client_accounts", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   cwCompanyId: integer("cw_company_id").notNull().unique(),
   companyName: text("company_name").notNull(),
   tier: text("tier").default("B").notNull(),
@@ -110,6 +112,7 @@ export type ClientAccount = typeof clientAccounts.$inferSelect;
 
 export const arOnlyClients = pgTable("ar_only_clients", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   cwCompanyId: integer("cw_company_id").notNull().unique(),
   companyName: text("company_name").notNull(),
   agreementTypes: text("agreement_types"),
@@ -410,6 +413,7 @@ export interface ApiStatus {
 
 export const tbrSchedules = pgTable("tbr_schedules", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   orgId: integer("org_id").notNull().unique(),
   orgName: text("org_name").notNull(),
   frequencyMonths: integer("frequency_months").default(6).notNull(),
@@ -449,6 +453,7 @@ export interface WarrantyData {
 
 export const tbrStaging = pgTable("tbr_staging", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   orgId: integer("org_id").notNull().unique(),
   orgName: text("org_name").notNull(),
   engineerNotes: text("engineer_notes"),
@@ -473,11 +478,15 @@ export type TbrStaging = typeof tbrStaging.$inferSelect;
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
+  clientId: integer("client_id"),
   email: text("email").notNull().unique(),
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").default("viewer").notNull(),
   pageAccess: jsonb("page_access"),
+  authProvider: text("auth_provider").notNull().default("local"),
+  externalId: text("external_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -503,6 +512,7 @@ export const createUserSchema = z.object({
 
 export const dropsuiteAccounts = pgTable("dropsuite_accounts", {
   userId: text("user_id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   companyName: text("company_name").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -511,6 +521,62 @@ export type DropsuiteAccount = typeof dropsuiteAccounts.$inferSelect;
 
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().default(1),
+  clientId: integer("client_id"),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  type: text("type").notNull().default("announcement"),
+  publishedAt: timestamp("published_at"),
+  expiresAt: timestamp("expires_at"),
+  createdBy: integer("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = typeof announcements.$inferInsert;
+
+export const tenants = pgTable("tenants", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  psaType: text("psa_type").notNull().default("connectwise"),
+  psaConfig: jsonb("psa_config"),
+  rmmType: text("rmm_type").default("ninjaone"),
+  rmmConfig: jsonb("rmm_config"),
+  securityType: text("security_type").default("huntress"),
+  securityConfig: jsonb("security_config"),
+  m365Type: text("m365_type").default("cipp"),
+  m365Config: jsonb("m365_config"),
+  branding: jsonb("branding"),
+  features: jsonb("features"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Tenant = typeof tenants.$inferSelect;
+export type InsertTenant = typeof tenants.$inferInsert;
+
+export const clients = pgTable("clients", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull(),
+  psaCompanyId: integer("psa_company_id"),
+  rmmOrgId: integer("rmm_org_id"),
+  securityOrgId: integer("security_org_id"),
+  m365TenantDomain: text("m365_tenant_domain"),
+  companyName: text("company_name").notNull(),
+  portalEnabled: text("portal_enabled").default("false"),
+  portalSettings: jsonb("portal_settings"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;

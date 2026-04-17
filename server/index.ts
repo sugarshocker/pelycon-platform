@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startReminderJob } from "./services/reminderJob";
+import { resolveTenant } from "./middleware/tenant";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +23,7 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.use(resolveTenant);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -95,7 +97,6 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);
