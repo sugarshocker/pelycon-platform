@@ -45,6 +45,7 @@ import Receivables from "@/pages/receivables";
 import Sales from "@/pages/sales";
 import Help from "@/pages/help";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
+import { ClientPortalApp } from "@/portals/client/ClientPortalApp";
 
 const APP_VERSION = "26.3.17";
 
@@ -257,11 +258,29 @@ function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    const token = getToken();
+    // Handle M365 SSO redirect: ?token=msal_xxx in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const ssoToken = urlParams.get("token");
+    if (ssoToken?.startsWith("msal_")) {
+      import("./lib/queryClient").then(({ setToken }) => setToken(ssoToken));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    const token = ssoToken?.startsWith("msal_") ? ssoToken : getToken();
     if (!token) { setIsAuthenticated(false); return; }
-    fetch("/api/auth/check", { headers: { Authorization: `Bearer ${token}` } })
+
+    const checkEndpoint = ssoToken?.startsWith("msal_")
+      ? "/api/auth/microsoft/userinfo"
+      : "/api/auth/check";
+
+    fetch(checkEndpoint, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => { if (res.ok) return res.json(); throw new Error("Unauthorized"); })
-      .then(data => { setIsAuthenticated(true); setCurrentUser(data.user); setStoredUser(data.user); })
+      .then(data => {
+        const user = data.user || data; // /userinfo returns flat, /check returns {user}
+        setIsAuthenticated(true);
+        setCurrentUser(user);
+        setStoredUser(user);
+      })
       .catch(() => { setIsAuthenticated(false); setCurrentUser(null); clearToken(); });
   }, []);
 
@@ -281,7 +300,9 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           {isAuthenticated && currentUser
-            ? <AuthenticatedApp onLogout={handleLogout} user={currentUser} />
+            ? (currentUser.role === "client_user" || currentUser.role === "client_admin")
+              ? <ClientPortalApp onLogout={handleLogout} user={currentUser} />
+              : <AuthenticatedApp onLogout={handleLogout} user={currentUser} />
             : <Login onLogin={handleLogin} />}
           <Toaster />
         </TooltipProvider>
