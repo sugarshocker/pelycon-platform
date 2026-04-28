@@ -20,6 +20,7 @@ import { registerPortalAuthRoutes } from "./routes/portalAuth";
 import { registerPortalRoutes } from "./routes/portal/index";
 import { registerAnnouncementRoutes } from "./routes/announcements";
 import { registerPortalManagementRoutes } from "./routes/portalManagement";
+import { registerClientMatchingRoutes } from "./routes/clientMatching";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -44,6 +45,7 @@ export async function registerRoutes(
   registerPortalAuthRoutes(app);
   registerAnnouncementRoutes(app);
   registerPortalManagementRoutes(app);
+  registerClientMatchingRoutes(app);
   registerPortalRoutes(app);
 
   return httpServer;

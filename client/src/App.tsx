@@ -35,6 +35,7 @@ import {
   ShieldCheck,
   HelpCircle,
   Megaphone,
+  Network,
 } from "lucide-react";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -46,6 +47,7 @@ import Receivables from "@/pages/receivables";
 import Sales from "@/pages/sales";
 import Help from "@/pages/help";
 import PortalContent from "@/pages/portal-content";
+import IntegrationMapping from "@/pages/integration-mapping";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 import { ClientPortalApp } from "@/portals/client/ClientPortalApp";
 
@@ -69,6 +71,7 @@ const NAV_GROUPS = [
     label: "Clients",
     items: [
       { title: "Client Management", path: "/clients", icon: Building2, accessKey: "clients" },
+      { title: "Integration Mapping", path: "/integration-mapping", icon: Network, accessKey: "integrationMapping" },
       { title: "Receivables", path: "/receivables", icon: Receipt, accessKey: "receivables" },
     ],
   },
@@ -246,6 +249,7 @@ function AuthenticatedApp({ onLogout, user }: { onLogout: () => void; user: Auth
                 {hasPageAccess(user, "receivables") && <Route path="/receivables" component={Receivables} />}
                 {hasPageAccess(user, "sales") && <Route path="/sales" component={Sales} />}
                 {hasPageAccess(user, "portalContent") && <Route path="/portal-content" component={PortalContent} />}
+                {hasPageAccess(user, "integrationMapping") && <Route path="/integration-mapping" component={IntegrationMapping} />}
                 {user.role === "admin" && <Route path="/users" component={UserManagement} />}
                 <Route path="/help" component={Help} />
                 <Route>
