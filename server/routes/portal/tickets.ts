@@ -6,7 +6,7 @@ export function registerPortalTicketRoutes(app: Express) {
   app.get("/api/portal/tickets", async (req: Request, res: Response) => {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
-      const clientId = String((req as any).clientId);
+      const clientId = (req as any).psaCompanyId as string;
       const status = (req.query.status as "open" | "resolved" | "all") || "open";
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
@@ -24,13 +24,13 @@ export function registerPortalTicketRoutes(app: Express) {
   app.get("/api/portal/tickets/:ticketId", async (req: Request, res: Response) => {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
-      const clientId = String((req as any).clientId);
-      const ticket = await psa.getTicketById(req.params.ticketId);
+      const clientId = (req as any).psaCompanyId as string;
+      const ticket = await psa.getTicketById(req.params.ticketId as string);
 
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
       if (ticket.clientId !== clientId) return res.status(403).json({ message: "Access denied" });
 
-      const notes = await psa.getTicketNotes(req.params.ticketId, false);
+      const notes = await psa.getTicketNotes(req.params.ticketId as string, false);
       res.json({
         ...ticket,
         stageLabel: STAGE_LABELS[ticket.status],
@@ -46,7 +46,7 @@ export function registerPortalTicketRoutes(app: Express) {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
       const user = (req as any).user;
-      const clientId = String((req as any).clientId);
+      const clientId = (req as any).psaCompanyId as string;
       const { summary, description, priority } = req.body;
 
       if (!summary || !description) {
@@ -73,8 +73,8 @@ export function registerPortalTicketRoutes(app: Express) {
   app.post("/api/portal/tickets/:ticketId/notes", async (req: Request, res: Response) => {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
-      const clientId = String((req as any).clientId);
-      const ticket = await psa.getTicketById(req.params.ticketId);
+      const clientId = (req as any).psaCompanyId as string;
+      const ticket = await psa.getTicketById(req.params.ticketId as string);
 
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
       if (ticket.clientId !== clientId) return res.status(403).json({ message: "Access denied" });
@@ -82,7 +82,7 @@ export function registerPortalTicketRoutes(app: Express) {
       const { text } = req.body;
       if (!text?.trim()) return res.status(400).json({ message: "Note text is required" });
 
-      const note = await psa.addTicketNote(req.params.ticketId, text.trim(), false);
+      const note = await psa.addTicketNote(req.params.ticketId as string, text.trim(), false);
       res.status(201).json(note);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

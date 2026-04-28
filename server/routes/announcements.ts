@@ -41,7 +41,7 @@ export function registerAnnouncementRoutes(app: Express) {
 
   app.post("/api/announcements/:id/publish", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       const item = await storage.updateAnnouncement(id, { publishedAt: new Date() });
       res.json(item);
@@ -52,7 +52,7 @@ export function registerAnnouncementRoutes(app: Express) {
 
   app.patch("/api/announcements/:id", requireAuth, requireEditor, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       const { title, body, type, clientId, publishedAt, expiresAt } = req.body;
       const item = await storage.updateAnnouncement(id, {
@@ -71,7 +71,7 @@ export function registerAnnouncementRoutes(app: Express) {
 
   app.delete("/api/announcements/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       await storage.deleteAnnouncement(id);
       res.json({ success: true });

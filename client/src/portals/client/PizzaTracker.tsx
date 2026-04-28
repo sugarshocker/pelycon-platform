@@ -19,11 +19,42 @@ const STATUS_POSITION: Record<PSATicketStatus, number> = {
 interface Props {
   status: PSATicketStatus;
   compact?: boolean;
+  mini?: boolean;
 }
 
-export function PizzaTracker({ status, compact = false }: Props) {
+export function PizzaTracker({ status, compact = false, mini = false }: Props) {
   const currentPos = STATUS_POSITION[status];
   const isWaitingClient = status === "waiting_client";
+
+  if (mini) {
+    const fillPct = currentPos === 0 ? 0 : currentPos === 1 ? 33 : currentPos === 2 ? 66 : 100;
+    const dotColor = isWaitingClient ? "bg-amber-500 border-amber-500" : "bg-[#E77125] border-[#E77125]";
+    const lineColor = isWaitingClient ? "bg-amber-500" : "bg-[#E77125]";
+    const label = isWaitingClient ? "Needs your reply" :
+      status === "received" ? "Received" :
+      status === "working" ? "Working on it" :
+      status === "waiting" ? "Waiting" :
+      "Resolved";
+
+    return (
+      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+        <div className="relative flex items-center w-[120px] h-3">
+          <div className="absolute left-1.5 right-1.5 top-1/2 -translate-y-1/2 h-0.5 bg-gray-200 dark:bg-gray-700">
+            <div className={`h-full ${lineColor} transition-all duration-500`} style={{ width: `${fillPct}%` }} />
+          </div>
+          {STAGES.map((stage, i) => {
+            const isFilled = i <= currentPos;
+            return (
+              <div key={stage.key} className="relative z-10 flex-1 flex justify-center">
+                <div className={`h-3 w-3 rounded-full border-2 ${isFilled ? dotColor : "bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"}`} />
+              </div>
+            );
+          })}
+        </div>
+        <span className={`text-[10px] font-medium ${isWaitingClient ? "text-amber-700" : "text-muted-foreground"}`}>{label}</span>
+      </div>
+    );
+  }
 
   if (compact) {
     const label = isWaitingClient ? "Needs your reply" :

@@ -66,24 +66,24 @@ export function Tickets() {
         <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">No tickets found.</CardContent></Card>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {displayed.map(t => (
           <button
             key={t.id}
             onClick={() => setLocation(`/portal/tickets/${t.id}`)}
-            className="w-full text-left p-4 rounded-lg border bg-white dark:bg-gray-900 hover:shadow-md transition-shadow"
+            className="w-full text-left px-4 py-3 rounded-lg border bg-white dark:bg-gray-900 hover:shadow-md transition-shadow"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-[#394442] dark:text-white truncate">{t.summary}</div>
-                <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
                   <span>#{t.id}</span>
                   {t.assignedTo && <span>· {t.assignedTo}</span>}
                   <span>· {new Date(t.dateUpdated || t.dateCreated).toLocaleDateString()}</span>
+                  {t.statusDetail && <span className="italic">· {t.statusDetail}</span>}
                 </div>
-                {t.statusDetail && <div className="text-[11px] text-muted-foreground mt-1 italic">{t.statusDetail}</div>}
               </div>
-              <PizzaTracker status={t.status} compact />
+              <PizzaTracker status={t.status} mini />
             </div>
           </button>
         ))}

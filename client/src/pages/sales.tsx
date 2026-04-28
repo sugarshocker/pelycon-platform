@@ -33,6 +33,7 @@ interface QuoterSummary {
   needsActionQuotes: QuoterQuote[];
   needsActionCount: number;
   needsActionValue: number;
+  pipelineValue: number;
   quotesThisMonth: number;
   wonThisMonth: number;
   wonThisMonthValue: number;

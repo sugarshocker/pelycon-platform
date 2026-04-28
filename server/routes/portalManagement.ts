@@ -17,7 +17,7 @@ export function registerPortalManagementRoutes(app: Express) {
   // Enable/disable portal for a client
   app.patch("/api/portal-management/clients/:id/portal", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid client ID" });
       const { enabled, settings } = req.body;
 
@@ -34,7 +34,7 @@ export function registerPortalManagementRoutes(app: Express) {
   // Update portal settings for a client
   app.patch("/api/portal-management/clients/:id/portal-settings", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid client ID" });
       const updated = await storage.updateClient(id, { portalSettings: req.body });
       res.json(updated);
@@ -46,7 +46,7 @@ export function registerPortalManagementRoutes(app: Express) {
   // List portal users for a client
   app.get("/api/portal-management/clients/:id/users", requireAuth, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid client ID" });
       const portalUsers = await storage.getPortalUsersByClientId(id);
       res.json(portalUsers.map(u => ({
@@ -65,7 +65,7 @@ export function registerPortalManagementRoutes(app: Express) {
   // Set a portal user's role (client_user or client_admin)
   app.patch("/api/portal-management/users/:userId/role", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const userId = parseInt(req.params.userId);
+      const userId = parseInt(req.params.userId as string);
       if (isNaN(userId)) return res.status(400).json({ message: "Invalid user ID" });
       const { role } = req.body;
       if (!["client_user", "client_admin"].includes(role)) {

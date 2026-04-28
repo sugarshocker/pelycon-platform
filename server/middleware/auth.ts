@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { storage } from "../storage";
 
 export interface TokenSession {
   userId: number;
@@ -45,6 +46,22 @@ export function requireClientAuth(req: Request, res: Response, next: NextFunctio
   }
   (req as any).clientId = user.clientId;
   next();
+}
+
+// Resolves the client row + PSA company ID for /api/portal/* routes.
+// Sets (req as any).client and (req as any).psaCompanyId.
+// Run AFTER requireClientAuth.
+export async function resolvePortalClient(req: Request, res: Response, next: NextFunction) {
+  try {
+    const clientDbId = (req as any).clientId as number;
+    const client = await storage.getClientById(clientDbId);
+    if (!client) return res.status(404).json({ message: "Client not found" });
+    (req as any).client = client;
+    (req as any).psaCompanyId = client.psaCompanyId != null ? String(client.psaCompanyId) : null;
+    next();
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {

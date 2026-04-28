@@ -58,7 +58,7 @@ export function registerUserRoutes(app: Express) {
 
   app.patch("/api/users/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID" });
 
       const existing = await storage.getUserById(id);
@@ -104,7 +104,7 @@ export function registerUserRoutes(app: Express) {
 
   app.delete("/api/users/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid user ID" });
 
       const currentUser = (req as any).user as TokenSession;

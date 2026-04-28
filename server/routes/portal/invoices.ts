@@ -7,7 +7,7 @@ export function registerPortalInvoiceRoutes(app: Express) {
   app.get("/api/portal/invoices", async (req: Request, res: Response) => {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
-      const clientId = String((req as any).clientId);
+      const clientId = (req as any).psaCompanyId as string;
       const status = (req.query.status as "open" | "paid" | "all") || "all";
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
@@ -24,7 +24,7 @@ export function registerPortalInvoiceRoutes(app: Express) {
   app.get("/api/portal/invoices/summary", async (req: Request, res: Response) => {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
-      const clientId = String((req as any).clientId);
+      const clientId = (req as any).psaCompanyId as string;
 
       const [openInvoices, allInvoices] = await Promise.all([
         psa.getInvoicesForClient(clientId, { status: "open", limit: 100 }),

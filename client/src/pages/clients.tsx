@@ -92,7 +92,7 @@ const STACK_TOOL_GROUPS: {
 const STACK_TOOLS = STACK_TOOL_GROUPS.flatMap(g => g.tools.map(t => ({ ...t, group: g.key })));
 
 function StackDot({ value, required = true, optedOut = false }: { value: boolean | null | undefined; required?: boolean; optedOut?: boolean }) {
-  if (optedOut) return <Ban className="h-4 w-4 text-muted-foreground/50 mx-auto" title="Opted out" />;
+  if (optedOut) return <Ban className="h-4 w-4 text-muted-foreground/50 mx-auto"><title>Opted out</title></Ban>;
   if (value === true) return <CheckCircle2 className="h-4 w-4 text-green-500 mx-auto" />;
   if (value === false) {
     if (!required) return <MinusCircle className="h-4 w-4 text-muted-foreground/40 mx-auto" />;
@@ -557,7 +557,7 @@ function StackManualOverridePanel({ account, onClose }: { account: Account; onCl
 
   const toggleOptOut = (key: string) => {
     const current = stack.optedOutTools ?? [];
-    const next = current.includes(key) ? current.filter(k => k !== key) : [...current, key];
+    const next = current.includes(key) ? current.filter((k: string) => k !== key) : [...current, key];
     mutation.mutate({ optedOutTools: next } as any);
   };
 

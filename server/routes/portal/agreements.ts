@@ -5,7 +5,7 @@ export function registerPortalAgreementRoutes(app: Express) {
   app.get("/api/portal/agreements", async (req: Request, res: Response) => {
     try {
       const psa = (req as any).psaAdapter as PSAAdapter;
-      const clientId = String((req as any).clientId);
+      const clientId = (req as any).psaCompanyId as string;
 
       const agreements = await psa.getAgreementsForClient(clientId);
       res.json(agreements);

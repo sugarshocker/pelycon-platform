@@ -189,7 +189,7 @@ export class ConnectWiseAdapter implements PSAAdapter {
       results.push({
         id: String(agr.id),
         name: agr.name || "",
-        type: agr.agreementType?.name || agr.type || "Unknown",
+        type: agr.agreementType?.name || agr.type?.name || (typeof agr.type === "string" ? agr.type : "Unknown"),
         clientId,
         clientName: agr.company?.name || "",
         startDate: agr.startDate || "",

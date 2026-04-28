@@ -32,11 +32,12 @@ export function registerAuthRoutes(app: Express) {
         displayName: user.displayName,
         role: user.role,
         pageAccess: user.pageAccess as Record<string, boolean> | null,
+        clientId: user.clientId ?? null,
       });
       res.json({
         success: true,
         token,
-        user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role, pageAccess: user.pageAccess },
+        user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role, pageAccess: user.pageAccess, clientId: user.clientId },
       });
     } catch (err: any) {
       log(`Login error: ${err.message}`);
@@ -91,11 +92,12 @@ export function registerAuthRoutes(app: Express) {
         displayName: user.displayName,
         role: user.role,
         pageAccess: user.pageAccess as Record<string, boolean> | null,
+        clientId: user.clientId ?? null,
       });
       res.json({
         success: true,
         token,
-        user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role, pageAccess: user.pageAccess },
+        user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role, pageAccess: user.pageAccess, clientId: user.clientId },
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

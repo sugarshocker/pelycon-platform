@@ -657,7 +657,7 @@ export default function Accounts() {
     }
   };
 
-  const statusOrder = { red: 0, yellow: 1, green: 2 };
+  const statusOrder = { red: 0, yellow: 1, scheduled: 1, green: 2 };
 
   const filtered = (accounts || [])
     .filter(a => filterTier === "all" || a.effectiveTier === filterTier)

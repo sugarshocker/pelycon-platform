@@ -4,7 +4,7 @@ import * as connectwise from "../services/connectwise";
 export function registerDebugRoutes(app: Express) {
   app.get("/api/cw-debug/financial-breakdown/:companyId", async (req: Request, res: Response) => {
     try {
-      const cwCompanyId = parseInt(req.params.companyId);
+      const cwCompanyId = parseInt(req.params.companyId as string);
       const dateFrom = (req.query.from as string) || "2025-01-01";
       const dateTo = (req.query.to as string) || "2025-12-31";
 
