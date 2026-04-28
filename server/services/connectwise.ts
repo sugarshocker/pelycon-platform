@@ -9,7 +9,7 @@ const COMPANY_ID = cleanEnv("CW_COMPANY_ID");
 const PUBLIC_KEY = cleanEnv("CW_PUBLIC_KEY");
 const PRIVATE_KEY = cleanEnv("CW_PRIVATE_KEY");
 const CLIENT_ID = cleanEnv("CW_CLIENT_ID");
-const SITE_URL = cleanEnv("CW_SITE_URL", "na.myconnectwise.net");
+const SITE_URL = cleanEnv("CW_SITE_URL", "na.myconnectwise.net").replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 const BASE_URL = `https://${SITE_URL}/v4_6_release/apis/3.0`;
 
 export function isConfigured(): boolean {

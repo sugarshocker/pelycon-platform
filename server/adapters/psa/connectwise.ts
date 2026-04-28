@@ -177,13 +177,16 @@ export class ConnectWiseAdapter implements PSAAdapter {
       let additions: any[] = [];
       try {
         const additionData = await cw.apiGet(`/finance/agreements/${agr.id}/additions`, {
-          pageSize: "100",
+          pageSize: "500",
         });
-        additions = (additionData || []).map((a: any) => ({
-          name: a.product?.description || a.product?.identifier || "Unknown",
-          quantity: a.quantity || 1,
-          unitPrice: a.unitPrice || 0,
-        }));
+        additions = (additionData || [])
+          .filter((a: any) => a.additionStatus === "Active" && a.billCustomer === "Billable")
+          .map((a: any) => ({
+            name: a.invoiceDescription || a.description || a.product?.description || a.product?.identifier || "Unknown",
+            quantity: a.quantity || 0,
+            unitPrice: a.unitPrice || 0,
+            extPrice: a.extPrice || 0,
+          }));
       } catch {}
 
       results.push({
@@ -219,10 +222,10 @@ export class ConnectWiseAdapter implements PSAAdapter {
       contactEmail: t.contactEmailAddress || null,
       assignedTo: t.resources?.[0]?.member?.name || t.owner?.name || null,
       boardName: t.board?.name || null,
-      dateCreated: t.dateEntered || "",
-      dateUpdated: t.lastUpdated || "",
+      dateCreated: t.dateEntered || t._info?.dateEntered || "",
+      dateUpdated: t.lastUpdated || t._info?.lastUpdated || "",
       dateClosed: t.closedDate || null,
-      lastActionDate: t.lastUpdated || null,
+      lastActionDate: t.lastUpdated || t._info?.lastUpdated || null,
       scheduledDate: t.scheduleDate || null,
       requiresOnsite: cwStatus === 'Requires Onsite',
       slaInfo: t.sla ? {

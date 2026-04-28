@@ -34,6 +34,7 @@ import {
   TrendingUp,
   ShieldCheck,
   HelpCircle,
+  Megaphone,
 } from "lucide-react";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -44,6 +45,7 @@ import Clients from "@/pages/clients";
 import Receivables from "@/pages/receivables";
 import Sales from "@/pages/sales";
 import Help from "@/pages/help";
+import PortalContent from "@/pages/portal-content";
 import pelyconLogo from "@assets/Pelycon_Logomark_RGB_Orange_1770825725925.png";
 import { ClientPortalApp } from "@/portals/client/ClientPortalApp";
 
@@ -76,6 +78,12 @@ const NAV_GROUPS = [
       { title: "TBR Tracker", path: "/", icon: LayoutDashboard, accessKey: "dashboard" },
       { title: "TBR Reviews", path: "/reviews", icon: FilePen, accessKey: "reviews" },
       { title: "TBR Staging", path: "/staging", icon: ClipboardList, accessKey: "staging" },
+    ],
+  },
+  {
+    label: "Portal",
+    items: [
+      { title: "Portal Content", path: "/portal-content", icon: Megaphone, accessKey: "portalContent" },
     ],
   },
 ];
@@ -237,6 +245,7 @@ function AuthenticatedApp({ onLogout, user }: { onLogout: () => void; user: Auth
                 {hasPageAccess(user, "accounts") && <Route path="/accounts" component={Clients} />}
                 {hasPageAccess(user, "receivables") && <Route path="/receivables" component={Receivables} />}
                 {hasPageAccess(user, "sales") && <Route path="/sales" component={Sales} />}
+                {hasPageAccess(user, "portalContent") && <Route path="/portal-content" component={PortalContent} />}
                 {user.role === "admin" && <Route path="/users" component={UserManagement} />}
                 <Route path="/help" component={Help} />
                 <Route>

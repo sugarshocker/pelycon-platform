@@ -61,5 +61,5 @@ export interface PSAAgreement {
   endDate: string | null;
   monthlyRevenue: number;
   status: 'active' | 'cancelled' | 'expired';
-  additions: { name: string; quantity: number; unitPrice: number }[];
+  additions: { name: string; quantity: number; unitPrice: number; extPrice: number }[];
 }
